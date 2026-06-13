@@ -23,6 +23,15 @@ services:
       BACKUP_DIR: /backups
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@example.com}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-changeme123}
+      # SSH terminal kill-switch — set SSH_ENABLED=true to enable (admin-only RCE feature)
+      SSH_ENABLED: ${SSH_ENABLED:-false}
+      SSH_CONNECT_TIMEOUT_MS: ${SSH_CONNECT_TIMEOUT_MS:-10000}
+      SSH_IDLE_TIMEOUT_MS: ${SSH_IDLE_TIMEOUT_MS:-300000}
+      SSH_MAX_SESSION_MS: ${SSH_MAX_SESSION_MS:-3600000}
+      SSH_MAX_CONCURRENT: ${SSH_MAX_CONCURRENT:-5}
+      # Live metrics via agentless SSH exec
+      METRICS_ENABLED: ${METRICS_ENABLED:-true}
+      METRICS_SSH_TIMEOUT_MS: ${METRICS_SSH_TIMEOUT_MS:-10000}
     volumes:
       - sqlite_data:/data
       - backups:/backups
