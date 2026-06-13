@@ -3,7 +3,12 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { routeTree } from "./routeTree.gen";
+import { initSecurityLock } from "./lib/security-lock";
 import "./styles.css";
+
+if (import.meta.env.VITE_SECURITY_LOCK === "true") {
+  initSecurityLock();
+}
 
 // Persist theme across page loads before first paint
 const savedTheme = localStorage.getItem("theme");

@@ -12,6 +12,9 @@ RUN pnpm install --no-frozen-lockfile
 # ── build ─────────────────────────────────────────────────────────────────────
 FROM deps AS builder
 WORKDIR /app
+# VITE_ vars are baked into the JS bundle at build time, not runtime
+ARG VITE_SECURITY_LOCK=false
+ENV VITE_SECURITY_LOCK=$VITE_SECURITY_LOCK
 COPY packages/shared ./packages/shared
 COPY apps/web ./apps/web
 RUN pnpm --filter @inv/shared build
