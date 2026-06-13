@@ -19,7 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { toast } from "sonner";
 import {
   RefreshCw, Eye, EyeOff, Trash2, RotateCcw, Zap,
-  Download, AlertTriangle, Terminal, KeyRound,
+  Download, AlertTriangle, Terminal, KeyRound, Copy, ShieldCheck,
 } from "lucide-react";
 import type { ServerDto } from "@inv/shared";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -399,6 +399,44 @@ function ServersPage() {
                           </TooltipTrigger>
                           <TooltipContent>Restore</TooltipContent>
                         </Tooltip>
+                      )}
+
+                      {/* Copy SSH command (all roles) */}
+                      {!isDeleted && (
+                        <>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="icon" variant="ghost"
+                                className="h-7 w-7 text-muted-foreground hover:text-primary"
+                                onClick={() => {
+                                  void navigator.clipboard.writeText(
+                                    `ssh -p ${server.sshPort} ${server.username}@${server.ip}`
+                                  ).then(() => toast.success("SSH command copied"));
+                                }}
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Copy SSH command</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="icon" variant="ghost"
+                                className="h-7 w-7 text-muted-foreground hover:text-amber-500"
+                                onClick={() => {
+                                  void navigator.clipboard.writeText(
+                                    `ssh -p ${server.sshPort} ${server.username}@${server.ip} -t sudo su -`
+                                  ).then(() => toast.success("SSH sudo command copied"));
+                                }}
+                              >
+                                <ShieldCheck className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Copy SSH + sudo</TooltipContent>
+                          </Tooltip>
+                        </>
                       )}
 
                       {/* SSH Terminal — admin: direct link; others: request access */}

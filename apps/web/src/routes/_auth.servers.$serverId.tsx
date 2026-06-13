@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SshTerminal } from "@/components/ssh-terminal";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Cpu, MemoryStick, HardDrive, Network, Zap, AlertTriangle, Terminal } from "lucide-react";
+import { ArrowLeft, Cpu, MemoryStick, HardDrive, Network, Zap, AlertTriangle, Terminal, Copy, Check, ShieldCheck } from "lucide-react";
+import { toast } from "sonner";
 import type { ProcInfo } from "@inv/shared";
 
 export const Route = createFileRoute("/_auth/servers/$serverId")({
@@ -62,6 +63,26 @@ function ProcTable({ procs, kind }: { procs: ProcInfo[]; kind: "cpu" | "mem" }) 
   );
 }
 
+function CopySSHButton({ server, sudo = false }: { server: { ip: string; username: string; sshPort: number }; sudo?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const cmd = sudo
+    ? `ssh -p ${server.sshPort} ${server.username}@${server.ip} -t sudo su -`
+    : `ssh -p ${server.sshPort} ${server.username}@${server.ip}`;
+  const copy = () => {
+    void navigator.clipboard.writeText(cmd).then(() => {
+      setCopied(true);
+      toast.success("SSH command copied");
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  return (
+    <Button size="sm" variant="outline" className="gap-1.5 font-mono text-xs h-8" onClick={copy} title={cmd}>
+      {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : sudo ? <ShieldCheck className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      {sudo ? "sudo" : "Copy SSH"}
+    </Button>
+  );
+}
+
 function ServerDetailPage() {
   const { serverId } = Route.useParams();
   const id = Number(serverId);
@@ -103,11 +124,17 @@ function ServerDetailPage() {
         {server?.cloudProvider && <Badge variant="secondary" className="text-xs">{server.cloudProvider.name}</Badge>}
         {server?.location && <Badge variant="outline" className="text-xs">{server.location.name}</Badge>}
         <span className="text-sm text-muted-foreground font-mono ml-auto">{server?.ip}:{server?.sshPort}</span>
+        {server && (
+          <>
+            <CopySSHButton server={server as { ip: string; username: string; sshPort: number }} />
+            <CopySSHButton server={server as { ip: string; username: string; sshPort: number }} sudo />
+          </>
+        )}
         {canSsh && (
-          <Button 
-            size="sm" 
-            variant={showTerminal ? "secondary" : "default"} 
-            className="gap-2 ml-2"
+          <Button
+            size="sm"
+            variant={showTerminal ? "secondary" : "default"}
+            className="gap-2"
             onClick={() => setShowTerminal(!showTerminal)}
           >
             <Terminal className="h-4 w-4" />

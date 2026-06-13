@@ -4,6 +4,7 @@ import { admin, twoFactor } from "better-auth/plugins";
 import { prisma } from "./db.js";
 import { env } from "./env.js";
 import { ac, roles } from "@inv/shared";
+import { writeAuditDirect } from "./lib/audit.js";
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "sqlite" }),
@@ -41,7 +42,22 @@ export const auth = betterAuth({
     twoFactor(),
   ],
 
-  // Auth event audit hooks wired in M4 (writeAuditAuthEvent added after audit.ts created)
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          await writeAuditDirect({
+            ctx: { actorId: user.id, actorEmail: user.email, ip: null },
+            category: "auth",
+            action: "user.create",
+            entity: "User",
+            entityId: user.id,
+            after: { email: user.email },
+          });
+        },
+      },
+    },
+  },
 });
 
 export type Auth = typeof auth;
