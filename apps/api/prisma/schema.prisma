@@ -1,0 +1,270 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // To switch to Postgres: change "sqlite" -> "postgresql", delete migrations/, run `prisma migrate dev --name baseline`
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Better Auth tables ──────────────────────────────────────────────────────
+// NOTE: run `npx @better-auth/cli generate` after editing auth.ts to get the
+// authoritative schema. The fields below match better-auth v1.x core + admin +
+// twoFactor + apiKey plugins. Hand-add `auditLogs` relation after generation.
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  // admin plugin
+  role          String?   @default("viewer")
+  banned        Boolean?  @default(false)
+  banReason     String?
+  banExpires    DateTime?
+  // twoFactor plugin
+  twoFactorEnabled Boolean? @default(false)
+  sessions      Session[]
+  accounts      Account[]
+  apiKeys       ApiKey[]
+  auditLogs     AuditLog[]
+  savedViews    SavedView[]
+  @@map("user")
+}
+
+model Session {
+  id             String   @id
+  token          String   @unique
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt      DateTime
+  ipAddress      String?
+  userAgent      String?
+  impersonatedBy String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId             String
+  providerId            String
+  password              String?
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@map("verification")
+}
+
+model TwoFactor {
+  id          String @id
+  userId      String @unique
+  secret      String
+  backupCodes String
+  @@map("twoFactor")
+}
+
+model ApiKey {
+  id          String    @id
+  name        String?
+  start       String?
+  prefix      String?
+  key         String    @unique
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refillAt    DateTime?
+  refillAmount Int?
+  lastRefillAt DateTime?
+  enabled     Boolean   @default(true)
+  rateLimitEnabled Boolean @default(false)
+  rateLimitTimeWindow Int?
+  rateLimitMax Int?
+  requestCount Int      @default(0)
+  remaining   Int?
+  expiresAt   DateTime?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  @@index([userId])
+  @@map("apiKey")
+}
+
+// ─── Lookup tables ───────────────────────────────────────────────────────────
+model CloudProvider {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  servers   Server[]
+}
+
+model GpuType {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  servers   Server[]
+}
+
+model AllocatedTo {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  servers   Server[]
+}
+
+model Location {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  servers   Server[]
+}
+
+model ServerType {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  servers   Server[]
+}
+
+// ─── Tags ────────────────────────────────────────────────────────────────────
+model Tag {
+  id      Int         @id @default(autoincrement())
+  name    String      @unique
+  color   String?
+  servers ServerTag[]
+}
+
+model ServerTag {
+  serverId Int
+  tagId    Int
+  server   Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  @@id([serverId, tagId])
+  @@index([tagId])
+}
+
+// ─── Inventory ───────────────────────────────────────────────────────────────
+model Server {
+  id            Int          @id @default(autoincrement())
+  hostname      String
+  ip            String
+  username      String
+  /// AES-256-GCM blob "v1.<iv>.<tag>.<ct>". NEVER sent to client.
+  passwordEnc   String?
+  /// Per-server SSH port (varies — from Excel SSH column). Probe uses this.
+  sshPort       Int          @default(22)
+  cpu           String?
+  ram           String?
+  gpuCount      Int?
+  remark        String?
+  domain        String?
+  environment   String?      @default("on-premise")
+  cloudProviderId Int?
+  cloudProvider CloudProvider? @relation(fields: [cloudProviderId], references: [id], onDelete: Restrict)
+  gpuTypeId     Int?
+  gpuType       GpuType?     @relation(fields: [gpuTypeId], references: [id], onDelete: Restrict)
+  allocatedToId Int?
+  allocatedTo   AllocatedTo? @relation(fields: [allocatedToId], references: [id], onDelete: Restrict)
+  locationId    Int?
+  location      Location?    @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  serverTypeId  Int?
+  serverType    ServerType?  @relation(fields: [serverTypeId], references: [id], onDelete: Restrict)
+  tags          ServerTag[]
+  /// Denormalized latest probe result (updated by scheduler; NOT audited)
+  lastStatus    String       @default("unknown")
+  lastCheckedAt DateTime?
+  lastLatencyMs Int?
+  /// Consecutive down count — triggers notification at threshold
+  downStreak    Int          @default(0)
+  notifiedDown  Boolean      @default(false)
+  deletedAt     DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  statusChecks  StatusCheck[]
+  @@index([cloudProviderId])
+  @@index([gpuTypeId])
+  @@index([allocatedToId])
+  @@index([locationId])
+  @@index([serverTypeId])
+  @@index([deletedAt])
+  @@index([hostname])
+  @@index([ip])
+}
+
+model StatusCheck {
+  id        Int      @id @default(autoincrement())
+  serverId  Int
+  server    Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  status    String
+  latencyMs Int?
+  /// Whitelisted error code only — never raw socket data
+  errorCode String?
+  checkedAt DateTime @default(now())
+  @@index([serverId, checkedAt])
+}
+
+// ─── Audit (append-only) ─────────────────────────────────────────────────────
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  /// 'data' | 'auth'
+  category   String
+  action     String
+  entity     String?
+  entityId   String?
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  /// Snapshot — survives user deletion
+  actorEmail String?
+  /// JSON text (passwordEnc always redacted before write)
+  beforeJson String?
+  afterJson  String?
+  /// Changed keys only: {"field":{"from":x,"to":y}}
+  diffJson   String?
+  ip         String?
+  createdAt  DateTime @default(now())
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@index([actorId])
+  @@index([category, createdAt])
+}
+
+// ─── Saved views ─────────────────────────────────────────────────────────────
+model SavedView {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  /// Serialized servers-table filter + column-visibility state
+  paramsJson String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([userId])
+}

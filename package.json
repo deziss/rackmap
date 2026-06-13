@@ -1,0 +1,15 @@
+{
+  "name": "server-inventory",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.27.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @inv/api --filter @inv/web dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "db:migrate": "pnpm --filter @inv/api db:migrate",
+    "db:seed": "pnpm --filter @inv/api db:seed",
+    "db:studio": "pnpm --filter @inv/api db:studio"
+  }
+}

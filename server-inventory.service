@@ -1,0 +1,25 @@
+[Unit]
+Description=Server Inventory API
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/server-inventory/apps/api
+EnvironmentFile=/opt/server-inventory/apps/api/.env
+ExecStartPre=/usr/bin/npx prisma migrate deploy
+ExecStart=/usr/bin/node dist/index.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=server-inventory
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/server-inventory/apps/api /data /backups
+
+[Install]
+WantedBy=multi-user.target

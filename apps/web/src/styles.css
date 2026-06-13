@@ -1,0 +1,208 @@
+@import "tailwindcss";
+
+/* ─── Typography ───────────────────────────────────────────────────────────── */
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,300..700&family=JetBrains+Mono:wght@400;500&display=swap");
+
+/* ─── Design Tokens ─────────────────────────────────────────────────────────── */
+@theme {
+  /* Light mode — warm white with subtle depth */
+  --color-primary:            oklch(0.52 0.26 275);   /* electric indigo */
+  --color-primary-foreground: oklch(0.98 0 0);
+  --color-destructive:        oklch(0.55 0.24 27);
+  --color-destructive-foreground: oklch(0.98 0 0);
+  --color-muted:              oklch(0.95 0.006 265);
+  --color-muted-foreground:   oklch(0.52 0.018 265);
+  --color-border:             oklch(0.88 0.008 265);
+  --color-background:         oklch(0.97 0.003 265);
+  --color-foreground:         oklch(0.12 0.008 280);
+  --color-card:               oklch(1 0 0);
+  --color-card-foreground:    oklch(0.12 0.008 280);
+  --color-popover:            oklch(1 0 0);
+  --color-popover-foreground: oklch(0.12 0.008 280);
+  --color-secondary:          oklch(0.94 0.008 265);
+  --color-secondary-foreground: oklch(0.18 0.008 265);
+  --color-accent:             oklch(0.93 0.012 265);
+  --color-accent-foreground:  oklch(0.18 0.008 265);
+  --color-input:              oklch(0.88 0.008 265);
+  --color-ring:               oklch(0.52 0.26 275);
+  --color-sidebar:            oklch(0.99 0.002 265);
+  --color-sidebar-foreground: oklch(0.12 0.008 280);
+  --color-sidebar-border:     oklch(0.88 0.008 265);
+  --color-sidebar-accent:     oklch(0.93 0.012 265);
+  --color-sidebar-accent-foreground: oklch(0.18 0.008 265);
+  --radius: 0.625rem;
+
+  /* Font family */
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+}
+
+/* ─── Dark mode — deep navy glass ──────────────────────────────────────────── */
+.dark {
+  --color-background:         oklch(0.085 0.022 268);
+  --color-foreground:         oklch(0.95 0.006 265);
+  --color-card:               oklch(0.135 0.028 268);
+  --color-card-foreground:    oklch(0.95 0.006 265);
+  --color-popover:            oklch(0.135 0.028 268);
+  --color-popover-foreground: oklch(0.95 0.006 265);
+  --color-primary:            oklch(0.65 0.26 275);
+  --color-primary-foreground: oklch(0.08 0.022 268);
+  --color-secondary:          oklch(0.195 0.038 268);
+  --color-secondary-foreground: oklch(0.93 0.006 265);
+  --color-muted:              oklch(0.185 0.033 268);
+  --color-muted-foreground:   oklch(0.62 0.022 265);
+  --color-accent:             oklch(0.195 0.038 268);
+  --color-accent-foreground:  oklch(0.93 0.006 265);
+  --color-destructive:        oklch(0.65 0.22 22);
+  --color-destructive-foreground: oklch(0.98 0 0);
+  --color-border:             oklch(1 0 0 / 0.09);
+  --color-input:              oklch(1 0 0 / 0.09);
+  --color-ring:               oklch(0.65 0.26 275);
+  --color-sidebar:            oklch(0.065 0.020 268);
+  --color-sidebar-foreground: oklch(0.93 0.006 265);
+  --color-sidebar-border:     oklch(1 0 0 / 0.07);
+  --color-sidebar-accent:     oklch(1 0 0 / 0.06);
+  --color-sidebar-accent-foreground: oklch(0.93 0.006 265);
+}
+
+/* ─── Base ──────────────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  border-color: var(--color-border);
+}
+
+html {
+  font-family: var(--font-sans);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code, pre, kbd, .font-mono {
+  font-family: var(--font-mono);
+}
+
+/* ─── Keyframes ─────────────────────────────────────────────────────────────── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+@keyframes blob-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(30px, -20px) scale(1.05); }
+  66%       { transform: translate(-20px, 15px) scale(0.95); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px oklch(0.7 0.2 145 / 0.3); }
+  50%       { box-shadow: 0 0 0 4px oklch(0.7 0.2 145 / 0.15), 0 0 12px oklch(0.7 0.2 145 / 0.4); }
+}
+
+@keyframes spin-in {
+  from { transform: rotate(-90deg); opacity: 0; }
+  to   { transform: rotate(0deg);   opacity: 1; }
+}
+
+/* ─── Animation utilities ───────────────────────────────────────────────────── */
+.animate-fade-up     { animation: fade-up 0.35s ease forwards; }
+.animate-fade-in     { animation: fade-in 0.25s ease forwards; }
+.animate-glow-pulse  { animation: glow-pulse 2s ease-in-out infinite; }
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent 0%, oklch(1 0 0 / 0.06) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2.5s linear infinite;
+}
+
+/* ─── Mesh gradient background ─────────────────────────────────────────────── */
+.mesh-bg {
+  position: relative;
+  overflow: hidden;
+}
+
+.mesh-bg::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 60% 50% at 15% 10%,  oklch(0.45 0.18 275 / 0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 60% at 85% 85%,  oklch(0.5  0.20 220 / 0.14) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 40% at 50% 50%,  oklch(0.42 0.16 285 / 0.10) 0%, transparent 60%);
+  animation: blob-drift 18s ease-in-out infinite;
+}
+
+.mesh-bg > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Light mode mesh is very subtle */
+:not(.dark) .mesh-bg::before {
+  background:
+    radial-gradient(ellipse 50% 40% at 10% 5%,   oklch(0.52 0.26 275 / 0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 50% at 90% 90%,  oklch(0.55 0.22 220 / 0.06) 0%, transparent 60%);
+}
+
+/* ─── Glass surface ─────────────────────────────────────────────────────────── */
+.glass {
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  background-color: oklch(1 0 0 / 0.06);
+  border: 1px solid oklch(1 0 0 / 0.12);
+}
+
+:not(.dark) .glass {
+  background-color: oklch(1 0 0 / 0.6);
+  border-color: oklch(0 0 0 / 0.08);
+  backdrop-filter: blur(12px) saturate(1.2);
+}
+
+/* ─── Glow rings ────────────────────────────────────────────────────────────── */
+.glow-green { box-shadow: 0 0 0 2px oklch(0.7 0.2 145 / 0.35), 0 0 8px oklch(0.7 0.2 145 / 0.25); }
+.glow-red   { box-shadow: 0 0 0 2px oklch(0.65 0.22 22  / 0.35), 0 0 8px oklch(0.65 0.22 22  / 0.2); }
+.glow-blue  { box-shadow: 0 0 0 2px oklch(0.65 0.26 275 / 0.35), 0 0 8px oklch(0.65 0.26 275 / 0.2); }
+
+/* ─── Staggered row animations ──────────────────────────────────────────────── */
+.row-animate {
+  opacity: 0;
+  animation: fade-up 0.3s ease forwards;
+}
+.row-animate:nth-child(1)  { animation-delay: 0.02s; }
+.row-animate:nth-child(2)  { animation-delay: 0.05s; }
+.row-animate:nth-child(3)  { animation-delay: 0.08s; }
+.row-animate:nth-child(4)  { animation-delay: 0.11s; }
+.row-animate:nth-child(5)  { animation-delay: 0.14s; }
+.row-animate:nth-child(6)  { animation-delay: 0.17s; }
+.row-animate:nth-child(7)  { animation-delay: 0.20s; }
+.row-animate:nth-child(8)  { animation-delay: 0.23s; }
+.row-animate:nth-child(9)  { animation-delay: 0.26s; }
+.row-animate:nth-child(10) { animation-delay: 0.29s; }
+
+/* ─── Scrollbar ─────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: oklch(1 0 0 / 0.12); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: oklch(1 0 0 / 0.2); }
+
+/* ─── Selection ─────────────────────────────────────────────────────────────── */
+::selection {
+  background-color: oklch(0.52 0.26 275 / 0.25);
+  color: var(--color-foreground);
+}

@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.env
+.env.local
+data/
+coverage/
+.turbo/
+*.tsbuildinfo
+apps/web/src/routeTree.gen.ts
+backups/
