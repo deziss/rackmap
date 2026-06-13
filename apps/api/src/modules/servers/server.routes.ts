@@ -19,6 +19,7 @@ import { runCheck, runAll } from "../../services/status.service.js";
 import { fetchMetrics } from "../../services/metrics.service.js";
 import { sshErrorToHttp } from "../../services/ssh.service.js";
 import { env } from "../../env.js";
+import { prisma } from "../../db.js";
 
 // Throttle metrics-view audit: one row per user·server per 5 min (the page polls every 5s).
 const METRICS_AUDIT_TTL_MS = 5 * 60 * 1000;
@@ -99,13 +100,30 @@ export const serverRoutes = new Hono()
     },
   )
 
-  // POST /servers/:id/reveal-password
+  // POST /servers/:id/reveal-password — admin/editor OR viewer with approved AccessRequest
   .post(
     "/:id/reveal-password",
-    requirePermission({ server: ["revealPassword"] }),
     zValidator("param", idParamSchema),
     async (c) => {
+      const user = c.get("user") as { id?: string; role?: string } | undefined;
+      if (!user?.id) return c.json({ error: { code: "UNAUTHORIZED", message: "Unauthorized" } }, 401);
       const { id } = c.req.valid("param");
+
+      const hasDirectPerm = user.role === "admin" || user.role === "editor";
+      if (!hasDirectPerm) {
+        // Check for valid approved AccessRequest
+        const req = await prisma.accessRequest.findFirst({
+          where: {
+            requesterId: user.id,
+            serverId: id,
+            type: "password_reveal",
+            status: "approved",
+            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+          },
+        });
+        if (!req) return c.json({ error: { code: "FORBIDDEN", message: "Request access to reveal this password" } }, 403);
+      }
+
       const password = await revealServerPassword(id, getAuditCtx(c));
       return c.json({ password });
     },

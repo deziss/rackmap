@@ -130,7 +130,7 @@ export function ServerFormDialog({ server, onSaved }: ServerFormDialogProps) {
             </div>
             <div className="space-y-1 col-span-2">
               <Label>Password {isEdit ? "(leave blank to keep existing)" : ""}</Label>
-              <Input type="password" autoComplete="new-password" {...register("password")} placeholder={isEdit ? "Unchanged" : ""} />
+              <Input type="password" autoComplete="new-password" {...register("password", { setValueAs: (v) => v === "" ? undefined : v })} placeholder={isEdit ? "Unchanged" : ""} />
             </div>
             <div className="space-y-1">
               <Label>CPU</Label>

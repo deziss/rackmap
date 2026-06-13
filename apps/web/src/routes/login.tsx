@@ -13,11 +13,13 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const router = useRouter();
+  const [mode, setMode] = useState<"signin" | "register">("signin");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     try {
@@ -26,13 +28,33 @@ function LoginPage() {
         toast.error(error.message ?? "Sign in failed");
         return;
       }
-      await router.navigate({ to: "/servers" });
+      await router.navigate({ to: "/" });
     } catch {
       toast.error("Sign in failed");
     } finally {
       setLoading(false);
     }
   }
+
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const { error } = await authClient.signUp.email({ name, email, password });
+      if (error) {
+        toast.error(error.message ?? "Registration failed");
+        return;
+      }
+      toast.success("Account created — you have Viewer access. Contact admin to upgrade.");
+      await router.navigate({ to: "/" });
+    } catch {
+      toast.error("Registration failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const isRegister = mode === "register";
 
   return (
     <div className="mesh-bg relative flex min-h-screen items-center justify-center p-4 bg-background">
@@ -44,20 +66,38 @@ function LoginPage() {
           </div>
           <div className="text-center">
             <h1 className="text-2xl font-bold tracking-tight text-foreground">Server Inventory</h1>
-            <p className="text-sm text-muted-foreground mt-1">Sign in to manage your infrastructure</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {isRegister ? "Create an account to get started" : "Sign in to manage your infrastructure"}
+            </p>
           </div>
         </div>
 
         {/* Glass card */}
         <div className="rounded-2xl border border-white/10 bg-card/80 backdrop-blur-xl shadow-2xl shadow-black/20 p-6">
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={isRegister ? handleRegister : handleSignIn} className="space-y-5">
+            {isRegister && (
+              <div className="space-y-1.5">
+                <Label htmlFor="name" className="text-sm font-medium">Full name</Label>
+                <Input
+                  id="name"
+                  type="text"
+                  autoComplete="name"
+                  placeholder="Jane Smith"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label htmlFor="email" className="text-sm font-medium">Email address</Label>
               <Input
                 id="email"
                 type="email"
                 autoComplete="email"
-                placeholder="admin@example.com"
+                placeholder="you@example.com"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -70,9 +110,10 @@ function LoginPage() {
               <Input
                 id="password"
                 type="password"
-                autoComplete="current-password"
+                autoComplete={isRegister ? "new-password" : "current-password"}
                 placeholder="••••••••"
                 required
+                minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}
@@ -83,17 +124,39 @@ function LoginPage() {
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Signing in…
+                  {isRegister ? "Creating account…" : "Signing in…"}
                 </>
               ) : (
-                "Sign in"
+                isRegister ? "Create account" : "Sign in"
               )}
             </Button>
           </form>
         </div>
 
-        <p className="mt-4 text-center text-xs text-muted-foreground">
-          Access is restricted to authorized users only.
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          {isRegister ? (
+            <>
+              Already have an account?{" "}
+              <button
+                type="button"
+                onClick={() => setMode("signin")}
+                className="text-primary hover:underline font-medium"
+              >
+                Sign in
+              </button>
+            </>
+          ) : (
+            <>
+              Don&apos;t have an account?{" "}
+              <button
+                type="button"
+                onClick={() => setMode("register")}
+                className="text-primary hover:underline font-medium"
+              >
+                Register
+              </button>
+            </>
+          )}
         </p>
       </div>
     </div>

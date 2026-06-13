@@ -3,9 +3,10 @@ import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ShieldCheck, Key, Trash2, Plus } from "lucide-react";
+import { ShieldCheck, Key, Trash2, Plus, User } from "lucide-react";
 
 export const Route = createFileRoute("/_auth/security")({
   component: SecurityPage,
@@ -25,9 +26,110 @@ function SecurityPage() {
 
   return (
     <div className="space-y-6 max-w-xl">
-      <h1 className="text-xl font-semibold">Security</h1>
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Security</h1>
+        <p className="text-muted-foreground text-sm mt-0.5">Manage your profile, password, and authentication settings</p>
+      </div>
+      <ProfileSection user={session?.user ?? null} />
+      <ChangePasswordSection />
       <TwoFactorSection enabled={!!(session?.user as { twoFactorEnabled?: boolean })?.twoFactorEnabled} />
       <ApiKeysSection />
+    </div>
+  );
+}
+
+function ProfileSection({ user }: { user: { name?: string; email?: string } | null }) {
+  const [name, setName] = useState(user?.name ?? "");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const { error } = await authClient.updateUser({ name });
+      if (error) throw new Error(error.message);
+      toast.success("Profile updated");
+    } catch (err: unknown) {
+      toast.error((err as Error).message ?? "Failed to update profile");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-card/60 backdrop-blur-md p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <User className="h-4 w-4" />
+        <span className="font-medium text-sm">Profile</span>
+      </div>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Email (contact admin to change)</Label>
+          <Input value={user?.email ?? ""} disabled className="h-8 text-sm bg-muted/30" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Display Name</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} className="h-8 text-sm" required />
+        </div>
+        <Button size="sm" type="submit" disabled={loading}>{loading ? "Saving…" : "Update Profile"}</Button>
+      </form>
+    </div>
+  );
+}
+
+function ChangePasswordSection() {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const { error } = await authClient.changePassword({ currentPassword, newPassword });
+      if (error) throw new Error(error.message);
+      toast.success("Password changed");
+      setCurrentPassword("");
+      setNewPassword("");
+    } catch (err: unknown) {
+      toast.error((err as Error).message ?? "Failed to change password");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-card/60 backdrop-blur-md p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Key className="h-4 w-4" />
+        <span className="font-medium text-sm">Change Password</span>
+      </div>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Current Password</Label>
+          <Input
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            className="h-8 text-sm"
+            autoComplete="current-password"
+            required
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">New Password (min. 8 chars)</Label>
+          <Input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            className="h-8 text-sm"
+            autoComplete="new-password"
+            minLength={8}
+            required
+          />
+        </div>
+        <Button size="sm" type="submit" disabled={loading}>{loading ? "Saving…" : "Change Password"}</Button>
+      </form>
     </div>
   );
 }
@@ -85,7 +187,7 @@ function TwoFactorSection({ enabled }: { enabled: boolean }) {
   }
 
   return (
-    <div className="rounded-md border p-4 space-y-3">
+    <div className="rounded-xl border border-white/10 bg-card/60 backdrop-blur-md p-4 space-y-3">
       <div className="flex items-center gap-2">
         <ShieldCheck className="h-4 w-4" />
         <span className="font-medium text-sm">Two-Factor Authentication</span>

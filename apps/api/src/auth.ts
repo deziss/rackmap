@@ -13,10 +13,10 @@ export const auth = betterAuth({
 
   emailAndPassword: {
     enabled: true,
-    // Signup disabled — admin creates users via /api/auth/admin/create-user
-    disableSignUp: true,
+    // Self-signup enabled; admin plugin assigns "viewer" as default role
+    disableSignUp: false,
     minPasswordLength: 8,
-    autoSignIn: false,
+    autoSignIn: true,
   },
 
   session: {

@@ -9,6 +9,7 @@ import { getClientIp } from "../middleware/session.js";
 import { writeAuditDirect } from "../lib/audit.js";
 import { connectToServer, sshErrorToHttp, type SshTarget } from "../services/ssh.service.js";
 import type { Client } from "ssh2";
+import { prisma } from "../db.js";
 
 // Global + per-user concurrency caps for an RCE-capable feature.
 let activeCount = 0;
@@ -32,12 +33,28 @@ export function setupWebSocket(app: Hono): (server: Server) => void {
       const role = user?.role ?? "viewer";
       const ip = getClientIp(c);
 
+      // Admin has direct SSH permission; viewers/editors need an approved AccessRequest
+      const hasSshPerm = can(role, "server", "ssh");
+      let authorizedViaRequest = false;
+      if (!hasSshPerm && !!user && !user.banned && Number.isFinite(id)) {
+        const req = await prisma.accessRequest.findFirst({
+          where: {
+            requesterId: user.id,
+            serverId: id,
+            type: "ssh",
+            status: "approved",
+            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+          },
+        });
+        authorizedViaRequest = !!req;
+      }
+
       const authorized =
         env.SSH_ENABLED &&
         !!user &&
         !user.banned &&
         Number.isFinite(id) &&
-        can(role, "server", "ssh");
+        (hasSshPerm || authorizedViaRequest);
 
       if (!authorized) {
         return { onOpen: (_e, ws) => ws.close(1008, "unauthorized") };

@@ -13,6 +13,8 @@ import { auditRoutes } from "./modules/audit/audit.routes.js";
 import { viewRoutes } from "./modules/views/view.routes.js";
 import { importRoutes } from "./modules/import-export/import.routes.js";
 import { apiKeyRoutes } from "./modules/api-keys/api-key.routes.js";
+import { userRoutes } from "./modules/users/user.routes.js";
+import { accessRequestRoutes } from "./modules/access-requests/access-request.routes.js";
 
 export function createApp() {
   const app = new Hono();
@@ -42,6 +44,8 @@ export function createApp() {
   app.route("/api/v1/views", viewRoutes);
   app.route("/api/v1/servers", importRoutes);
   app.route("/api/v1/api-keys", apiKeyRoutes);
+  app.route("/api/v1/users", userRoutes);
+  app.route("/api/v1/access-requests", accessRequestRoutes);
 
   app.onError(onError);
 

@@ -46,9 +46,14 @@ export const AUDIT_ACTIONS = [
   "auth.sign_in_failed",
   "auth.sign_out",
   "user.create",
+  "user.update",
   "user.role_change",
   "user.ban",
   "user.unban",
   "user.remove",
+  "auth.password_reset_by_admin",
+  "access_request.create",
+  "access_request.approved",
+  "access_request.rejected",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

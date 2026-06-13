@@ -6,6 +6,7 @@ import { requirePermission } from "../../middleware/require-permission.js";
 import { LOOKUP_TYPE_KEYS, type LookupType } from "@inv/shared";
 import { listLookups, createLookup, updateLookup, deleteLookup } from "./lookup.service.js";
 import { notFound } from "../../lib/errors.js";
+import { getAuditCtx, writeAuditDirect } from "../../lib/audit.js";
 
 const nameSchema = z.object({ name: z.string().min(1).max(100).trim() });
 const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
@@ -33,6 +34,14 @@ export const lookupRoutes = new Hono()
       const type = parseLookupType(c.req.param("type"));
       const { name } = c.req.valid("json");
       const created = await createLookup(type, name);
+      await writeAuditDirect({
+        ctx: getAuditCtx(c),
+        category: "data",
+        action: "lookup.create",
+        entity: "Lookup",
+        entityId: String(created.id),
+        after: { type, name: created.name },
+      });
       return c.json(created, 201);
     },
   )
@@ -47,7 +56,18 @@ export const lookupRoutes = new Hono()
       const type = parseLookupType(c.req.param("type"));
       const { id } = c.req.valid("param");
       const { name } = c.req.valid("json");
-      return c.json(await updateLookup(type, id, name));
+      const before = await listLookups(type).then((list) => list.find((e) => e.id === id) ?? null);
+      const updated = await updateLookup(type, id, name);
+      await writeAuditDirect({
+        ctx: getAuditCtx(c),
+        category: "data",
+        action: "lookup.update",
+        entity: "Lookup",
+        entityId: String(id),
+        before: before ? { type, name: before.name } : null,
+        after: { type, name: updated.name },
+      });
+      return c.json(updated);
     },
   )
 
@@ -59,7 +79,15 @@ export const lookupRoutes = new Hono()
     async (c) => {
       const type = parseLookupType(c.req.param("type"));
       const { id } = c.req.valid("param");
-      await deleteLookup(type, id);
+      const deleted = await deleteLookup(type, id);
+      await writeAuditDirect({
+        ctx: getAuditCtx(c),
+        category: "data",
+        action: "lookup.delete",
+        entity: "Lookup",
+        entityId: String(id),
+        before: { type, name: deleted.name },
+      });
       return c.json({ ok: true });
     },
   );

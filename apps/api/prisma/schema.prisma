@@ -31,8 +31,10 @@ model User {
   sessions      Session[]
   accounts      Account[]
   apiKeys       ApiKey[]
-  auditLogs     AuditLog[]
-  savedViews    SavedView[]
+  auditLogs         AuditLog[]
+  savedViews        SavedView[]
+  accessRequests    AccessRequest[]  @relation("Requester")
+  resolvedRequests  AccessRequest[]  @relation("Resolver")
   @@map("user")
 }
 
@@ -208,7 +210,8 @@ model Server {
   deletedAt     DateTime?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
-  statusChecks  StatusCheck[]
+  statusChecks    StatusCheck[]
+  accessRequests  AccessRequest[]
   @@index([cloudProviderId])
   @@index([gpuTypeId])
   @@index([allocatedToId])
@@ -254,6 +257,30 @@ model AuditLog {
   @@index([createdAt])
   @@index([actorId])
   @@index([category, createdAt])
+}
+
+// ─── Access Requests (viewer approval for SSH / password reveal) ─────────────
+model AccessRequest {
+  id          Int       @id @default(autoincrement())
+  requesterId String
+  requester   User      @relation("Requester", fields: [requesterId], references: [id], onDelete: Cascade)
+  serverId    Int
+  server      Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  /// "ssh" | "password_reveal"
+  type        String
+  /// "pending" | "approved" | "rejected"
+  status      String    @default("pending")
+  note        String?
+  adminNote   String?
+  requestedAt DateTime  @default(now())
+  resolvedAt  DateTime?
+  resolvedBy  String?
+  resolver    User?     @relation("Resolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
+  /// Approval valid until (null = indefinite)
+  expiresAt   DateTime?
+  @@index([requesterId])
+  @@index([serverId])
+  @@index([status])
 }
 
 // ─── Saved views ─────────────────────────────────────────────────────────────

@@ -2,9 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback } from "react";
 import { fetchServers, checkServer, revealPassword, serverKeys } from "@/lib/queries";
+import { apiFetch } from "@/lib/api";
 import { StatusDot } from "@/components/status-dot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -12,11 +14,12 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import {
   RefreshCw, Eye, EyeOff, Trash2, RotateCcw, Zap,
-  Download, AlertTriangle, Terminal,
+  Download, AlertTriangle, Terminal, KeyRound,
 } from "lucide-react";
 import type { ServerDto } from "@inv/shared";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -28,6 +31,64 @@ import { authClient } from "@/lib/auth-client";
 export const Route = createFileRoute("/_auth/servers")({
   component: ServersPage,
 });
+
+function RequestAccessButton({ serverId, type, label }: { serverId: number; type: "ssh" | "password_reveal"; label: string }) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await apiFetch("/api/v1/access-requests", {
+        method: "POST",
+        body: JSON.stringify({ serverId, type, note: note || undefined }),
+      });
+      toast.success("Access request submitted — await admin approval");
+      setOpen(false);
+      setNote("");
+    } catch (err: unknown) {
+      toast.error((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 text-amber-500 hover:text-amber-400"
+            onClick={() => setOpen(true)}
+          >
+            <KeyRound className="h-3.5 w-3.5" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Request {label} access</TooltipContent>
+      </Tooltip>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Request {label} Access</DialogTitle></DialogHeader>
+          <form onSubmit={submit} className="space-y-4 mt-2">
+            <p className="text-sm text-muted-foreground">Your request will be reviewed by an admin. You'll be notified when approved.</p>
+            <div className="space-y-1">
+              <Label>Reason (optional)</Label>
+              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Briefly describe why you need access…" className="h-8 text-sm" />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={loading}>{loading ? "Sending…" : "Submit Request"}</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
 function DeleteConfirm({ server, onConfirm, isPending }: { server: ServerDto; onConfirm: () => void; isPending: boolean }) {
   const [open, setOpen] = useState(false);
@@ -225,7 +286,7 @@ function ServersPage() {
                 >
                   <td className="px-3 py-2.5 text-muted-foreground text-xs">{server.id}</td>
                   <td className="px-3 py-2.5 font-mono font-medium">
-                    {canEdit && !isDeleted ? (
+                    {!isDeleted ? (
                       <Link
                         to="/servers/$serverId"
                         params={{ serverId: String(server.id) }}
@@ -262,20 +323,24 @@ function ServersPage() {
                   <td className="px-3 py-2.5 text-xs">{server.username}</td>
                   <td className="px-3 py-2.5">
                     {server.hasPassword ? (
-                      <div className="flex items-center gap-1">
-                        <span className="font-mono text-xs">
-                          {revealed !== undefined ? (revealed ?? "—") : "••••••"}
-                        </span>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-5 w-5"
-                          onClick={() => handleReveal(server)}
-                          title={revealed !== undefined ? "Hide" : "Reveal"}
-                        >
-                          {revealed !== undefined ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                        </Button>
-                      </div>
+                      role === "viewer" ? (
+                        <RequestAccessButton serverId={server.id} type="password_reveal" label="Password" />
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <span className="font-mono text-xs">
+                            {revealed !== undefined ? (revealed ?? "—") : "••••••"}
+                          </span>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-5 w-5"
+                            onClick={() => handleReveal(server)}
+                            title={revealed !== undefined ? "Hide" : "Reveal"}
+                          >
+                            {revealed !== undefined ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                          </Button>
+                        </div>
+                      )
                     ) : (
                       <span className="text-muted-foreground text-xs">—</span>
                     )}
@@ -336,8 +401,8 @@ function ServersPage() {
                         </Tooltip>
                       )}
 
-                      {/* SSH Terminal — admin only */}
-                      {role === "admin" && !isDeleted && (
+                      {/* SSH Terminal — admin: direct link; others: request access */}
+                      {!isDeleted && role === "admin" && (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Link to="/ssh" search={{ serverId: server.id }}>
@@ -348,6 +413,9 @@ function ServersPage() {
                           </TooltipTrigger>
                           <TooltipContent>Open SSH Terminal</TooltipContent>
                         </Tooltip>
+                      )}
+                      {!isDeleted && role !== "admin" && (
+                        <RequestAccessButton serverId={server.id} type="ssh" label="SSH Terminal" />
                       )}
 
                       {/* Edit + Delete for editor/admin on active servers */}
