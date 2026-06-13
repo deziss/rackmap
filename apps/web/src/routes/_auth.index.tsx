@@ -8,10 +8,9 @@ import {
   PieChart, Pie, Cell, Tooltip as ReTooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from "recharts";
-import { authClient } from "@/lib/auth-client";
 import { StatusDot } from "@/components/status-dot";
 
-export const Route = createFileRoute("/")({
+export const Route = createFileRoute("/_auth/")({
   component: DashboardPage,
 });
 
@@ -69,7 +68,6 @@ function ServerRow({ server }: {
 }
 
 function DashboardPage() {
-  authClient.useSession();
 
   const { data, isLoading } = useQuery({
     queryKey: serverKeys.list({ limit: 100 }),
