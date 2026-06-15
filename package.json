@@ -10,6 +10,11 @@
     "typecheck": "pnpm -r typecheck",
     "db:migrate": "pnpm --filter @inv/api db:migrate",
     "db:seed": "pnpm --filter @inv/api db:seed",
-    "db:studio": "pnpm --filter @inv/api db:studio"
+    "db:studio": "pnpm --filter @inv/api db:studio",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.0"
   }
 }

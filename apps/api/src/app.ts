@@ -42,20 +42,30 @@ export function createApp() {
       headers: c.req.raw.headers,
       body: JSON.stringify(body),
     });
+    const ip = c.req.header("x-forwarded-for") ?? c.req.header("x-real-ip") ?? null;
+    const email = typeof body.email === "string" ? body.email.toLowerCase() : null;
     const response = await auth.handler(cloned);
-    if (response.status === 200) {
-      const email = typeof body.email === "string" ? body.email.toLowerCase() : null;
-      if (email) {
+    if (email) {
+      if (response.status === 200) {
         prisma.user.findUnique({ where: { email } }).then((user) => {
           if (user) {
             return writeAuditDirect({
-              ctx: { actorId: user.id, actorEmail: user.email, ip: c.req.header("x-forwarded-for") ?? c.req.header("x-real-ip") ?? null },
+              ctx: { actorId: user.id, actorEmail: user.email, ip },
               category: "auth",
               action: "auth.sign_in",
               entity: "User",
               entityId: user.id,
             });
           }
+        }).catch(() => {/* non-blocking */});
+      } else if (response.status === 401 || response.status === 400) {
+        writeAuditDirect({
+          ctx: { actorId: null, actorEmail: email, ip },
+          category: "auth",
+          action: "auth.sign_in_failed",
+          entity: "User",
+          entityId: null,
+          after: { email, status: response.status },
         }).catch(() => {/* non-blocking */});
       }
     }

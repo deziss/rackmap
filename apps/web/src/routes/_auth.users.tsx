@@ -43,7 +43,7 @@ function UsersPage() {
 
   const setRole = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: Role }) => {
-      await authClient.admin.setRole({ userId, role });
+      await apiFetch(`/api/v1/users/${userId}/role`, { method: "PATCH", body: JSON.stringify({ role }) });
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["users"] }); toast.success("Role updated"); },
     onError: (e: Error) => toast.error(e.message),
@@ -51,11 +51,8 @@ function UsersPage() {
 
   const ban = useMutation({
     mutationFn: async ({ userId, banned }: { userId: string; banned: boolean }) => {
-      if (banned) {
-        await authClient.admin.unbanUser({ userId });
-      } else {
-        await authClient.admin.banUser({ userId });
-      }
+      const path = banned ? "unban" : "ban";
+      await apiFetch(`/api/v1/users/${userId}/${path}`, { method: "POST" });
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["users"] }); toast.success("Updated"); },
     onError: (e: Error) => toast.error(e.message),
