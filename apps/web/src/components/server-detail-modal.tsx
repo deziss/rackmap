@@ -190,8 +190,8 @@ export function ServerDetailModal({ serverId, onClose }: ServerDetailModalProps)
           {metricsQ.isError && (
             <Card className="border-destructive/50">
               <CardContent className="flex items-center gap-2 py-3 text-sm text-destructive">
-                <AlertTriangle className="h-4 w-4" />
-                Live metrics unavailable — host unreachable over SSH or no credentials configured.
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>Live metrics unavailable — {metricsQ.error instanceof Error ? metricsQ.error.message : "host unreachable over SSH or no credentials configured."}</span>
               </CardContent>
             </Card>
           )}

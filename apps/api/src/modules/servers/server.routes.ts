@@ -189,7 +189,7 @@ export const serverRoutes = new Hono()
         return c.json(metrics);
       } catch (err) {
         const { status, message } = sshErrorToHttp(err);
-        return c.json({ reachable: false, message }, status);
+        return c.json({ error: { code: "SSH_ERROR", message } }, status);
       }
     },
   );
