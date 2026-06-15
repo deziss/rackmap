@@ -5,6 +5,7 @@ import { requireSession } from "../../middleware/session.js";
 import { forbidden, notFound } from "../../lib/errors.js";
 import { getAuditCtx, writeAuditDirect } from "../../lib/audit.js";
 import { prisma } from "../../db.js";
+import { notifyAccessRequest } from "../../services/notify.service.js";
 
 const createSchema = z.object({
   serverId: z.number().int().positive(),
@@ -123,6 +124,19 @@ export const accessRequestRoutes = new Hono()
       entity: "AccessRequest",
       entityId: String(id),
       after: { status, type: existing.type, serverId: existing.serverId, adminNote, expiresAt },
+    });
+
+    // Fire-and-forget notification
+    const requester = await prisma.user.findUnique({ where: { id: existing.requesterId }, select: { email: true } });
+    const server = await prisma.server.findUnique({ where: { id: existing.serverId }, select: { hostname: true } });
+    void notifyAccessRequest({
+      requestId: id,
+      status,
+      type: existing.type as "ssh" | "password_reveal",
+      requesterEmail: requester?.email ?? "unknown",
+      hostname: server?.hostname ?? String(existing.serverId),
+      adminNote,
+      expiresAt,
     });
 
     return c.json(updated);

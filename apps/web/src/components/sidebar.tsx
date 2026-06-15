@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, useMatchRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
+import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -50,6 +52,13 @@ export function Sidebar({ user }: SidebarProps) {
     typeof window !== "undefined" && localStorage.getItem("sidebar-collapsed") === "true"
   );
 
+  const { data: pendingData } = useQuery({
+    queryKey: ["access-requests", "pending-count"],
+    queryFn: () => apiFetch<{ count: number }>("/api/v1/access-requests/pending-count"),
+    enabled: role === "admin",
+    refetchInterval: 30_000,
+  });
+
   function toggleCollapse() {
     setCollapsed((v) => {
       const next = !v;
@@ -90,6 +99,9 @@ export function Sidebar({ user }: SidebarProps) {
           .filter((item) => !item.roles || item.roles.includes(role))
           .map(({ to, label, icon: Icon }) => {
             const active = !!matchRoute({ to, fuzzy: true });
+            const badge = to === "/access-requests" && (pendingData?.count ?? 0) > 0
+              ? pendingData!.count
+              : null;
             const linkEl = (
               <Link
                 key={to}
@@ -103,14 +115,28 @@ export function Sidebar({ user }: SidebarProps) {
                 )}
               >
                 <Icon className={cn("h-4 w-4 shrink-0", active ? "text-primary" : "text-muted-foreground")} />
-                {!collapsed && label}
+                {!collapsed && <span className="flex-1">{label}</span>}
+                {badge != null && (
+                  <span className="ml-auto min-w-4.5 h-4.5 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold px-1 leading-none">
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                )}
               </Link>
             );
             if (collapsed) {
               return (
                 <Tooltip key={to}>
-                  <TooltipTrigger asChild>{linkEl}</TooltipTrigger>
-                  <TooltipContent side="right">{label}</TooltipContent>
+                  <TooltipTrigger asChild>
+                    <div className="relative">
+                      {linkEl}
+                      {badge != null && (
+                        <span className="absolute -top-1 -right-1 min-w-3.5 h-3.5 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold px-0.5 leading-none pointer-events-none">
+                          {badge > 9 ? "9+" : badge}
+                        </span>
+                      )}
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">{label}{badge ? ` (${badge} pending)` : ""}</TooltipContent>
                 </Tooltip>
               );
             }

@@ -195,6 +195,27 @@ function ServersPage() {
   );
 
   const canEdit = role === "admin" || role === "editor";
+  const isViewer = role === "viewer";
+
+  // Viewer: fetch own access requests to derive per-server approval without N+1 calls
+  const { data: myRequests } = useQuery({
+    queryKey: ["access-requests", "mine"],
+    queryFn: () => apiFetch<{ serverId: number; type: string; status: string; expiresAt: string | null }[]>("/api/v1/access-requests"),
+    enabled: isViewer,
+    refetchInterval: 15_000,
+  });
+
+  function viewerApproved(serverId: number, type: "ssh" | "password_reveal"): boolean {
+    if (!isViewer || !myRequests) return false;
+    const now = Date.now();
+    return myRequests.some(
+      (r) =>
+        r.serverId === serverId &&
+        r.type === type &&
+        r.status === "approved" &&
+        (r.expiresAt === null || new Date(r.expiresAt).getTime() > now),
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -323,7 +344,7 @@ function ServersPage() {
                   <td className="px-3 py-2.5 text-xs">{server.username}</td>
                   <td className="px-3 py-2.5">
                     {server.hasPassword ? (
-                      role === "viewer" ? (
+                      role === "viewer" && !viewerApproved(server.id, "password_reveal") ? (
                         <RequestAccessButton serverId={server.id} type="password_reveal" label="Password" />
                       ) : (
                         <div className="flex items-center gap-1">
@@ -452,7 +473,19 @@ function ServersPage() {
                           <TooltipContent>Open SSH Terminal</TooltipContent>
                         </Tooltip>
                       )}
-                      {!isDeleted && role !== "admin" && (
+                      {!isDeleted && role !== "admin" && viewerApproved(server.id, "ssh") && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Link to="/ssh" search={{ serverId: server.id }}>
+                              <Button size="icon" variant="ghost" className="h-7 w-7 text-emerald-500 hover:text-emerald-400">
+                                <Terminal className="h-3.5 w-3.5" />
+                              </Button>
+                            </Link>
+                          </TooltipTrigger>
+                          <TooltipContent>Open SSH Terminal (approved)</TooltipContent>
+                        </Tooltip>
+                      )}
+                      {!isDeleted && role !== "admin" && !viewerApproved(server.id, "ssh") && (
                         <RequestAccessButton serverId={server.id} type="ssh" label="SSH Terminal" />
                       )}
 

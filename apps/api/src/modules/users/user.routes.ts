@@ -90,6 +90,82 @@ export const userRoutes = new Hono()
     },
   )
 
+  // POST /users/:id/ban — admin bans user
+  .post("/:id/ban", async (c) => {
+    requireAdmin(c);
+    const id = c.req.param("id");
+    const actor = c.get("user") as { id?: string } | undefined;
+    if (actor?.id === id) throw forbidden("Cannot ban yourself");
+
+    const existing = await prisma.user.findUnique({ where: { id } });
+    if (!existing) throw notFound("User");
+
+    await auth.api.banUser({ headers: c.req.raw.headers, body: { userId: id } });
+
+    await writeAuditDirect({
+      ctx: getAuditCtx(c),
+      category: "auth",
+      action: "user.ban",
+      entity: "User",
+      entityId: id,
+      after: { targetEmail: existing.email },
+    });
+
+    return c.json({ ok: true });
+  })
+
+  // POST /users/:id/unban — admin unbans user
+  .post("/:id/unban", async (c) => {
+    requireAdmin(c);
+    const id = c.req.param("id");
+
+    const existing = await prisma.user.findUnique({ where: { id } });
+    if (!existing) throw notFound("User");
+
+    await auth.api.unbanUser({ headers: c.req.raw.headers, body: { userId: id } });
+
+    await writeAuditDirect({
+      ctx: getAuditCtx(c),
+      category: "auth",
+      action: "user.unban",
+      entity: "User",
+      entityId: id,
+      after: { targetEmail: existing.email },
+    });
+
+    return c.json({ ok: true });
+  })
+
+  // PATCH /users/:id/role — admin changes user role
+  .patch(
+    "/:id/role",
+    zValidator("json", z.object({ role: z.enum(["admin", "editor", "viewer"]) })),
+    async (c) => {
+      requireAdmin(c);
+      const id = c.req.param("id");
+      const actor = c.get("user") as { id?: string } | undefined;
+      if (actor?.id === id) throw forbidden("Cannot change your own role");
+      const { role } = c.req.valid("json");
+
+      const existing = await prisma.user.findUnique({ where: { id } });
+      if (!existing) throw notFound("User");
+
+      await auth.api.setRole({ headers: c.req.raw.headers, body: { userId: id, role } });
+
+      await writeAuditDirect({
+        ctx: getAuditCtx(c),
+        category: "auth",
+        action: "user.role_change",
+        entity: "User",
+        entityId: id,
+        before: { role: existing.role },
+        after: { role },
+      });
+
+      return c.json({ ok: true });
+    },
+  )
+
   // DELETE /users/:id — admin removes user
   .delete("/:id", async (c) => {
     requireAdmin(c);
