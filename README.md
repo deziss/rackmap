@@ -1,6 +1,23 @@
 # Server Inventory
 
+> **Status: Complete** — All planned phases shipped and production-ready.
+
 Full-stack infrastructure inventory and monitoring platform. Track bare-metal and cloud servers, monitor live metrics via agentless SSH, manage access, and maintain a complete audit trail — no agents installed on target servers.
+
+---
+
+## Project Status
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| P1 | Server CRUD, tags, lookup tables, RBAC | ✅ Done |
+| P2 | TCP ping monitoring, up/down history, scheduler | ✅ Done |
+| P3 | Audit log, notifications (webhook + Telegram), UX | ✅ Done |
+| P4 | Agentless SSH metrics (CPU/mem/disk/net/GPU) | ✅ Done |
+| P5 | Browser SSH terminal (xterm.js, WebSocket, kill-switch) | ✅ Done |
+| P6 | Excel + JSON export, server detail modal | ✅ Done |
+| P7 | Access request system (SSH + password reveal approval) | ✅ Done |
+| P8 | Multi-vendor GPU metrics (NVIDIA, AMD, Intel) | ✅ Done |
 
 ---
 
