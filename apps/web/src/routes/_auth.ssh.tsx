@@ -58,8 +58,6 @@ function SshPage() {
   const offlineServers = servers.filter((s) => s.lastStatus !== "up");
 
   function openTab(serverId: number, hostname: string) {
-    const existing = tabs.find((t) => t.serverId === serverId);
-    if (existing) { setActiveTabId(existing.id); return; }
     const id = newTabId();
     setTabs((prev) => [...prev, { id, serverId, hostname }]);
     setActiveTabId(id);
@@ -109,12 +107,7 @@ function SshPage() {
                   {onlineServers.map((s) => (
                     <button
                       key={s.id}
-                      className={cn(
-                        "w-full text-left px-2.5 py-1.5 rounded text-xs transition-colors flex items-center justify-between group",
-                        tabs.some((t) => t.serverId === s.id)
-                          ? "bg-primary/15 text-primary font-medium"
-                          : "hover:bg-muted text-foreground",
-                      )}
+                      className="w-full text-left px-2.5 py-1.5 rounded text-xs transition-colors flex items-center justify-between group hover:bg-muted text-foreground"
                       onClick={() => openTab(s.id, s.hostname)}
                     >
                       <span className="truncate">{s.hostname}</span>
