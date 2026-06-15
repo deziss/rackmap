@@ -1,6 +1,8 @@
 # Server Inventory
 
 > **Status: Complete** — All planned phases shipped and production-ready.
+>
+> **[User Guide →](USER_GUIDE.md)** — Setup, features, roles, troubleshooting
 
 Full-stack infrastructure inventory and monitoring platform. Track bare-metal and cloud servers, monitor live metrics via agentless SSH, manage access, and maintain a complete audit trail — no agents installed on target servers.
 
