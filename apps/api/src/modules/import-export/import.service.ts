@@ -233,3 +233,49 @@ export async function exportServers(filters: Record<string, string | undefined>)
   const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
   return buf;
 }
+
+export async function exportServersJson(filters: Record<string, string | undefined>): Promise<string> {
+  const where = {
+    deletedAt: null,
+    ...(filters.q ? { OR: [{ hostname: { contains: filters.q } }, { ip: { contains: filters.q } }] } : {}),
+    ...(filters.cloudProviderId ? { cloudProviderId: Number(filters.cloudProviderId) } : {}),
+    ...(filters.locationId ? { locationId: Number(filters.locationId) } : {}),
+    ...(filters.gpuTypeId ? { gpuTypeId: Number(filters.gpuTypeId) } : {}),
+    ...(filters.allocatedToId ? { allocatedToId: Number(filters.allocatedToId) } : {}),
+    ...(filters.serverTypeId ? { serverTypeId: Number(filters.serverTypeId) } : {}),
+    ...(filters.status ? { lastStatus: filters.status } : {}),
+  };
+
+  const servers = await prisma.server.findMany({
+    where,
+    orderBy: { id: "asc" },
+    select: {
+      id: true, hostname: true, ip: true, sshPort: true, username: true,
+      cpu: true, ram: true, gpuCount: true, remark: true,
+      lastStatus: true, lastCheckedAt: true, lastLatencyMs: true,
+      domain: true, environment: true,
+      cloudProvider: { select: { name: true } },
+      gpuType: { select: { name: true } },
+      allocatedTo: { select: { name: true } },
+      location: { select: { name: true } },
+      serverType: { select: { name: true } },
+      tags: { select: { tag: { select: { name: true } } } },
+    },
+  });
+
+  return JSON.stringify(servers.map((s) => ({
+    id: s.id, hostname: s.hostname, ip: s.ip, sshPort: s.sshPort, username: s.username,
+    domain: s.domain, environment: s.environment,
+    cloudProvider: s.cloudProvider?.name ?? null,
+    gpuType: s.gpuType?.name ?? null, gpuCount: s.gpuCount,
+    allocatedTo: s.allocatedTo?.name ?? null,
+    location: s.location?.name ?? null,
+    serverType: s.serverType?.name ?? null,
+    cpu: s.cpu, ram: s.ram,
+    tags: s.tags.map((t) => t.tag.name),
+    status: s.lastStatus,
+    lastCheckedAt: s.lastCheckedAt?.toISOString() ?? null,
+    latencyMs: s.lastLatencyMs,
+    remark: s.remark,
+  })), null, 2);
+}

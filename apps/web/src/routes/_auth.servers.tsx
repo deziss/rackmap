@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback } from "react";
+import { ServerDetailModal } from "@/components/server-detail-modal";
 import { fetchServers, checkServer, revealPassword, serverKeys } from "@/lib/queries";
 import { apiFetch } from "@/lib/api";
 import { StatusDot } from "@/components/status-dot";
@@ -143,6 +144,7 @@ function ServersPage() {
   const [q, setQ] = useState("");
   const [cursor, setCursor] = useState<number | undefined>();
   const [includeDeleted, setIncludeDeleted] = useState(false);
+  const [detailServerId, setDetailServerId] = useState<number | null>(null);
   const [revealedPasswords, setRevealedPasswords] = useState<Record<number, string | null>>({});
   const debouncedQ = useDebounce(q, 300);
 
@@ -196,6 +198,24 @@ function ServersPage() {
 
   const canEdit = role === "admin" || role === "editor";
   const isViewer = role === "viewer";
+
+  async function triggerDownload(format: "xlsx" | "json", searchQ: string) {
+    const url = `/api/v1/servers/export.${format}?q=${encodeURIComponent(searchQ)}`;
+    try {
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) { toast.error("Export failed"); return; }
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `servers-${Date.now()}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    } catch {
+      toast.error("Export failed");
+    }
+  }
 
   // Viewer: fetch own access requests to derive per-server approval without N+1 calls
   const { data: myRequests } = useQuery({
@@ -251,11 +271,22 @@ function ServersPage() {
           </TooltipTrigger>
           <TooltipContent>Refresh</TooltipContent>
         </Tooltip>
-        <a href={`/api/v1/servers/export.xlsx?q=${encodeURIComponent(debouncedQ)}`} download>
-          <Button size="sm" variant="outline" className="gap-1.5">
-            <Download className="h-3.5 w-3.5" /> Export
-          </Button>
-        </a>
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5"
+          onClick={() => triggerDownload("xlsx", debouncedQ)}
+        >
+          <Download className="h-3.5 w-3.5" /> XLSX
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5"
+          onClick={() => triggerDownload("json", debouncedQ)}
+        >
+          <Download className="h-3.5 w-3.5" /> JSON
+        </Button>
         {canEdit && <ImportWizard onImported={() => qc.invalidateQueries({ queryKey: serverKeys.all })} />}
         {canEdit && <ServerFormDialog onSaved={() => qc.invalidateQueries({ queryKey: serverKeys.all })} />}
       </div>
@@ -308,13 +339,13 @@ function ServersPage() {
                   <td className="px-3 py-2.5 text-muted-foreground text-xs">{server.id}</td>
                   <td className="px-3 py-2.5 font-mono font-medium">
                     {!isDeleted ? (
-                      <Link
-                        to="/servers/$serverId"
-                        params={{ serverId: String(server.id) }}
-                        className="text-primary hover:underline"
+                      <button
+                        type="button"
+                        className="text-primary hover:underline cursor-pointer text-left"
+                        onClick={() => setDetailServerId(server.id)}
                       >
                         {server.hostname}
-                      </Link>
+                      </button>
                     ) : (
                       <span>{server.hostname}</span>
                     )}
@@ -524,6 +555,8 @@ function ServersPage() {
           )}
         </div>
       </div>
+
+      <ServerDetailModal serverId={detailServerId} onClose={() => setDetailServerId(null)} />
     </div>
   );
 }

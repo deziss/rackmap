@@ -97,11 +97,13 @@ export function createApp() {
   // Authenticated app routes
   app.route("/api/v1/me", meRoutes);
   app.route("/api/v1/lookups", lookupRoutes);
+  // importRoutes must be before serverRoutes — /export.xlsx and /export.json are
+  // specific paths that would otherwise be swallowed by serverRoutes' /:id pattern.
+  app.route("/api/v1/servers", importRoutes);
   app.route("/api/v1/servers", serverRoutes);
   app.route("/api/v1/tags", tagRoutes);
   app.route("/api/v1/audit", auditRoutes);
   app.route("/api/v1/views", viewRoutes);
-  app.route("/api/v1/servers", importRoutes);
   app.route("/api/v1/api-keys", apiKeyRoutes);
   app.route("/api/v1/users", userRoutes);
   app.route("/api/v1/access-requests", accessRequestRoutes);

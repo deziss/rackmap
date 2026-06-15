@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { requireSession } from "../../middleware/session.js";
 import { requirePermission } from "../../middleware/require-permission.js";
 import { getAuditCtx } from "../../lib/audit.js";
-import { importServers, exportServers } from "./import.service.js";
+import { importServers, exportServers, exportServersJson } from "./import.service.js";
 
 const importRoutes = new Hono();
 
@@ -50,6 +50,27 @@ importRoutes.get("/export.xlsx", requireSession, async (c) => {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="servers-${Date.now()}.xlsx"`,
+    },
+  });
+});
+
+// GET /servers/export.json — viewer+
+importRoutes.get("/export.json", requireSession, async (c) => {
+  const filters: Record<string, string | undefined> = {
+    q: c.req.query("q"),
+    cloudProviderId: c.req.query("cloudProviderId"),
+    gpuTypeId: c.req.query("gpuTypeId"),
+    allocatedToId: c.req.query("allocatedToId"),
+    locationId: c.req.query("locationId"),
+    serverTypeId: c.req.query("serverTypeId"),
+    status: c.req.query("status"),
+  };
+
+  const json = await exportServersJson(filters);
+  return new Response(json, {
+    headers: {
+      "Content-Type": "application/json",
+      "Content-Disposition": `attachment; filename="servers-${Date.now()}.json"`,
     },
   });
 });
