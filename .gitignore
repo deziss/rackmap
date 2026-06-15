@@ -13,3 +13,5 @@ coverage/
 *.tsbuildinfo
 apps/web/src/routeTree.gen.ts
 backups/
+.env.docker
+.env.docker
