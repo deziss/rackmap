@@ -20,9 +20,12 @@ export function createApp() {
   const app = new Hono();
 
   app.use(logger());
+  // Reflect origin to support any IP/hostname when TRUSTED_ORIGINS=* (internal tool default).
+  // With credentials:true, CORS requires an exact origin echo — can't use literal "*".
+  const trustedList = env.TRUSTED_ORIGINS === "*" ? null : env.TRUSTED_ORIGINS.split(",").map((o) => o.trim());
   app.use(
     cors({
-      origin: env.WEB_ORIGIN,
+      origin: trustedList ? trustedList : (origin) => origin,
       credentials: true,
       allowHeaders: ["Content-Type", "Authorization"],
       allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],

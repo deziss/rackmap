@@ -9,9 +9,10 @@ import "@xterm/xterm/css/xterm.css";
 interface SshTerminalProps {
   serverId: number;
   onClose: () => void;
+  className?: string;
 }
 
-export function SshTerminal({ serverId, onClose }: SshTerminalProps) {
+export function SshTerminal({ serverId, onClose, className }: SshTerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [status, setStatus] = useState<"connecting" | "connected" | "disconnected" | "error">("connecting");
@@ -107,7 +108,8 @@ export function SshTerminal({ serverId, onClose }: SshTerminalProps) {
     <div
       className={cn(
         "flex flex-col overflow-hidden bg-zinc-950 border border-zinc-800 rounded-lg",
-        fullscreen ? "fixed inset-4 z-50 shadow-2xl" : "relative h-[400px]"
+        fullscreen ? "fixed inset-4 z-50 shadow-2xl" : "relative h-100",
+        !fullscreen && className,
       )}
     >
       {/* Terminal Header */}

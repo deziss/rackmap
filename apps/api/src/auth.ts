@@ -10,7 +10,8 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "sqlite" }),
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
-  trustedOrigins: [env.WEB_ORIGIN],
+  // "*" = wildcard (allows any origin) — safe for internal tools on private networks
+  trustedOrigins: env.TRUSTED_ORIGINS === "*" ? ["*"] : env.TRUSTED_ORIGINS.split(",").map((o) => o.trim()),
 
   emailAndPassword: {
     enabled: true,

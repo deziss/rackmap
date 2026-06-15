@@ -16,6 +16,8 @@ const EnvSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(16),
   BETTER_AUTH_URL: z.string().default("http://localhost:5173"),
   WEB_ORIGIN: z.string().default("http://localhost:5173"),
+  // Comma-separated allowed origins, or "*" to allow all (internal tool default)
+  TRUSTED_ORIGINS: z.string().default("*"),
   SCHEDULER_ENABLED: z
     .string()
     .default("true")
