@@ -210,6 +210,7 @@ model Server {
   deletedAt     DateTime?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+  updatedByEmail String?
   statusChecks    StatusCheck[]
   accessRequests  AccessRequest[]
   @@index([cloudProviderId])

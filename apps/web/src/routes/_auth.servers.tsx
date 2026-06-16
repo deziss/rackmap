@@ -305,6 +305,7 @@ function ServersPage() {
               <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Password</th>
               <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">GPU</th>
               <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tags</th>
+              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Last Updated By</th>
               <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
@@ -312,7 +313,7 @@ function ServersPage() {
             {isLoading && (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b border-white/5">
-                  {Array.from({ length: 10 }).map((__, j) => (
+                  {Array.from({ length: 11 }).map((__, j) => (
                     <td key={j} className="px-3 py-3">
                       <Skeleton className="h-4 w-full" />
                     </td>
@@ -322,7 +323,7 @@ function ServersPage() {
             )}
             {!isLoading && data?.items.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-3 py-12 text-center text-muted-foreground text-sm">
+                <td colSpan={11} className="px-3 py-12 text-center text-muted-foreground text-sm">
                   No servers found
                 </td>
               </tr>
@@ -415,6 +416,23 @@ function ServersPage() {
                         </Badge>
                       ))}
                     </div>
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground max-w-35">
+                    {server.updatedByEmail ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="truncate block cursor-default" title={server.updatedByEmail}>
+                            {server.updatedByEmail.split("@")[0]}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{server.updatedByEmail}</p>
+                          <p className="text-muted-foreground text-xs">{new Date(server.updatedAt).toLocaleString()}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <span className="text-muted-foreground/50">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-1">
