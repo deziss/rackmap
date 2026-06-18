@@ -70,6 +70,8 @@ export function setupWebSocket(app: Hono): (server: Server) => void {
       let cleanedUp = false;
       let idleTimer: ReturnType<typeof setTimeout> | undefined;
       let maxTimer: ReturnType<typeof setTimeout> | undefined;
+      // Two-phase connect: set to true when we're waiting for the client to send a password
+      let waitingForPassword = false;
 
       const ctx = { actorId: actor.id, actorEmail: actor.email, ip };
 
@@ -98,6 +100,45 @@ export function setupWebSocket(app: Hono): (server: Server) => void {
         }
       };
 
+      function resetIdle(ws: { close: (code?: number, reason?: string) => void }) {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => ws.close(4000, "idle timeout"), env.SSH_IDLE_TIMEOUT_MS);
+      }
+
+      // Shared shell-open logic used from both onOpen (stored creds) and
+      // onMessage (client-supplied password after need_password prompt).
+      function openShell(conn: { client: Client; target: SshTarget }, ws: { send: (data: unknown) => void; close: (code?: number, reason?: string) => void }) {
+        client = conn.client;
+        target = conn.target;
+
+        client.shell({ term: "xterm-256color", cols: 80, rows: 24 }, (err, st) => {
+          if (err || !client) {
+            ws.send(enc.encode("\r\n*** Failed to open shell ***\r\n"));
+            ws.close(1011, "shell failed");
+            cleanup();
+            return;
+          }
+          stream = st;
+          startedAt = Date.now();
+
+          void writeAuditDirect({
+            ctx,
+            category: "data",
+            action: "server.ssh_open",
+            entity: "server",
+            entityId: String(id),
+            after: { hostname: target?.hostname ?? null },
+          });
+
+          resetIdle(ws);
+          maxTimer = setTimeout(() => ws.close(4001, "max session duration"), env.SSH_MAX_SESSION_MS);
+
+          st.on("data", (d: Buffer) => ws.send(new Uint8Array(d)));
+          st.stderr.on("data", (d: Buffer) => ws.send(new Uint8Array(d)));
+          st.on("close", () => ws.close(1000, "shell closed"));
+        });
+      }
+
       return {
         onOpen: async (_evt, ws) => {
           const userActive = perUser.get(actor.id) ?? 0;
@@ -112,49 +153,54 @@ export function setupWebSocket(app: Hono): (server: Server) => void {
 
           try {
             const conn = await connectToServer(id);
-            client = conn.client;
-            target = conn.target;
+            openShell(conn, ws);
           } catch (err) {
             const { message } = sshErrorToHttp(err);
-            ws.send(enc.encode(`\r\n*** ${message} ***\r\n`));
-            ws.close(1011, "ssh connect failed");
-            cleanup();
+            // For credential errors, prompt the client for a password instead of closing.
+            // The WS stays open; the client sends {"t":"p","p":"..."} to retry.
+            if (err instanceof Error && "kind" in err && (err as { kind: string }).kind === "no_credentials") {
+              waitingForPassword = true;
+              ws.send(JSON.stringify({ t: "need_password", message: "No password stored. Enter SSH password:" }));
+            } else if (err instanceof Error && "kind" in err && (err as { kind: string }).kind === "auth_failed") {
+              waitingForPassword = true;
+              ws.send(JSON.stringify({ t: "need_password", message: "Authentication failed. Enter SSH password:" }));
+            } else {
+              ws.send(enc.encode(`\r\n*** ${message} ***\r\n`));
+              ws.close(1011, "ssh connect failed");
+              cleanup();
+            }
+            return;
+          }
+        },
+
+        onMessage: async (evt, ws) => {
+          resetIdle(ws);
+          if (typeof evt.data !== "string") return;
+          let msg: { t?: string; d?: string; c?: number; r?: number; p?: string };
+          try { msg = JSON.parse(evt.data); } catch { return; }
+
+          // Two-phase connect: client is supplying a password
+          if (waitingForPassword && msg.t === "p" && typeof msg.p === "string") {
+            waitingForPassword = false;
+            try {
+              const conn = await connectToServer(id, msg.p);
+              openShell(conn, ws);
+            } catch (err) {
+              const { message } = sshErrorToHttp(err);
+              // Allow retry on auth failure
+              if (err instanceof Error && "kind" in err && (err as { kind: string }).kind === "auth_failed") {
+                waitingForPassword = true;
+                ws.send(JSON.stringify({ t: "auth_error", message: "Wrong password — try again:" }));
+              } else {
+                ws.send(JSON.stringify({ t: "auth_error", message }));
+                ws.close(1011, "ssh connect failed");
+                cleanup();
+              }
+            }
             return;
           }
 
-          client.shell({ term: "xterm-256color", cols: 80, rows: 24 }, (err, st) => {
-            if (err || !client) {
-              ws.send(enc.encode("\r\n*** Failed to open shell ***\r\n"));
-              ws.close(1011, "shell failed");
-              cleanup();
-              return;
-            }
-            stream = st;
-            startedAt = Date.now();
-
-            void writeAuditDirect({
-              ctx,
-              category: "data",
-              action: "server.ssh_open",
-              entity: "server",
-              entityId: String(id),
-              after: { hostname: target?.hostname ?? null },
-            });
-
-            resetIdle(ws);
-            maxTimer = setTimeout(() => ws.close(4001, "max session duration"), env.SSH_MAX_SESSION_MS);
-
-            st.on("data", (d: Buffer) => ws.send(new Uint8Array(d)));
-            st.stderr.on("data", (d: Buffer) => ws.send(new Uint8Array(d)));
-            st.on("close", () => ws.close(1000, "shell closed"));
-          });
-        },
-
-        onMessage: (evt, ws) => {
-          resetIdle(ws);
-          if (typeof evt.data !== "string" || !stream) return;
-          let msg: { t?: string; d?: string; c?: number; r?: number };
-          try { msg = JSON.parse(evt.data); } catch { return; }
+          if (!stream) return;
           if (msg.t === "d" && typeof msg.d === "string") {
             stream.write(msg.d);
           } else if (msg.t === "r") {
@@ -165,11 +211,6 @@ export function setupWebSocket(app: Hono): (server: Server) => void {
         onClose: () => cleanup(),
         onError: () => cleanup(),
       };
-
-      function resetIdle(ws: { close: (code?: number, reason?: string) => void }) {
-        if (idleTimer) clearTimeout(idleTimer);
-        idleTimer = setTimeout(() => ws.close(4000, "idle timeout"), env.SSH_IDLE_TIMEOUT_MS);
-      }
     }),
   );
 

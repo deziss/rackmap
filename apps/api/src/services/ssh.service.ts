@@ -30,16 +30,22 @@ export interface SshTarget {
  * Host-key policy is `accept-any` for internal LAN (TOFU pinning is a documented
  * follow-up). Throws a typed {@link SshError} on any failure.
  */
-export async function connectToServer(serverId: number): Promise<{ client: Client; target: SshTarget }> {
+export async function connectToServer(serverId: number, overridePassword?: string): Promise<{ client: Client; target: SshTarget }> {
   const server = await prisma.server.findUnique({
     where: { id: serverId },
     select: { id: true, hostname: true, ip: true, username: true, sshPort: true, passwordEnc: true, deletedAt: true },
   });
   if (!server || server.deletedAt) throw new SshError("not_found", "Server not found");
-  if (!server.passwordEnc) throw new SshError("no_credentials", "Server has no stored password");
 
-  const password = decryptSecret(server.passwordEnc);
-  if (password === null) throw new SshError("no_credentials", "Could not decrypt stored password");
+  let password: string;
+  if (overridePassword !== undefined) {
+    password = overridePassword;
+  } else {
+    if (!server.passwordEnc) throw new SshError("no_credentials", "Server has no stored password");
+    const decrypted = decryptSecret(server.passwordEnc);
+    if (decrypted === null) throw new SshError("no_credentials", "Could not decrypt stored password");
+    password = decrypted;
+  }
 
   const target: SshTarget = {
     id: server.id,
