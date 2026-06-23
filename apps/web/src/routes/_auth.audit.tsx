@@ -129,17 +129,19 @@ function AuditPage() {
   const [pages, setPages] = useState<AuditEntry[][]>([]);
   const [category, setCategory] = useState("");
   const [action, setAction] = useState("");
+  const [search, setSearch] = useState("");
 
   const buildParams = (cur: number | null) => {
     const p = new URLSearchParams({ limit: "50" });
     if (cur) p.set("cursor", String(cur));
     if (category) p.set("category", category);
     if (action) p.set("action", action);
+    if (search) p.set("search", search);
     return p.toString();
   };
 
   const { data, isLoading, refetch } = useQuery<AuditResponse>({
-    queryKey: ["audit", cursor, category, action],
+    queryKey: ["audit", cursor, category, action, search],
     queryFn: () => apiFetch<AuditResponse>(`/api/v1/audit?${buildParams(cursor)}`),
   });
 
@@ -162,8 +164,14 @@ function AuditPage() {
       <div className="flex items-center gap-3 flex-wrap">
         <h1 className="text-xl font-semibold mr-auto">Audit Log</h1>
         <Input
-          placeholder="Category (data/auth)"
-          className="w-40 h-8 text-sm"
+          placeholder="Search IP, name, domain..."
+          className="w-48 h-8 text-sm"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); reset(); }}
+        />
+        <Input
+          placeholder="Category (data/auth/notification)"
+          className="w-56 h-8 text-sm"
           value={category}
           onChange={(e) => { setCategory(e.target.value); reset(); }}
         />

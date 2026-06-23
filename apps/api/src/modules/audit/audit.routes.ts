@@ -8,11 +8,12 @@ import { prisma } from "../../db.js";
 const auditQuerySchema = z.object({
   cursor: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
-  category: z.enum(["data", "auth"]).optional(),
+  category: z.string().optional(),
   entity: z.string().optional(),
   entityId: z.string().optional(),
   action: z.string().optional(),
   actorId: z.string().optional(),
+  search: z.string().optional(),
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
 });
@@ -22,7 +23,7 @@ export const auditRoutes = new Hono()
   .use(requirePermission({ audit: ["read"] }))
 
   .get("/", zValidator("query", auditQuerySchema), async (c) => {
-    const { cursor, limit, category, entity, entityId, action, actorId, from, to } = c.req.valid("query");
+    const { cursor, limit, category, entity, entityId, action, actorId, search, from, to } = c.req.valid("query");
 
     const where = {
       ...(cursor ? { id: { lt: cursor } } : {}),
@@ -31,6 +32,18 @@ export const auditRoutes = new Hono()
       ...(entityId ? { entityId: { contains: entityId } } : {}),
       ...(action ? { action: { contains: action } } : {}),
       ...(actorId ? { actorId } : {}),
+      ...(search ? {
+        OR: [
+          { beforeJson: { contains: search } },
+          { afterJson: { contains: search } },
+          { diffJson: { contains: search } },
+          { entityId: { contains: search } },
+          { entity: { contains: search } },
+          { action: { contains: search } },
+          { ip: { contains: search } },
+          { actorEmail: { contains: search } },
+        ]
+      } : {}),
       ...(from || to ? {
         createdAt: {
           ...(from ? { gte: new Date(from) } : {}),
