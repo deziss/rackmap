@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback } from "react";
 import { fetchServices, checkService, revealServicePassword, deleteService, serviceKeys } from "@/lib/queries";
-import { apiFetch } from "@/lib/api";
 import { StatusDot } from "@/components/status-dot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { toast } from "sonner";
 import {
   RefreshCw, Eye, EyeOff, Trash2, Zap,
-  Copy, Pencil
+  Copy
 } from "lucide-react";
 import type { ServiceDto } from "@inv/shared";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -172,7 +171,7 @@ function ServicesPage() {
 
   const checkMut = useMutation({
     mutationFn: checkService,
-    onSuccess: (res) => {
+    onSuccess: (res: any) => {
       toast.success(res.status === "up" ? `Service is UP (${res.latencyMs}ms)` : `Service is DOWN: ${res.errorCode}`);
       queryClient.invalidateQueries({ queryKey: serviceKeys.all });
     },

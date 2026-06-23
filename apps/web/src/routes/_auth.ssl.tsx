@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import { fetchSslList, scanAllSsl, scanSslDomain, deleteSslDomain, sslKeys } from "@/lib/queries";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,7 +8,6 @@ import { SslFormDialog } from "@/components/ssl-form-dialog";
 import { toast } from "sonner";
 import { RefreshCw, Trash2, Shield, AlertTriangle } from "lucide-react";
 import type { SslStatusDto } from "@inv/shared";
-import { formatDistanceToNow, isPast } from "date-fns";
 
 export const Route = createFileRoute("/_auth/ssl")({
   component: SslPage,
@@ -17,9 +15,9 @@ export const Route = createFileRoute("/_auth/ssl")({
 
 function SslPage() {
   const qc = useQueryClient();
-  const [q, setQ] = useState("");
+  const q = "";
   
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: sslKeys.list({ q }),
     queryFn: () => fetchSslList({ q }),
   });

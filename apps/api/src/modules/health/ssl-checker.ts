@@ -1,6 +1,5 @@
 import tls from "tls";
 import { prisma } from "../../db.js";
-import { differenceInDays } from "date-fns";
 import { sendMail } from "../../lib/mail.js"; // Assuming a mail.ts exists or we will create one
 
 export async function fetchSslCert(domain: string): Promise<{ validFrom: Date; validTo: Date; issuer: string; daysRemaining: number } | null> {
@@ -21,7 +20,7 @@ export async function fetchSslCert(domain: string): Promise<{ validFrom: Date; v
         
         const validFrom = new Date(cert.valid_from);
         const validTo = new Date(cert.valid_to);
-        const daysRemaining = differenceInDays(validTo, new Date());
+        const daysRemaining = Math.ceil((validTo.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
         
         // Issuer can be cert.issuer.O or cert.issuer.CN
         const issuer = cert.issuer?.O || cert.issuer?.CN || "Unknown Issuer";

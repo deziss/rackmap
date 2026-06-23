@@ -2,14 +2,14 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../../db.js";
-import { requireAuth } from "../../middleware/auth.js";
+import { requireSession } from "../../middleware/session.js";
 import { SslStatusCreateInput, SslStatusUpdateInput, SslStatusListQuery } from "@inv/shared";
 import { scanAllDomains, fetchSslCert } from "../health/ssl-checker.js";
 
 const sslRoutes = new Hono();
 
 // List SSL Statuses
-sslRoutes.get("/", requireAuth(), zValidator("query", SslStatusListQuery), async (c) => {
+sslRoutes.get("/", requireSession, zValidator("query", SslStatusListQuery), async (c) => {
   const query = c.req.valid("query");
   const { cursor, limit = 50, q, status } = query;
 
@@ -56,14 +56,14 @@ sslRoutes.get("/", requireAuth(), zValidator("query", SslStatusListQuery), async
 });
 
 // Trigger Scan
-sslRoutes.post("/scan", requireAuth(), async (c) => {
+sslRoutes.post("/scan", requireSession, async (c) => {
   // In a real app this might be a background job. We'll await it for now.
   await scanAllDomains(true);
   return c.json({ success: true, message: "Scan completed." });
 });
 
 // Scan a single specific domain (force)
-sslRoutes.post("/:id/scan", requireAuth(), async (c) => {
+sslRoutes.post("/:id/scan", requireSession, async (c) => {
   const id = parseInt(c.req.param("id"), 10);
   const ssl = await prisma.sslStatus.findUnique({ where: { id } });
   if (!ssl) return c.json({ error: "Not found" }, 404);
@@ -106,7 +106,7 @@ sslRoutes.post("/:id/scan", requireAuth(), async (c) => {
 });
 
 // Create manual domain entry
-sslRoutes.post("/", requireAuth(), zValidator("json", SslStatusCreateInput), async (c) => {
+sslRoutes.post("/", requireSession, zValidator("json", SslStatusCreateInput), async (c) => {
   const data = c.req.valid("json");
   
   const existing = await prisma.sslStatus.findUnique({ where: { domain: data.domain } });
@@ -123,7 +123,7 @@ sslRoutes.post("/", requireAuth(), zValidator("json", SslStatusCreateInput), asy
 });
 
 // Update
-sslRoutes.patch("/:id", requireAuth(), zValidator("json", SslStatusUpdateInput), async (c) => {
+sslRoutes.patch("/:id", requireSession, zValidator("json", SslStatusUpdateInput), async (c) => {
   const id = parseInt(c.req.param("id"), 10);
   const data = c.req.valid("json");
 
@@ -136,7 +136,7 @@ sslRoutes.patch("/:id", requireAuth(), zValidator("json", SslStatusUpdateInput),
 });
 
 // Delete
-sslRoutes.delete("/:id", requireAuth(), async (c) => {
+sslRoutes.delete("/:id", requireSession, async (c) => {
   const id = parseInt(c.req.param("id"), 10);
   await prisma.sslStatus.delete({ where: { id } });
   return c.json({ success: true });

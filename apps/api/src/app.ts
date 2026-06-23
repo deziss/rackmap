@@ -18,6 +18,7 @@ import { apiKeyRoutes } from "./modules/api-keys/api-key.routes.js";
 import { userRoutes } from "./modules/users/user.routes.js";
 import { accessRequestRoutes } from "./modules/access-requests/access-request.routes.js";
 import { serviceRoutes } from "./modules/services/service.routes.js";
+import { sslRoutes } from "./modules/ssl/ssl.routes.js";
 
 export function createApp() {
   const app = new Hono();

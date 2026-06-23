@@ -27,6 +27,7 @@ interface AuditEntry {
 interface AuditResponse {
   items: AuditEntry[];
   nextCursor: number | null;
+  total: number;
 }
 
 const ACTION_COLORS: Record<string, string> = {
