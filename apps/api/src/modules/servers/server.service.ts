@@ -30,6 +30,7 @@ export const serverSelect = {
   deletedAt: true,
   createdAt: true,
   updatedAt: true,
+  updatedByEmail: true,
 } as const;
 
 /** Strip passwordEnc and add hasPassword. */
@@ -96,6 +97,7 @@ export async function createServer(input: ServerCreateInput, ctx: AuditCtx = {})
       data: {
         ...data,
         passwordEnc: password ? encryptSecret(password) : null,
+        updatedByEmail: ctx.actorEmail ?? null,
         tags: tagIds?.length
           ? { create: tagIds.map((tagId) => ({ tag: { connect: { id: tagId } } })) }
           : undefined,
@@ -144,7 +146,7 @@ export async function updateServer(id: number, input: ServerUpdateInput, ctx: Au
 
     const s = await tx.server.update({
       where: { id },
-      data: { ...data, ...(passwordEnc !== undefined ? { passwordEnc } : {}) },
+      data: { ...data, ...(passwordEnc !== undefined ? { passwordEnc } : {}), updatedByEmail: ctx.actorEmail ?? null },
       select: serverSelect,
     });
 

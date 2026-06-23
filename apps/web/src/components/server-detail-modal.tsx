@@ -102,10 +102,10 @@ export function ServerDetailModal({ serverId, onClose }: ServerDetailModalProps)
 
   return (
     <Dialog open={serverId != null} onOpenChange={(open) => { if (!open) { setShowTerminal(false); onClose(); } }}>
-      <DialogContent className="max-w-[96vw] w-full h-[94vh] flex flex-col p-0 gap-0 overflow-hidden">
+      <DialogContent className="max-w-[96vw] w-full h-[94vh] flex flex-col p-0 gap-0 overflow-hidden [&>button:last-child]:top-3 [&>button:last-child]:right-3">
         {/* Header */}
         <DialogHeader className="shrink-0 px-5 py-3 border-b border-border bg-card/80 backdrop-blur-sm">
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap pr-8">
             <Server className="h-4 w-4 text-muted-foreground shrink-0" />
             <DialogTitle className="font-mono text-base flex items-center gap-2">
               {server && (
@@ -190,8 +190,8 @@ export function ServerDetailModal({ serverId, onClose }: ServerDetailModalProps)
           {metricsQ.isError && (
             <Card className="border-destructive/50">
               <CardContent className="flex items-center gap-2 py-3 text-sm text-destructive">
-                <AlertTriangle className="h-4 w-4" />
-                Live metrics unavailable — host unreachable over SSH or no credentials configured.
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>Live metrics unavailable — {metricsQ.error instanceof Error ? metricsQ.error.message : "host unreachable over SSH or no credentials configured."}</span>
               </CardContent>
             </Card>
           )}

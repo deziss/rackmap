@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { CloudCog, Loader2 } from "lucide-react";
+import { CloudCog, Eye, EyeOff, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -18,6 +18,7 @@ function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
@@ -107,17 +108,28 @@ function LoginPage() {
 
             <div className="space-y-1.5">
               <Label htmlFor="password" className="text-sm font-medium">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete={isRegister ? "new-password" : "current-password"}
-                placeholder="••••••••"
-                required
-                minLength={8}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete={isRegister ? "new-password" : "current-password"}
+                  placeholder="••••••••"
+                  required
+                  minLength={8}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                  className="pr-9"
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowPassword((v) => !v)}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>

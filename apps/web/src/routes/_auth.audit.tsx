@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
+import { apiFetch } from "@/lib/api";
 
 export const Route = createFileRoute("/_auth/audit")({
   component: AuditPage,
@@ -139,11 +140,7 @@ function AuditPage() {
 
   const { data, isLoading, refetch } = useQuery<AuditResponse>({
     queryKey: ["audit", cursor, category, action],
-    queryFn: async () => {
-      const res = await fetch(`/api/v1/audit?${buildParams(cursor)}`);
-      if (!res.ok) throw new Error(await res.text());
-      return res.json() as Promise<AuditResponse>;
-    },
+    queryFn: () => apiFetch<AuditResponse>(`/api/v1/audit?${buildParams(cursor)}`),
   });
 
   const allItems = [...pages.flat(), ...(data?.items ?? [])];

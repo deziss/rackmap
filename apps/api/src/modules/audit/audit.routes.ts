@@ -27,9 +27,9 @@ export const auditRoutes = new Hono()
     const where = {
       ...(cursor ? { id: { lt: cursor } } : {}),
       ...(category ? { category } : {}),
-      ...(entity ? { entity } : {}),
-      ...(entityId ? { entityId } : {}),
-      ...(action ? { action } : {}),
+      ...(entity ? { entity: { contains: entity } } : {}),
+      ...(entityId ? { entityId: { contains: entityId } } : {}),
+      ...(action ? { action: { contains: action } } : {}),
       ...(actorId ? { actorId } : {}),
       ...(from || to ? {
         createdAt: {

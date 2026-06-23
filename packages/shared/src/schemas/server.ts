@@ -72,6 +72,7 @@ export const ServerDto = z.object({
   deletedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  updatedByEmail: z.string().nullable(),
 });
 export type ServerDto = z.infer<typeof ServerDto>;
 

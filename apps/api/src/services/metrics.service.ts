@@ -13,10 +13,45 @@ const METRICS_CMD = [
   'echo "===NET1==="', "cat /proc/net/dev | tail -n +3",
   "sleep 1",
   'echo "===NET2==="', "cat /proc/net/dev | tail -n +3",
+  // GPU: multi-vendor detection. Normalized output: VENDOR=<x> then CSV rows
+  // Format per row: index,name,utilPct,memUsedMiB,memTotalMiB,tempC
   'echo "===GPU==="',
-  'nvidia-smi --query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null || echo "NO_GPU"',
+  // Detect AMD sysfs availability (amdgpu kernel driver — no extra tools needed)
+  "_gpu_amd_sysfs=0",
+  "for _d in /sys/class/drm/card*/device; do [ -f \"$_d/gpu_busy_percent\" ] && _gpu_amd_sysfs=1 && break; done",
+  // Priority: NVIDIA > AMD sysfs > AMD ROCm > Intel xpu-smi > none
+  "if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then",
+  "  echo VENDOR=nvidia",
+  "  nvidia-smi --query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null",
+  'elif [ "$_gpu_amd_sysfs" = "1" ]; then',
+  "  echo VENDOR=amd_sysfs",
+  "  for _d in /sys/class/drm/card*/device; do",
+  '    [ -f "$_d/gpu_busy_percent" ] || continue',
+  '    _i=$(echo "$_d" | grep -oE "card[0-9]+" | tr -dc "0-9")',
+  '    _u=$(cat "$_d/gpu_busy_percent" 2>/dev/null || echo 0)',
+  '    _vu=$(cat "$_d/mem_info_vram_used" 2>/dev/null || echo 0)',
+  '    _vt=$(cat "$_d/mem_info_vram_total" 2>/dev/null || echo 0)',
+  '    _tf=$(find "$_d/hwmon" -name temp1_input 2>/dev/null | head -1)',
+  '    _t=$([ -n "$_tf" ] && echo $(( $(cat "$_tf" 2>/dev/null || echo 0) / 1000 )) || echo N/A)',
+  "    printf '%s,AMD GPU %s,%s,%d,%d,%s\\n' \"$_i\" \"$_i\" \"$_u\" \"$((_vu/1048576))\" \"$((_vt/1048576))\" \"$_t\"",
+  "  done",
+  "elif command -v rocm-smi >/dev/null 2>&1; then",
+  "  echo VENDOR=amd_rocm",
+  // rocm-smi CSV: Device,Temp(C),VRAM Total(B),VRAM Used(B),GPU use(%),...
+  "  rocm-smi --showid --showtemp --showmeminfo vram --showuse --csv 2>/dev/null | awk -F, 'NR>1&&NF>4{gsub(/ /,\"\"); printf \"%s,AMD GPU %s,%s,%d,%d,%s\\n\",$1,$1,$5,int($4/1048576),int($3/1048576),$2}'",
+  "elif command -v xpu-smi >/dev/null 2>&1; then",
+  "  echo VENDOR=intel_xpu",
+  // xpu-smi dump: one-shot stats for device 0, metric 0 = GPU_ACTIVE
+  "  xpu-smi dump -d 0 -m 0 2>/dev/null | awk -F, 'NR==2&&NF>2{printf \"0,Intel GPU 0,%s,N/A,N/A,N/A\\n\",$3}' || echo NO_GPU",
+  "else",
+  "  echo NO_GPU",
+  "fi",
   'echo "===GPUPROC==="',
-  'nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader,nounits 2>/dev/null || echo "NO_GPU"',
+  "if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then",
+  "  nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader,nounits 2>/dev/null || echo NO_GPU",
+  "else",
+  "  echo NO_GPU",
+  "fi",
   'echo "===END==="',
 ].join("\n");
 
