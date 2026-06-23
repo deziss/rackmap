@@ -296,6 +296,37 @@ Viewers can submit access requests for SSH terminal and password reveal. Admins 
 
 ---
 
+## Deployment (Docker Production)
+
+The recommended way to deploy CloudScope in production is using the provided `docker-compose.yml`.
+
+1. **Prepare Environment:**
+   Create a `.env` file based on `.env.example`. You must securely generate `BETTER_AUTH_SECRET` and `APP_ENCRYPTION_KEY`.
+   ```bash
+   cp .env.example .env
+   # Generate a 32-byte base64 key for APP_ENCRYPTION_KEY
+   sed -i "s|^APP_ENCRYPTION_KEY=.*|APP_ENCRYPTION_KEY=\"$(openssl rand -base64 32)\"|" .env
+   # Generate a secure secret for BETTER_AUTH_SECRET
+   sed -i "s|^BETTER_AUTH_SECRET=.*|BETTER_AUTH_SECRET=\"$(openssl rand -hex 32)\"|" .env
+   ```
+   
+2. **Configure Port:**
+   By default, the web UI is exposed on port `8080`. You can change this by setting `PORT` in your `.env`.
+
+3. **Start Services:**
+   ```bash
+   docker compose up -d --build
+   ```
+
+4. **Volumes & Backups:**
+   The SQLite database is stored in a Docker volume named `cloudscope_sqlite_data`. Automatic backups (if configured) are stored in `cloudscope_backups`.
+   To map these to host directories, modify the `volumes` section in `docker-compose.yml`.
+
+5. **Reverse Proxy (Optional but Recommended):**
+   Put CloudScope behind a reverse proxy like Nginx, Caddy, or Traefik with SSL termination. The API and Web UI are combined into a single entry point by the web container's Nginx configuration.
+
+---
+
 ## Deployment (Bare Metal / VPS)
 
 Using PM2 with the included ecosystem config:
