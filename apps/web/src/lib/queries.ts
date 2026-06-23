@@ -66,6 +66,10 @@ export function checkService(id: number) {
   return apiFetch(`/api/v1/services/${id}/check`, { method: "POST" });
 }
 
+export function checkAllServices() {
+  return apiFetch<{ checked: number }>("/api/v1/services/check-all", { method: "POST" });
+}
+
 export function createService(data: unknown) {
   return apiFetch<any>("/api/v1/services", { method: "POST", body: JSON.stringify(data) });
 }

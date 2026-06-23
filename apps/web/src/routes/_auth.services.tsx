@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback } from "react";
-import { fetchServices, checkService, revealServicePassword, deleteService, serviceKeys } from "@/lib/queries";
+import { fetchServices, checkService, checkAllServices, revealServicePassword, deleteService, serviceKeys } from "@/lib/queries";
 import { StatusDot } from "@/components/status-dot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -178,12 +178,33 @@ function ServicesPage() {
     onError: (err: Error) => toast.error(`Health check failed: ${err.message}`),
   });
 
+  const checkAllMut = useMutation({
+    mutationFn: checkAllServices,
+    onSuccess: (res) => {
+      toast.success(`Checked ${res.checked} services`);
+      queryClient.invalidateQueries({ queryKey: serviceKeys.all });
+    },
+    onError: (err: Error) => toast.error(`Bulk health check failed: ${err.message}`),
+  });
+
   return (
     <div className="space-y-4">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-1">
         <h1 className="text-2xl font-semibold tracking-tight">Services Inventory</h1>
         <div className="flex items-center gap-2">
+          {canModify && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2"
+              onClick={() => checkAllMut.mutate()}
+              disabled={checkAllMut.isPending}
+            >
+              <RefreshCw className={`h-4 w-4 ${checkAllMut.isPending ? "animate-spin" : ""}`} />
+              Check All Health
+            </Button>
+          )}
           {canModify && <ServiceFormDialog onSaved={() => queryClient.invalidateQueries({ queryKey: serviceKeys.all })} />}
         </div>
       </div>

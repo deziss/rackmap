@@ -25,8 +25,7 @@ export const auditRoutes = new Hono()
   .get("/", zValidator("query", auditQuerySchema), async (c) => {
     const { cursor, limit, category, entity, entityId, action, actorId, search, from, to } = c.req.valid("query");
 
-    const where = {
-      ...(cursor ? { id: { lt: cursor } } : {}),
+    const baseWhere = {
       ...(category ? { category } : {}),
       ...(entity ? { entity: { contains: entity } } : {}),
       ...(entityId ? { entityId: { contains: entityId } } : {}),
@@ -52,12 +51,20 @@ export const auditRoutes = new Hono()
       } : {}),
     };
 
-    const items = await prisma.auditLog.findMany({
-      where,
-      orderBy: { id: "desc" },
-      take: limit,
-    });
+    const where = {
+      ...baseWhere,
+      ...(cursor ? { id: { lt: cursor } } : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      prisma.auditLog.findMany({
+        where,
+        orderBy: { id: "desc" },
+        take: limit,
+      }),
+      prisma.auditLog.count({ where: baseWhere }),
+    ]);
 
     const nextCursor = items.length === limit ? (items[items.length - 1]?.id ?? null) : null;
-    return c.json({ items, nextCursor });
+    return c.json({ items, nextCursor, total });
   });

@@ -15,7 +15,7 @@ export const Route = createFileRoute("/_auth/ssl")({
 
 function SslPage() {
   const qc = useQueryClient();
-  const q = "";
+  const [q] = useState("");
   
   const { data, isLoading } = useQuery({
     queryKey: sslKeys.list({ q }),
