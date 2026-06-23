@@ -12,6 +12,10 @@ export const lookupKeys = {
   list: (type: string) => ["lookups", type] as const,
 };
 
+export const systemKeys = {
+  me: ["system", "me"] as const,
+};
+
 export function fetchServers(params: Record<string, string | number | boolean | undefined>) {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -34,4 +38,8 @@ export function revealPassword(id: number) {
 
 export function checkServer(id: number) {
   return apiFetch(`/api/v1/servers/${id}/check`, { method: "POST" });
+}
+
+export function fetchMe() {
+  return apiFetch<{ id: string; email: string; name: string; role: string; can: Record<string, any>; features: { sshEnabled: boolean } }>("/api/v1/me");
 }

@@ -3,6 +3,7 @@ import { Link, useMatchRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
 import { apiFetch } from "@/lib/api";
+import { fetchMe, systemKeys } from "@/lib/queries";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -59,6 +60,12 @@ export function Sidebar({ user }: SidebarProps) {
     refetchInterval: 30_000,
   });
 
+  const { data: me } = useQuery({
+    queryKey: systemKeys.me,
+    queryFn: fetchMe,
+    staleTime: 5 * 60 * 1000,
+  });
+
   function toggleCollapse() {
     setCollapsed((v) => {
       const next = !v;
@@ -97,6 +104,10 @@ export function Sidebar({ user }: SidebarProps) {
       <nav className="flex-1 space-y-0.5 p-2 pt-3">
         {nav
           .filter((item) => !item.roles || item.roles.includes(role))
+          .filter((item) => {
+            if (item.to === "/ssh" && me && !me.features.sshEnabled) return false;
+            return true;
+          })
           .map(({ to, label, icon: Icon }) => {
             const active = !!matchRoute({ to, fuzzy: true });
             const badge = to === "/access-requests" && (pendingData?.count ?? 0) > 0

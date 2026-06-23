@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchServers, serverKeys } from "@/lib/queries";
+import { fetchServers, serverKeys, fetchMe, systemKeys } from "@/lib/queries";
 import { authClient } from "@/lib/auth-client";
 import { SshTerminal } from "@/components/ssh-terminal";
 import { Server, Terminal, Plus, X } from "lucide-react";
@@ -42,6 +42,14 @@ function SshPage() {
     queryFn: () => fetchServers({ limit: 100 }),
   });
 
+  const { data: me } = useQuery({
+    queryKey: systemKeys.me,
+    queryFn: fetchMe,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const sshEnabled = me?.features?.sshEnabled ?? true; // Default to true while loading
+
   const servers = data?.items || [];
 
   // Update hostname once servers load
@@ -76,6 +84,20 @@ function SshPage() {
 
   if (!canSsh) {
     return <div className="text-muted-foreground p-8">No SSH permission.</div>;
+  }
+
+  if (me && !sshEnabled) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-3rem)] text-muted-foreground p-8 text-center space-y-4">
+        <Terminal className="w-16 h-16 opacity-20" />
+        <div>
+          <h2 className="text-xl font-semibold text-foreground">SSH Terminal is Disabled</h2>
+          <p className="mt-2 text-sm opacity-80 max-w-sm">
+            The SSH feature is currently turned off system-wide. An administrator must enable the SSH kill-switch in the server configuration.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
