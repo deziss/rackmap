@@ -24,6 +24,7 @@ function SettingsPage() {
 
 function NotificationPreferencesSection() {
   const { data: session } = authClient.useSession();
+  // @ts-expect-error - role is injected by admin plugin
   const isAdmin = session?.user?.role === "admin";
   
   const [prefs, setPrefs] = useState<Record<string, boolean> | null>(null);
