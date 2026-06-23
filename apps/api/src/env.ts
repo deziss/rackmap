@@ -30,6 +30,11 @@ const EnvSchema = z.object({
   NOTIFY_WEBHOOK_URL: z.string().optional(),
   NOTIFY_TELEGRAM_BOT_TOKEN: z.string().optional(),
   NOTIFY_TELEGRAM_CHAT_ID: z.string().optional(),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().default(587),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().default("cloudscope@example.com"),
   SERVE_STATIC_DIR: z.string().optional(),
   BACKUP_DIR: z.string().optional(),
   // M12 — live metrics (agentless SSH exec)
@@ -38,6 +43,16 @@ const EnvSchema = z.object({
     .default("true")
     .transform((v) => v === "true"),
   METRICS_SSH_TIMEOUT_MS: z.coerce.number().int().min(1000).default(10_000),
+  // Background Metrics Alerting
+  METRICS_ALERT_ENABLED: z
+    .string()
+    .default("true")
+    .transform((v) => v === "true"),
+  METRICS_ALERT_INTERVAL_MS: z.coerce.number().int().min(60_000).default(300_000), // 5 mins
+  // Global thresholds
+  ALERT_THRESHOLD_CPU: z.coerce.number().min(0).max(100).default(90),
+  ALERT_THRESHOLD_RAM: z.coerce.number().min(0).max(100).default(95),
+  ALERT_THRESHOLD_DISK: z.coerce.number().min(0).max(100).default(90),
   // M13 — browser SSH terminal (off by default — RCE kill-switch)
   SSH_ENABLED: z
     .string()

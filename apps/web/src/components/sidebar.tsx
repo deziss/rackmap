@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   KeyRound,
+  Settings,
 } from "lucide-react";
 
 interface User {
@@ -43,6 +44,7 @@ const nav = [
   { to: "/users" as const, label: "Users", icon: Users, roles: ["admin"] },
   { to: "/audit" as const, label: "Audit Log", icon: Clock, roles: ["admin"] },
   { to: "/security" as const, label: "Security", icon: Shield },
+  { to: "/settings" as const, label: "Settings", icon: Settings },
 ];
 
 export function Sidebar({ user }: SidebarProps) {

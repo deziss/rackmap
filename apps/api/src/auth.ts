@@ -47,6 +47,13 @@ export const auth = betterAuth({
     user: {
       create: {
         after: async (user) => {
+          await prisma.notificationPreference.create({
+            data: { userId: user.id },
+          }).catch((err) => console.error("[auth] failed to create default pref:", err));
+
+          const { notifyUserRegistered } = await import("./services/notify.service.js");
+          notifyUserRegistered({ id: user.id, email: user.email, name: user.name || "User" }).catch((err) => console.error("[notify] failed:", err));
+
           await writeAuditDirect({
             ctx: { actorId: user.id, actorEmail: user.email, ip: null },
             category: "auth",

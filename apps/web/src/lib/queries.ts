@@ -43,3 +43,15 @@ export function checkServer(id: number) {
 export function fetchMe() {
   return apiFetch<{ id: string; email: string; name: string; role: string; can: Record<string, any>; features: { sshEnabled: boolean } }>("/api/v1/me");
 }
+
+export function fetchPreferences() {
+  return apiFetch<Record<string, any>>("/api/v1/me/preferences");
+}
+
+export function updatePreferences(updates: Record<string, any>) {
+  return apiFetch<Record<string, any>>("/api/v1/me/preferences", {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+}
+

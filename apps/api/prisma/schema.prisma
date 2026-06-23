@@ -35,6 +35,7 @@ model User {
   savedViews        SavedView[]
   accessRequests    AccessRequest[]  @relation("Requester")
   resolvedRequests  AccessRequest[]  @relation("Resolver")
+  notificationPreference NotificationPreference?
   @@map("user")
 }
 
@@ -294,5 +295,26 @@ model SavedView {
   paramsJson String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  @@index([userId])
+}
+
+// ─── Notification Preferences ────────────────────────────────────────────────
+model NotificationPreference {
+  id              Int      @id @default(autoincrement())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  newServerAdded  Boolean  @default(false)
+  serverUpDown    Boolean  @default(false)
+  gpuCountChanged Boolean  @default(false)
+  diskUnmounted   Boolean  @default(false)
+  diskFull        Boolean  @default(false)
+  ramFull         Boolean  @default(false)
+  highCpu         Boolean  @default(false)
+  userRegistered  Boolean  @default(false) // Admin only
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
   @@index([userId])
 }

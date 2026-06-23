@@ -7,6 +7,7 @@ import { createApp } from "./app.js";
 import { startScheduler } from "./services/scheduler.js";
 import { scheduleBackup } from "./services/backup.service.js";
 import { setupWebSocket } from "./ws/ssh.ws.js";
+import { startAlertScheduler } from "./services/alert.service.js";
 import type { Server } from "node:http";
 
 async function main() {
@@ -27,6 +28,7 @@ async function main() {
   const server = serve({ fetch: app.fetch, port: env.PORT }, () => {
     console.log(`API listening on http://localhost:${env.PORT}`);
     startScheduler();
+    startAlertScheduler();
     scheduleBackup();
   });
 
