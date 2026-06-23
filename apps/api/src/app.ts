@@ -17,6 +17,7 @@ import { importRoutes } from "./modules/import-export/import.routes.js";
 import { apiKeyRoutes } from "./modules/api-keys/api-key.routes.js";
 import { userRoutes } from "./modules/users/user.routes.js";
 import { accessRequestRoutes } from "./modules/access-requests/access-request.routes.js";
+import { serviceRoutes } from "./modules/services/service.routes.js";
 
 export function createApp() {
   const app = new Hono();
@@ -107,6 +108,7 @@ export function createApp() {
   app.route("/api/v1/api-keys", apiKeyRoutes);
   app.route("/api/v1/users", userRoutes);
   app.route("/api/v1/access-requests", accessRequestRoutes);
+  app.route("/api/v1/services", serviceRoutes);
 
   app.onError(onError);
 

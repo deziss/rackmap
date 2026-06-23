@@ -67,6 +67,10 @@ export function ServerFormDialog({ server, onSaved }: ServerFormDialogProps) {
       allocatedToId: server?.allocatedTo?.id ?? undefined,
       locationId: server?.location?.id ?? undefined,
       serverTypeId: server?.serverType?.id ?? undefined,
+      osType: server?.osType ?? "",
+      isPrivateIp: server?.isPrivateIp ?? false,
+      purpose: server?.purpose ?? "",
+      createdBy: server?.createdBy ?? "",
     },
   });
 
@@ -157,6 +161,22 @@ export function ServerFormDialog({ server, onSaved }: ServerFormDialogProps) {
                 <option value="on-premise">On Premise</option>
                 <option value="cloud">Cloud</option>
               </select>
+            </div>
+            <div className="space-y-1">
+              <Label>OS Type</Label>
+              <Input {...register("osType")} placeholder="e.g. Ubuntu 22.04" />
+            </div>
+            <div className="space-y-1">
+              <Label>Purpose</Label>
+              <Input {...register("purpose")} placeholder="e.g. Database Server" />
+            </div>
+            <div className="space-y-1">
+              <Label>Created By</Label>
+              <Input {...register("createdBy")} placeholder="e.g. Alice" />
+            </div>
+            <div className="space-y-1 flex flex-row items-center gap-2 mt-6">
+              <input type="checkbox" id="isPrivateIp" {...register("isPrivateIp")} className="h-4 w-4 rounded border-gray-300" />
+              <Label htmlFor="isPrivateIp" className="m-0">Is Private IP?</Label>
             </div>
           </div>
 

@@ -159,10 +159,11 @@ model ServerType {
 
 // ─── Tags ────────────────────────────────────────────────────────────────────
 model Tag {
-  id      Int         @id @default(autoincrement())
-  name    String      @unique
-  color   String?
-  servers ServerTag[]
+  id       Int          @id @default(autoincrement())
+  name     String       @unique
+  color    String?
+  servers  ServerTag[]
+  services ServiceTag[]
 }
 
 model ServerTag {
@@ -212,8 +213,13 @@ model Server {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
   updatedByEmail String?
+  osType        String?
+  isPrivateIp   Boolean      @default(false)
+  purpose       String?
+  createdBy     String?
   statusChecks    StatusCheck[]
   accessRequests  AccessRequest[]
+  sslStatuses     SslStatus[]
   @@index([cloudProviderId])
   @@index([gpuTypeId])
   @@index([allocatedToId])
@@ -317,4 +323,77 @@ model NotificationPreference {
   updatedAt       DateTime @updatedAt
   
   @@index([userId])
+}
+
+// ─── Services ────────────────────────────────────────────────────────────────
+model Service {
+  id            Int          @id @default(autoincrement())
+  serviceName   String       @map("service_name")
+  serviceType   String?      @map("service_type")
+  serverIp      String?      @map("server_ip")
+  port          String?
+  domain        String?
+  username      String?
+  passwordEnc   String?      @map("password")
+  documentLink  String?      @map("document_link")
+  project       String?
+  version       String?
+  environment   String?      @default("on-premise")
+  dbName        String?      @map("db_name")
+  managedBy     String?      @map("managed_by")
+  remark        String?
+  healthUrl     String?      @map("health_url")
+  status        String?      @default("working")
+  
+  lastStatus    String       @default("unknown") @map("last_status")
+  lastCheckedAt DateTime?    @map("last_checked_at")
+  lastLatencyMs Int?         @map("last_latency_ms")
+  downStreak    Int          @default(0) @map("down_streak")
+  notifiedDown  Boolean      @default(false) @map("notified_down")
+
+  tags          ServiceTag[]
+
+  deletedAt     DateTime?    @map("deleted_at")
+  createdAt     DateTime?    @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  sslStatuses   SslStatus[]
+
+  @@map("services")
+}
+
+model ServiceTag {
+  serviceId Int
+  tagId     Int
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  @@id([serviceId, tagId])
+  @@index([tagId])
+}
+
+// ─── SSL Status ──────────────────────────────────────────────────────────────
+model SslStatus {
+  id          Int       @id @default(autoincrement())
+  domain      String    @unique
+  team        String?
+  project     String?
+  
+  serverId    Int?
+  server      Server?   @relation(fields: [serverId], references: [id], onDelete: SetNull)
+  serviceId   Int?
+  service     Service?  @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  issuer      String?
+  validFrom   DateTime?
+  validTo     DateTime?
+  daysRemaining Int?
+  
+  status      String    @default("unknown")
+  lastError   String?
+  lastScannedAt DateTime?
+
+  isManual    Boolean   @default(false)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchServer, fetchServerMetrics, serverKeys } from "@/lib/queries";
+import { fetchServer, fetchServerMetrics, serverKeys, revealPassword } from "@/lib/queries";
 import { authClient } from "@/lib/auth-client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusDot } from "@/components/status-dot";
@@ -68,6 +68,40 @@ function CopySSHBtn({ server, sudo = false }: { server: { ip: string; username: 
       onClick={() => void navigator.clipboard.writeText(cmd).then(() => { setCopied(true); toast.success("Copied"); setTimeout(() => setCopied(false), 2000); })}>
       {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : sudo ? <ShieldCheck className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       {sudo ? "sudo" : "Copy SSH"}
+    </Button>
+  );
+}
+
+function PasswordBox({ serverId }: { serverId: number }) {
+  const [pwd, setPwd] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleReveal() {
+    setLoading(true);
+    try {
+      const res = await revealPassword(serverId);
+      setPwd(res.password);
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to reveal password");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (pwd) {
+    return (
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-sm truncate" title={pwd}>{pwd}</span>
+        <Button size="icon" variant="ghost" className="h-4 w-4" onClick={() => void navigator.clipboard.writeText(pwd).then(() => toast.success("Copied"))}>
+          <Copy className="h-3 w-3" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <Button size="sm" variant="ghost" className="h-5 px-1.5 text-xs text-muted-foreground -ml-1.5" onClick={handleReveal} disabled={loading}>
+      {loading ? "Revealing..." : "Reveal"}
     </Button>
   );
 }
@@ -150,21 +184,34 @@ export function ServerDetailModal({ serverId, onClose }: ServerDetailModalProps)
           {server && (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {[
+                ["Hostname", server.hostname],
+                ["IP Address", server.ip],
                 ["Username", server.username],
                 ["SSH Port", String(server.sshPort)],
-                ["IP Address", server.ip],
+                ["Password", <PasswordBox key="pwd" serverId={server.id} />],
                 ["CPU", server.cpu ?? "—"],
                 ["RAM", server.ram ?? "—"],
                 ["GPU Count", server.gpuCount != null ? String(server.gpuCount) : "—"],
+                ["Domain", server.domain ?? "—"],
+                ["Environment", server.environment ?? "—"],
+                ["Cloud Provider", (server.cloudProvider as { name?: string } | null)?.name ?? "—"],
                 ["GPU Type", (server.gpuType as { name?: string } | null)?.name ?? "—"],
                 ["Allocated To", (server.allocatedTo as { name?: string } | null)?.name ?? "—"],
-                ["Server Type", (server.serverType as { name?: string } | null)?.name ?? "—"],
                 ["Location", (server.location as { name?: string } | null)?.name ?? "—"],
+                ["Server Type", (server.serverType as { name?: string } | null)?.name ?? "—"],
+                ["OS Type", server.osType ?? "—"],
+                ["Private IP", server.isPrivateIp ? "Yes" : "No"],
+                ["Purpose", server.purpose ?? "—"],
+                ["Created By", server.createdBy ?? "—"],
                 ["Remark", server.remark ?? "—"],
               ].map(([label, value]) => (
-                <div key={label} className="rounded-lg border border-border/60 bg-card/50 px-3 py-2">
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">{label}</p>
-                  <p className="text-sm font-mono truncate" title={value}>{value}</p>
+                <div key={label as string} className="rounded-lg border border-border/60 bg-card/50 px-3 py-2">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">{label as string}</p>
+                  {typeof value === "string" ? (
+                    <p className="text-sm font-mono truncate" title={value}>{value}</p>
+                  ) : (
+                    value
+                  )}
                 </div>
               ))}
             </div>

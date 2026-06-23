@@ -143,6 +143,7 @@ function ServersPage() {
 
   const [q, setQ] = useState("");
   const [cursor, setCursor] = useState<number | undefined>();
+  const [cursorHistory, setCursorHistory] = useState<number[]>([]);
   const [includeDeleted, setIncludeDeleted] = useState(false);
   const [detailServerId, setDetailServerId] = useState<number | null>(null);
   const [revealedPasswords, setRevealedPasswords] = useState<Record<number, string | null>>({});
@@ -245,7 +246,7 @@ function ServersPage() {
         <Input
           placeholder="Search hostname, IP, user…"
           value={q}
-          onChange={(e) => { setQ(e.target.value); setCursor(undefined); }}
+          onChange={(e) => { setQ(e.target.value); setCursor(undefined); setCursorHistory([]); }}
           className="w-52 h-8 text-sm"
         />
         {role === "admin" && (
@@ -261,7 +262,7 @@ function ServersPage() {
         )}
         <SavedViews
           currentParams={{ q: debouncedQ, includeDeleted: String(includeDeleted) }}
-          onLoad={(p) => { setQ(p.q ?? ""); setIncludeDeleted(p.includeDeleted === "true"); setCursor(undefined); }}
+          onLoad={(p) => { setQ(p.q ?? ""); setIncludeDeleted(p.includeDeleted === "true"); setCursor(undefined); setCursorHistory([]); }}
         />
         <Tooltip>
           <TooltipTrigger asChild>
@@ -562,15 +563,32 @@ function ServersPage() {
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+      <div className="flex items-center justify-between text-sm text-muted-foreground mt-4">
         <span>{data?.total ?? 0} servers total</span>
-        <div className="ml-auto flex gap-2">
-          {cursor && (
-            <Button size="sm" variant="outline" onClick={() => setCursor(undefined)}>First</Button>
-          )}
-          {data?.nextCursor && (
-            <Button size="sm" variant="outline" onClick={() => setCursor(data.nextCursor!)}>Next</Button>
-          )}
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              const prev = cursorHistory[cursorHistory.length - 1];
+              setCursorHistory((h) => h.slice(0, -1));
+              setCursor(prev === 0 ? undefined : prev);
+            }}
+            disabled={cursorHistory.length === 0 || isLoading}
+          >
+            Previous
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setCursorHistory((h) => [...h, cursor ?? 0]);
+              setCursor(data!.nextCursor!);
+            }}
+            disabled={!data?.nextCursor || isLoading}
+          >
+            Next
+          </Button>
         </div>
       </div>
 

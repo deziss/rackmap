@@ -86,7 +86,8 @@ SEED_ADMIN_PASSWORD=changeme123
 EOF
 
 # 3. Start
-docker compose up -d
+# Note: On first run or after fetching updates, it's recommended to build:
+docker compose up -d --build
 
 # 4. Open
 open http://localhost:8080

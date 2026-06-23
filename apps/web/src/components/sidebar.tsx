@@ -22,6 +22,7 @@ import {
   ChevronRight,
   KeyRound,
   Settings,
+  Globe,
 } from "lucide-react";
 
 interface User {
@@ -38,6 +39,7 @@ interface SidebarProps {
 const nav = [
   { to: "/" as const, label: "Dashboard", icon: LayoutDashboard },
   { to: "/servers" as const, label: "Servers", icon: Server },
+  { to: "/services" as const, label: "Services", icon: Globe },
   { to: "/lookups" as const, label: "Lookups", icon: List, roles: ["admin", "editor"] },
   { to: "/ssh" as const, label: "SSH Terminal", icon: Terminal, roles: ["admin"] },
   { to: "/access-requests" as const, label: "Access Requests", icon: KeyRound, roles: ["admin"] },

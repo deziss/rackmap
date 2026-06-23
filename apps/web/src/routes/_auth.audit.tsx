@@ -126,7 +126,7 @@ function groupByDay(items: AuditEntry[]) {
 
 function AuditPage() {
   const [cursor, setCursor] = useState<number | null>(null);
-  const [pages, setPages] = useState<AuditEntry[][]>([]);
+  const [cursorHistory, setCursorHistory] = useState<number[]>([]);
   const [category, setCategory] = useState("");
   const [action, setAction] = useState("");
   const [search, setSearch] = useState("");
@@ -145,18 +145,12 @@ function AuditPage() {
     queryFn: () => apiFetch<AuditResponse>(`/api/v1/audit?${buildParams(cursor)}`),
   });
 
-  const allItems = [...pages.flat(), ...(data?.items ?? [])];
+  const allItems = data?.items ?? [];
   const grouped = groupByDay(allItems);
 
-  function loadMore() {
-    if (!data?.nextCursor) return;
-    setPages((p) => [...p, data.items]);
-    setCursor(data.nextCursor);
-  }
-
   function reset() {
-    setPages([]);
     setCursor(null);
+    setCursorHistory([]);
   }
 
   return (
@@ -203,13 +197,34 @@ function AuditPage() {
         ))}
       </div>
 
-      {data?.nextCursor && (
-        <div className="flex justify-center">
-          <Button variant="outline" size="sm" onClick={loadMore} disabled={isLoading}>
-            Load more
+      <div className="flex items-center justify-between text-sm text-muted-foreground mt-4">
+        <span>{data?.total ?? 0} entries</span>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              const prev = cursorHistory[cursorHistory.length - 1];
+              setCursorHistory((h) => h.slice(0, -1));
+              setCursor(prev === 0 ? null : prev);
+            }}
+            disabled={cursorHistory.length === 0 || isLoading}
+          >
+            Previous
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setCursorHistory((h) => [...h, cursor ?? 0]);
+              setCursor(data!.nextCursor!);
+            }}
+            disabled={!data?.nextCursor || isLoading}
+          >
+            Next
           </Button>
         </div>
-      )}
+      </div>
     </div>
   );
 }

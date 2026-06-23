@@ -31,6 +31,10 @@ export const serverSelect = {
   createdAt: true,
   updatedAt: true,
   updatedByEmail: true,
+  osType: true,
+  isPrivateIp: true,
+  purpose: true,
+  createdBy: true,
 } as const;
 
 /** Strip passwordEnc and add hasPassword. */

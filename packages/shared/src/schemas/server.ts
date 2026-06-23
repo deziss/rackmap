@@ -24,6 +24,10 @@ export const ServerCreateInput = z.object({
   locationId: nullableId,
   serverTypeId: nullableId,
   tagIds: z.array(z.number().int().positive()).max(50).optional(),
+  osType: z.string().trim().max(50).nullable().optional(),
+  isPrivateIp: z.boolean().default(false).optional(),
+  purpose: z.string().trim().max(255).nullable().optional(),
+  createdBy: z.string().trim().max(100).nullable().optional(),
 });
 export type ServerCreateInput = z.infer<typeof ServerCreateInput>;
 
@@ -73,6 +77,10 @@ export const ServerDto = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   updatedByEmail: z.string().nullable(),
+  osType: z.string().nullable(),
+  isPrivateIp: z.boolean(),
+  purpose: z.string().nullable(),
+  createdBy: z.string().nullable(),
 });
 export type ServerDto = z.infer<typeof ServerDto>;
 

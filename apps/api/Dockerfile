@@ -42,4 +42,7 @@ ENV PORT=3001
 EXPOSE 3001
 
 # Run migrations, seed the database, then start
-CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && pnpm run db:seed && node dist/index.js"]
+# CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && pnpm run db:seed && node dist/index.js"]
+# Run db push, seed the database, then start
+CMD ["sh", "-c", "node_modules/.bin/prisma db push --accept-data-loss && pnpm run db:seed && node dist/index.js"]
+
