@@ -93,3 +93,36 @@ export function updatePreferences(updates: Record<string, any>) {
   });
 }
 
+
+export const sslKeys = {
+  all: ["ssl"] as const,
+  list: (params: Record<string, unknown>) => ["ssl", "list", params] as const,
+};
+
+export function fetchSslList(params: Record<string, string | number | boolean | undefined>) {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== "") q.set(k, String(v));
+  }
+  return apiFetch<any>(`/api/v1/ssl?${q.toString()}`);
+}
+
+export function scanAllSsl() {
+  return apiFetch("/api/v1/ssl/scan", { method: "POST" });
+}
+
+export function scanSslDomain(id: number) {
+  return apiFetch(`/api/v1/ssl/${id}/scan`, { method: "POST" });
+}
+
+export function createSslDomain(data: unknown) {
+  return apiFetch<any>("/api/v1/ssl", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateSslDomain(id: number, data: unknown) {
+  return apiFetch<any>(`/api/v1/ssl/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function deleteSslDomain(id: number) {
+  return apiFetch(`/api/v1/ssl/${id}`, { method: "DELETE" });
+}

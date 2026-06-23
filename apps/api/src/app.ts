@@ -109,6 +109,7 @@ export function createApp() {
   app.route("/api/v1/users", userRoutes);
   app.route("/api/v1/access-requests", accessRequestRoutes);
   app.route("/api/v1/services", serviceRoutes);
+  app.route("/api/v1/ssl", sslRoutes);
 
   app.onError(onError);
 
