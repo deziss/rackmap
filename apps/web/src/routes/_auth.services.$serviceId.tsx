@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { fetchService, serviceKeys, fetchServer, serverKeys } from "@/lib/queries";
+import { fetchService, serviceKeys } from "@/lib/queries";
 import { StatusDot } from "@/components/status-dot";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
