@@ -4,8 +4,7 @@ import { fetchService, serviceKeys } from "@/lib/queries";
 import { StatusDot } from "@/components/status-dot";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, Server, Activity, Lock, Database, Globe, Tag, ExternalLink } from "lucide-react";
+import { Server, Activity, Lock, Database, Globe, Tag, ExternalLink } from "lucide-react";
 
 function InfoRow({ label, value, icon: Icon }: { label: string; value: React.ReactNode; icon?: React.ElementType }) {
   return (
