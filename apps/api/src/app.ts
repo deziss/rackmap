@@ -14,6 +14,7 @@ import { tagRoutes } from "./modules/tags/tag.routes.js";
 import { auditRoutes } from "./modules/audit/audit.routes.js";
 import { viewRoutes } from "./modules/views/view.routes.js";
 import { importRoutes } from "./modules/import-export/import.routes.js";
+import { serviceImportRoutes } from "./modules/import-export/service-import.routes.js";
 import { apiKeyRoutes } from "./modules/api-keys/api-key.routes.js";
 import { userRoutes } from "./modules/users/user.routes.js";
 import { accessRequestRoutes } from "./modules/access-requests/access-request.routes.js";
@@ -103,13 +104,17 @@ export function createApp() {
   // specific paths that would otherwise be swallowed by serverRoutes' /:id pattern.
   app.route("/api/v1/servers", importRoutes);
   app.route("/api/v1/servers", serverRoutes);
+
+  // Same for services
+  app.route("/api/v1/services", serviceImportRoutes);
+  app.route("/api/v1/services", serviceRoutes);
+
   app.route("/api/v1/tags", tagRoutes);
   app.route("/api/v1/audit", auditRoutes);
   app.route("/api/v1/views", viewRoutes);
   app.route("/api/v1/api-keys", apiKeyRoutes);
   app.route("/api/v1/users", userRoutes);
   app.route("/api/v1/access-requests", accessRequestRoutes);
-  app.route("/api/v1/services", serviceRoutes);
   app.route("/api/v1/ssl", sslRoutes);
 
   app.onError(onError);

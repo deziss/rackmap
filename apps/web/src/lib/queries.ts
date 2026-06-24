@@ -40,6 +40,10 @@ export function checkServer(id: number) {
   return apiFetch(`/api/v1/servers/${id}/check`, { method: "POST" });
 }
 
+export function checkAllServers() {
+  return apiFetch<{ checked: number }>("/api/v1/servers/check-all", { method: "POST" });
+}
+
 export const serviceKeys = {
   all: ["services"] as const,
   list: (params: Record<string, unknown>) => ["services", "list", params] as const,

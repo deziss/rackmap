@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback } from "react";
 import { ServerDetailModal } from "@/components/server-detail-modal";
-import { fetchServers, checkServer, revealPassword, serverKeys } from "@/lib/queries";
+import { fetchServers, checkServer, checkAllServers, revealPassword, serverKeys } from "@/lib/queries";
 import { apiFetch } from "@/lib/api";
 import { StatusDot } from "@/components/status-dot";
 import { Button } from "@/components/ui/button";
@@ -163,6 +163,12 @@ function ServersPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const checkAllMutation = useMutation({
+    mutationFn: checkAllServers,
+    onSuccess: (res) => { qc.invalidateQueries({ queryKey: serverKeys.all }); toast.success(`Checked ${res.checked} servers`); },
+    onError: (e: Error) => toast.error(`Check all failed: ${e.message}`),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id: number) =>
       fetch(`/api/v1/servers/${id}`, { method: "DELETE", credentials: "include" }).then((r) => r.json()),
@@ -272,6 +278,12 @@ function ServersPage() {
           </TooltipTrigger>
           <TooltipContent>Refresh</TooltipContent>
         </Tooltip>
+        {canEdit && (
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => checkAllMutation.mutate()} disabled={checkAllMutation.isPending}>
+            <RefreshCw className={`h-3.5 w-3.5 ${checkAllMutation.isPending ? "animate-spin" : ""}`} />
+            Check All Health
+          </Button>
+        )}
         <Button
           size="sm"
           variant="outline"

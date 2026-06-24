@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { fetchServer, fetchServerMetrics, serverKeys } from "@/lib/queries";
+import { fetchServer, fetchServerMetrics, serverKeys, fetchServices, serviceKeys } from "@/lib/queries";
 import { authClient } from "@/lib/auth-client";
 import { StatusDot } from "@/components/status-dot";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -102,9 +102,17 @@ function ServerDetailPage() {
     retry: false,
   });
 
+  const { data: servicesData } = useQuery({
+    queryKey: serviceKeys.list({ q: server?.ip ?? "" }),
+    queryFn: () => fetchServices({ q: server?.ip ?? "" }),
+    enabled: !!server?.ip,
+  });
+
   const m = metricsQ.data;
   const cpuLoadPct = m ? (m.cpu.loadAvg1 / Math.max(1, m.cpu.cores)) * 100 : 0;
   const memPct = m && m.mem.totalMb > 0 ? (m.mem.usedMb / m.mem.totalMb) * 100 : 0;
+
+  const relatedServices = servicesData?.items?.filter((s: any) => s.serverIp === server?.ip) ?? [];
 
   return (
     <div className="space-y-4">
@@ -160,6 +168,36 @@ function ServerDetailPage() {
 
       {metricsQ.isLoading && (
         <p className="text-sm text-muted-foreground py-8 text-center">Connecting over SSH to collect metrics…</p>
+      )}
+
+      {relatedServices.length > 0 && (
+        <Card className="border-border">
+          <CardHeader className="p-4 pb-2 border-b border-white/5">
+            <CardTitle className="text-sm flex items-center gap-2">Hosted Services ({relatedServices.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <table className="w-full text-xs">
+              <tbody>
+                {relatedServices.map((s: any) => (
+                  <tr key={s.id} className="border-b border-border/50 last:border-0 hover:bg-white/5 transition-colors">
+                    <td className="py-2 px-4 font-medium"><Link to="/services" className="hover:text-primary transition-colors">{s.serviceName}</Link></td>
+                    <td className="py-2 px-4 text-muted-foreground">{s.serviceType || "—"}</td>
+                    <td className="py-2 px-4 font-mono">{s.port || "—"}</td>
+                    <td className="py-2 px-4 text-right">
+                      {s.lastStatus === "up" ? (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-emerald-500/30 text-emerald-400">ONLINE</Badge>
+                      ) : s.lastStatus === "down" ? (
+                        <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4">OFFLINE</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">Unknown</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
       )}
 
       {m && (

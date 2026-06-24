@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { fetchServers, serverKeys } from "@/lib/queries";
+import { fetchServers, serverKeys, fetchServices, serviceKeys, fetchSslList, sslKeys } from "@/lib/queries";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Server, Wifi, WifiOff, Cloud, HardDrive, Activity, Zap } from "lucide-react";
+import { Server, HardDrive, Activity, Zap, ShieldAlert, CheckCircle2 } from "lucide-react";
 import {
   PieChart, Pie, Cell, Tooltip as ReTooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -70,12 +70,25 @@ function ServerRow({ server }: {
 function DashboardPage() {
 
   const { data, isLoading } = useQuery({
-    queryKey: serverKeys.list({ limit: 100 }),
-    queryFn: () => fetchServers({ limit: 100 }),
+    queryKey: serverKeys.list({ limit: 1000 }),
+    queryFn: () => fetchServers({ limit: 1000 }),
     refetchInterval: 15_000,
   });
 
-  if (isLoading) {
+  const { data: servicesData, isLoading: isServicesLoading } = useQuery({
+    queryKey: serviceKeys.list({ limit: 1000 }),
+    queryFn: () => fetchServices({ limit: 1000 }),
+    refetchInterval: 15_000,
+  });
+
+  const { data: sslData, isLoading: isSslLoading } = useQuery({
+    queryKey: sslKeys.list({ limit: 1000 }),
+    queryFn: () => fetchSslList({ limit: 1000 }),
+    refetchInterval: 15_000,
+  });
+
+  const isInitialLoad = (isLoading && !data) || (isServicesLoading && !servicesData) || (isSslLoading && !sslData);
+  if (isInitialLoad) {
     return (
       <div className="space-y-6">
         <div className="space-y-2 animate-fade-up">
@@ -127,6 +140,15 @@ function DashboardPage() {
   const recentServers = [...servers].sort((a, b) => b.id - a.id).slice(0, 8);
   const displayServers = downServers.length > 0 ? downServers.slice(0, 6) : recentServers;
 
+  const services = servicesData?.items ?? [];
+  const onlineServices = services.filter((s: any) => s.lastStatus === "up").length;
+  const offlineServices = services.filter((s: any) => s.lastStatus === "down").length;
+  const downServicesList = services.filter((s: any) => s.lastStatus === "down");
+
+  const ssls = sslData?.items ?? [];
+  const expiringSsls = ssls.filter((s: any) => s.daysRemaining !== null && s.daysRemaining <= 30);
+  const totalSsls = ssls.length;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -137,10 +159,10 @@ function DashboardPage() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Servers"  value={total}      icon={Server}  color="bg-linear-to-br from-primary/20 to-primary/5"        delay={50} />
-        <StatCard label="Online"         value={online}     icon={Wifi}    color="bg-linear-to-br from-emerald-500/25 to-emerald-500/5"  delay={100} sub={total > 0 ? `${uptimePct}% uptime` : undefined} />
-        <StatCard label="Offline"        value={offline}    icon={WifiOff} color="bg-linear-to-br from-red-500/25 to-red-500/5"          delay={150} />
-        <StatCard label="Cloud"          value={cloudCount} icon={Cloud}   color="bg-linear-to-br from-blue-400/20 to-blue-400/5"        delay={200} sub={avgLatency != null ? `avg ${avgLatency}ms` : undefined} />
+        <StatCard label="Servers"  value={`${online}/${total}`}      icon={Server}  color="bg-linear-to-br from-primary/20 to-primary/5"        delay={50} sub={`${offline} offline`} />
+        <StatCard label="Services"         value={`${onlineServices}/${services.length}`}     icon={Activity}    color="bg-linear-to-br from-blue-500/25 to-blue-500/5"  delay={100} sub={`${offlineServices} offline`} />
+        <StatCard label="Avg Latency"        value={avgLatency != null ? `${avgLatency}ms` : "—"}    icon={Zap} color="bg-linear-to-br from-emerald-500/25 to-emerald-500/5"          delay={150} sub={uptimePct > 0 ? `${uptimePct}% uptime` : "Fleet health"} />
+        <StatCard label="SSL Warnings"          value={expiringSsls.length} icon={ShieldAlert}   color="bg-linear-to-br from-red-400/20 to-red-400/5"        delay={200} sub={`Out of ${totalSsls} tracked certs`} />
       </div>
 
       {/* Charts */}
@@ -155,7 +177,8 @@ function DashboardPage() {
                     {envData.map((e, i) => <Cell key={i} fill={e.color} stroke="transparent" />)}
                   </Pie>
                   <ReTooltip
-                    contentStyle={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: "10px", fontSize: 12 }}
+                    contentStyle={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: "10px", fontSize: 12, color: "var(--color-foreground)" }}
+                    itemStyle={{ color: "var(--color-foreground)" }}
                     formatter={(v) => [`${v} servers`]}
                   />
                 </PieChart>
@@ -185,7 +208,11 @@ function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="oklch(1 0 0 / 0.06)" />
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} />
-                <ReTooltip contentStyle={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: "10px", fontSize: 12 }} />
+                <ReTooltip 
+                  contentStyle={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: "10px", fontSize: 12, color: "var(--color-foreground)" }} 
+                  itemStyle={{ color: "var(--color-foreground)" }}
+                  cursor={{ fill: "oklch(var(--color-muted) / 0.5)" }}
+                />
                 <Bar dataKey="count" fill="oklch(0.65 0.26 275)" radius={[6, 6, 0, 0]} maxBarSize={52} />
               </BarChart>
             </ResponsiveContainer>
@@ -247,9 +274,7 @@ function DashboardPage() {
             </div>
             <div className="space-y-2.5">
               {[
-                { label: "Uptime", value: `${uptimePct}%`, cls: "text-emerald-400" },
-                { label: "Unknown", value: String(unknown), cls: "" },
-                { label: "Avg latency", value: avgLatency != null ? `${avgLatency}ms` : "—", cls: "font-mono" },
+                { label: "Unknown status", value: String(unknown), cls: "" },
                 { label: "On-premise", value: String(total - cloudCount), cls: "" },
               ].map(({ label, value, cls }) => (
                 <div key={label} className="flex justify-between text-sm">
@@ -258,6 +283,47 @@ function DashboardPage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-card/60 backdrop-blur-xl shadow-xl p-5 animate-fade-up" style={{ animationDelay: "500ms" }}>
+            <div className="flex items-center gap-2 mb-4">
+              <Activity className="h-3.5 w-3.5 text-muted-foreground" />
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Offline Services</p>
+            </div>
+            {downServicesList.length > 0 ? (
+              <div className="space-y-2.5">
+                {downServicesList.slice(0, 5).map((s: any) => (
+                  <div key={s.id} className="flex items-center justify-between gap-2">
+                    <Link to="/services" className="text-sm truncate hover:text-primary transition-colors">{s.serviceName}</Link>
+                    <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4 shrink-0">DOWN</Badge>
+                  </div>
+                ))}
+                {downServicesList.length > 5 && (
+                  <p className="text-xs text-muted-foreground mt-2"><Link to="/services">+{downServicesList.length - 5} more offline</Link></p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-emerald-400/70 flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5" /> All services operational</p>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-card/60 backdrop-blur-xl shadow-xl p-5 animate-fade-up" style={{ animationDelay: "550ms" }}>
+            <div className="flex items-center gap-2 mb-4">
+              <ShieldAlert className="h-3.5 w-3.5 text-muted-foreground" />
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Expiring SSLs (≤ 30d)</p>
+            </div>
+            {expiringSsls.length > 0 ? (
+              <div className="space-y-2.5">
+                {expiringSsls.slice(0, 5).map((s: any) => (
+                  <div key={s.id} className="flex items-center justify-between gap-2">
+                    <span className="text-sm truncate">{s.domain}</span>
+                    <span className="text-xs font-mono text-red-400 shrink-0">{s.daysRemaining}d left</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-emerald-400/70 flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5" /> No immediate expirations</p>
+            )}
           </div>
         </div>
       </div>

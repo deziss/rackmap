@@ -27,7 +27,7 @@ export type IdParam = z.infer<typeof IdParam>;
 
 export const CursorQuery = z.object({
   cursor: z.coerce.number().int().positive().optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
+  limit: z.coerce.number().int().min(1).max(1000).default(50),
 });
 export type CursorQuery = z.infer<typeof CursorQuery>;
 

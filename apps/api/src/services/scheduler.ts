@@ -1,5 +1,6 @@
 import { env } from "../env.js";
 import { runAll, pruneStatusHistory } from "./status.service.js";
+import { runAllServices } from "./service-status.service.js";
 
 let running = false;
 let timer: ReturnType<typeof setTimeout> | null = null;
@@ -9,6 +10,7 @@ async function tick() {
   running = true;
   try {
     await runAll();
+    await runAllServices();
     await pruneStatusHistory();
   } catch (err) {
     console.error("[scheduler] error:", err);

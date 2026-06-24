@@ -4,7 +4,9 @@ import { sendEmail } from "./email.service.js";
 import { NotificationPreference } from "@prisma/client";
 
 interface FlipEvent {
-  serverId: number;
+  serverId?: number;
+  serviceId?: number;
+  type?: "server" | "service";
   hostname: string;
   ip: string;
   port: number;
@@ -63,7 +65,9 @@ async function sendWebhook(event: FlipEvent): Promise<void> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       event: "status_flip",
+      type: event.type ?? "server",
       serverId: event.serverId,
+      serviceId: event.serviceId,
       hostname: event.hostname,
       ip: event.ip,
       port: event.port,
@@ -77,7 +81,8 @@ async function sendWebhook(event: FlipEvent): Promise<void> {
 async function sendTelegram(event: FlipEvent): Promise<void> {
   if (!env.NOTIFY_TELEGRAM_BOT_TOKEN || !env.NOTIFY_TELEGRAM_CHAT_ID) return;
   const emoji = event.to === "up" ? "✅" : "🔴";
-  const text = `${emoji} *${event.hostname}* (${event.ip}:${event.port})\nStatus: ${event.from} → ${event.to}`;
+  const typeLabel = event.type === "service" ? "Service" : "Server";
+  const text = `${emoji} [${typeLabel}] *${event.hostname}* (${event.ip}:${event.port})\nStatus: ${event.from} → ${event.to}`;
   const url = `https://api.telegram.org/bot${env.NOTIFY_TELEGRAM_BOT_TOKEN}/sendMessage`;
   await fetch(url, {
     method: "POST",

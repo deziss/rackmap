@@ -3,6 +3,7 @@ import { prisma } from "../db.js";
 import { env } from "../env.js";
 import { tcpProbe } from "../lib/tcp-check.js";
 import { httpProbe } from "../lib/http-check.js";
+import { notifyFlip } from "./notify.service.js";
 
 /** Check a single service and persist result. */
 export async function runServiceCheck(serviceId: number) {
@@ -42,7 +43,19 @@ export async function runServiceCheck(serviceId: number) {
     },
   });
 
-  return { serviceId, ...result };
+  const prevStatus = service.lastStatus;
+  const flipped = prevStatus !== "unknown" && prevStatus !== result.status;
+  const confirmedDown = !isUp && newStreak >= env.STATUS_FLIP_THRESHOLD && !service.notifiedDown;
+  const recovered = isUp && prevStatus === "down";
+
+  if (confirmedDown) {
+    await prisma.service.update({ where: { id: serviceId }, data: { notifiedDown: true } });
+    notifyFlip({ type: "service", serviceId: serviceId, hostname: service.serviceName, ip: service.serverIp || "N/A", port: service.port ? parseInt(service.port, 10) : 0, from: "up", to: "down" }).catch(() => {});
+  } else if (recovered) {
+    notifyFlip({ type: "service", serviceId: serviceId, hostname: service.serviceName, ip: service.serverIp || "N/A", port: service.port ? parseInt(service.port, 10) : 0, from: "down", to: "up" }).catch(() => {});
+  }
+
+  return { serviceId, ...result, flipped, confirmedDown, recovered };
 }
 
 export async function runAllServices() {

@@ -15,11 +15,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { toast } from "sonner";
 import {
   RefreshCw, Eye, EyeOff, Trash2, Zap,
-  Copy
+  Copy, Download
 } from "lucide-react";
 import type { ServiceDto } from "@inv/shared";
 import { useDebounce } from "@/hooks/use-debounce";
 import { ServiceFormDialog } from "@/components/service-form-dialog";
+import { ServiceImportWizard } from "@/components/service-import-wizard";
 import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/_auth/services")({
@@ -160,6 +161,24 @@ function ServicesPage() {
   // Reset pagination on search change
   useState(() => { resetPagination(); });
 
+  async function triggerDownload(format: "xlsx" | "json", searchQ: string) {
+    const url = `/api/v1/services/export.${format}?q=${encodeURIComponent(searchQ)}`;
+    try {
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) { toast.error("Export failed"); return; }
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `services-${Date.now()}.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    } catch {
+      toast.error("Export failed");
+    }
+  }
+
   const deleteMut = useMutation({
     mutationFn: deleteService,
     onSuccess: () => {
@@ -205,6 +224,23 @@ function ServicesPage() {
               Check All Health
             </Button>
           )}
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => triggerDownload("xlsx", debouncedSearch)}
+          >
+            <Download className="h-3.5 w-3.5" /> XLSX
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => triggerDownload("json", debouncedSearch)}
+          >
+            <Download className="h-3.5 w-3.5" /> JSON
+          </Button>
+          {canModify && <ServiceImportWizard onImported={() => queryClient.invalidateQueries({ queryKey: serviceKeys.all })} />}
           {canModify && <ServiceFormDialog onSaved={() => queryClient.invalidateQueries({ queryKey: serviceKeys.all })} />}
         </div>
       </div>
