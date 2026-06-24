@@ -22,6 +22,7 @@ import { useDebounce } from "@/hooks/use-debounce";
 import { ServiceDetailModal } from "@/components/service-detail-modal";
 import { ServiceFormDialog } from "@/components/service-form-dialog";
 import { ServiceImportWizard } from "@/components/service-import-wizard";
+import { RequestAccessButton } from "@/components/request-access-button";
 import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/_auth/services")({
@@ -64,7 +65,7 @@ function DeleteConfirm({ service, onConfirm, isPending }: { service: ServiceDto;
   );
 }
 
-function PasswordCell({ serviceId, hasPassword, canReveal }: { serviceId: number; hasPassword: boolean; canReveal: boolean }) {
+function PasswordCell({ serviceId, hasPassword, canReveal, isViewer, isApproved }: { serviceId: number; hasPassword: boolean; canReveal: boolean; isViewer: boolean; isApproved: boolean }) {
   const [revealed, setRevealed] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -92,12 +93,14 @@ function PasswordCell({ serviceId, hasPassword, canReveal }: { serviceId: number
     toast.success("Password copied to clipboard");
   };
 
+  const canShowReveal = canReveal || (isViewer && isApproved);
+
   return (
     <div className="flex items-center gap-1 min-w-[80px]">
       <span className="font-mono text-xs min-w-[60px] max-w-[150px] truncate block tracking-wider" title={revealed ?? "Hidden password"}>
         {revealed ? revealed : "••••••••"}
       </span>
-      {canReveal && (
+      {canShowReveal ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button size="icon" variant="ghost" className="h-5 w-5 shrink-0" onClick={toggle} disabled={loading}>
@@ -106,7 +109,9 @@ function PasswordCell({ serviceId, hasPassword, canReveal }: { serviceId: number
           </TooltipTrigger>
           <TooltipContent>{revealed ? "Hide" : "Reveal"} password</TooltipContent>
         </Tooltip>
-      )}
+      ) : isViewer ? (
+        <RequestAccessButton entityId={serviceId} entityType="service" type="service_password_reveal" label="Password" />
+      ) : null}
       {revealed && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -114,7 +119,7 @@ function PasswordCell({ serviceId, hasPassword, canReveal }: { serviceId: number
               <Copy className="h-3 w-3" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Copy to clipboard</TooltipContent>
+          <TooltipContent>Copy password</TooltipContent>
         </Tooltip>
       )}
     </div>
@@ -126,12 +131,33 @@ function ServicesPage() {
   const userRole = sessionData?.user?.role;
   const isAdmin = userRole === "admin";
   const isEditor = userRole === "editor";
+  const isViewer = userRole === "viewer";
   const canModify = isAdmin || isEditor;
   const canReveal = isAdmin || isEditor;
 
   const [detailServiceId, setDetailServiceId] = useState<number | null>(null);
 
   const queryClient = useQueryClient();
+
+  // Viewer: fetch own access requests to derive per-service approval without N+1 calls
+  const { data: myRequests } = useQuery({
+    queryKey: ["access-requests", "mine"],
+    queryFn: () => apiFetch<{ serviceId: number; type: string; status: string; expiresAt: string | null }[]>("/api/v1/access-requests"),
+    enabled: isViewer,
+    refetchInterval: 15_000,
+  });
+
+  function viewerApproved(serviceId: number, type: "service_password_reveal"): boolean {
+    if (!isViewer || !myRequests) return false;
+    const now = Date.now();
+    return myRequests.some(
+      (r) =>
+        r.serviceId === serviceId &&
+        r.type === type &&
+        r.status === "approved" &&
+        (r.expiresAt === null || new Date(r.expiresAt).getTime() > now),
+    );
+  }
 
   // Search & Pagination State
   const [search, setSearch] = useState("");
@@ -355,7 +381,13 @@ function ServicesPage() {
                     <td className="px-3 py-2 whitespace-nowrap">
                       <div className="flex flex-col text-xs gap-1">
                         <span className="font-mono text-muted-foreground">{svc.username || "—"}</span>
-                        <PasswordCell serviceId={svc.id} hasPassword={svc.hasPassword} canReveal={canReveal} />
+                        <PasswordCell
+                          serviceId={svc.id}
+                          hasPassword={svc.hasPassword}
+                          canReveal={canReveal}
+                          isViewer={isViewer}
+                          isApproved={viewerApproved(svc.id, "service_password_reveal")}
+                        />
                       </div>
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">

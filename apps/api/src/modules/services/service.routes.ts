@@ -88,7 +88,17 @@ export const serviceRoutes = new Hono()
 
       const hasDirectPerm = user.role === "admin" || user.role === "editor";
       if (!hasDirectPerm) {
-        return c.json({ error: { code: "FORBIDDEN", message: "Forbidden" } }, 403);
+        // Check for valid approved AccessRequest
+        const req = await prisma.accessRequest.findFirst({
+          where: {
+            requesterId: user.id,
+            serviceId: id,
+            type: "service_password_reveal",
+            status: "approved",
+            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+          },
+        });
+        if (!req) return c.json({ error: { code: "FORBIDDEN", message: "Request access to reveal this password" } }, 403);
       }
 
       const password = await revealServicePassword(id, getAuditCtx(c));

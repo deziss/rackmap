@@ -14,28 +14,29 @@ datasource db {
 // twoFactor + apiKey plugins. Hand-add `auditLogs` relation after generation.
 
 model User {
-  id            String    @id
-  name          String
-  email         String    @unique
-  emailVerified Boolean   @default(false)
-  image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                     String                  @id
+  name                   String
+  email                  String                  @unique
+  emailVerified          Boolean                 @default(false)
+  image                  String?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
   // admin plugin
-  role          String?   @default("viewer")
-  banned        Boolean?  @default(false)
-  banReason     String?
-  banExpires    DateTime?
+  role                   String?                 @default("viewer")
+  banned                 Boolean?                @default(false)
+  banReason              String?
+  banExpires             DateTime?
   // twoFactor plugin
-  twoFactorEnabled Boolean? @default(false)
-  sessions      Session[]
-  accounts      Account[]
-  apiKeys       ApiKey[]
-  auditLogs         AuditLog[]
-  savedViews        SavedView[]
-  accessRequests    AccessRequest[]  @relation("Requester")
-  resolvedRequests  AccessRequest[]  @relation("Resolver")
+  twoFactorEnabled       Boolean?                @default(false)
+  sessions               Session[]
+  accounts               Account[]
+  apiKeys                ApiKey[]
+  auditLogs              AuditLog[]
+  savedViews             SavedView[]
+  accessRequests         AccessRequest[]         @relation("Requester")
+  resolvedRequests       AccessRequest[]         @relation("Resolver")
   notificationPreference NotificationPreference?
+
   @@map("user")
 }
 
@@ -50,6 +51,7 @@ model Session {
   impersonatedBy String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
   @@index([userId])
   @@map("session")
 }
@@ -69,6 +71,7 @@ model Account {
   scope                 String?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
+
   @@index([userId])
   @@map("account")
 }
@@ -80,6 +83,7 @@ model Verification {
   expiresAt  DateTime
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
   @@map("verification")
 }
 
@@ -88,30 +92,32 @@ model TwoFactor {
   userId      String @unique
   secret      String
   backupCodes String
+
   @@map("twoFactor")
 }
 
 model ApiKey {
-  id          String    @id
-  name        String?
-  start       String?
-  prefix      String?
-  key         String    @unique
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  refillAt    DateTime?
-  refillAmount Int?
-  lastRefillAt DateTime?
-  enabled     Boolean   @default(true)
-  rateLimitEnabled Boolean @default(false)
+  id                  String    @id
+  name                String?
+  start               String?
+  prefix              String?
+  key                 String    @unique
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refillAt            DateTime?
+  refillAmount        Int?
+  lastRefillAt        DateTime?
+  enabled             Boolean   @default(true)
+  rateLimitEnabled    Boolean   @default(false)
   rateLimitTimeWindow Int?
-  rateLimitMax Int?
-  requestCount Int      @default(0)
-  remaining   Int?
-  expiresAt   DateTime?
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  rateLimitMax        Int?
+  requestCount        Int       @default(0)
+  remaining           Int?
+  expiresAt           DateTime?
+  deletedAt           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
   @@index([userId])
   @@map("apiKey")
 }
@@ -171,55 +177,57 @@ model ServerTag {
   tagId    Int
   server   Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
   tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
   @@id([serverId, tagId])
   @@index([tagId])
 }
 
 // ─── Inventory ───────────────────────────────────────────────────────────────
 model Server {
-  id            Int          @id @default(autoincrement())
-  hostname      String
-  ip            String
-  username      String
+  id              Int             @id @default(autoincrement())
+  hostname        String
+  ip              String
+  username        String
   /// AES-256-GCM blob "v1.<iv>.<tag>.<ct>". NEVER sent to client.
-  passwordEnc   String?
+  passwordEnc     String?
   /// Per-server SSH port (varies — from Excel SSH column). Probe uses this.
-  sshPort       Int          @default(22)
-  cpu           String?
-  ram           String?
-  gpuCount      Int?
-  remark        String?
-  domain        String?
-  environment   String?      @default("on-premise")
+  sshPort         Int             @default(22)
+  cpu             String?
+  ram             String?
+  gpuCount        Int?
+  remark          String?
+  domain          String?
+  environment     String?         @default("on-premise")
   cloudProviderId Int?
-  cloudProvider CloudProvider? @relation(fields: [cloudProviderId], references: [id], onDelete: Restrict)
-  gpuTypeId     Int?
-  gpuType       GpuType?     @relation(fields: [gpuTypeId], references: [id], onDelete: Restrict)
-  allocatedToId Int?
-  allocatedTo   AllocatedTo? @relation(fields: [allocatedToId], references: [id], onDelete: Restrict)
-  locationId    Int?
-  location      Location?    @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  serverTypeId  Int?
-  serverType    ServerType?  @relation(fields: [serverTypeId], references: [id], onDelete: Restrict)
-  tags          ServerTag[]
+  cloudProvider   CloudProvider?  @relation(fields: [cloudProviderId], references: [id], onDelete: Restrict)
+  gpuTypeId       Int?
+  gpuType         GpuType?        @relation(fields: [gpuTypeId], references: [id], onDelete: Restrict)
+  allocatedToId   Int?
+  allocatedTo     AllocatedTo?    @relation(fields: [allocatedToId], references: [id], onDelete: Restrict)
+  locationId      Int?
+  location        Location?       @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  serverTypeId    Int?
+  serverType      ServerType?     @relation(fields: [serverTypeId], references: [id], onDelete: Restrict)
+  tags            ServerTag[]
   /// Denormalized latest probe result (updated by scheduler; NOT audited)
-  lastStatus    String       @default("unknown")
-  lastCheckedAt DateTime?
-  lastLatencyMs Int?
+  lastStatus      String          @default("unknown")
+  lastCheckedAt   DateTime?
+  lastLatencyMs   Int?
   /// Consecutive down count — triggers notification at threshold
-  downStreak    Int          @default(0)
-  notifiedDown  Boolean      @default(false)
-  deletedAt     DateTime?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  updatedByEmail String?
-  osType        String?
-  isPrivateIp   Boolean      @default(false)
-  purpose       String?
-  createdBy     String?
+  downStreak      Int             @default(0)
+  notifiedDown    Boolean         @default(false)
+  deletedAt       DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  updatedByEmail  String?
+  osType          String?
+  isPrivateIp     Boolean         @default(false)
+  purpose         String?
+  createdBy       String?
   statusChecks    StatusCheck[]
   accessRequests  AccessRequest[]
   sslStatuses     SslStatus[]
+
   @@index([cloudProviderId])
   @@index([gpuTypeId])
   @@index([allocatedToId])
@@ -239,6 +247,7 @@ model StatusCheck {
   /// Whitelisted error code only — never raw socket data
   errorCode String?
   checkedAt DateTime @default(now())
+
   @@index([serverId, checkedAt])
 }
 
@@ -261,6 +270,7 @@ model AuditLog {
   diffJson   String?
   ip         String?
   createdAt  DateTime @default(now())
+
   @@index([entity, entityId])
   @@index([createdAt])
   @@index([actorId])
@@ -272,9 +282,11 @@ model AccessRequest {
   id          Int       @id @default(autoincrement())
   requesterId String
   requester   User      @relation("Requester", fields: [requesterId], references: [id], onDelete: Cascade)
-  serverId    Int
-  server      Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
-  /// "ssh" | "password_reveal"
+  serverId    Int?
+  server      Server?   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  serviceId   Int?
+  service     Service?  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  /// "ssh" | "password_reveal" | "service_password_reveal"
   type        String
   /// "pending" | "approved" | "rejected"
   status      String    @default("pending")
@@ -286,6 +298,7 @@ model AccessRequest {
   resolver    User?     @relation("Resolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
   /// Approval valid until (null = indefinite)
   expiresAt   DateTime?
+
   @@index([requesterId])
   @@index([serverId])
   @@index([status])
@@ -293,71 +306,73 @@ model AccessRequest {
 
 // ─── Saved views ─────────────────────────────────────────────────────────────
 model SavedView {
-  id        Int      @id @default(autoincrement())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name      String
+  id         Int      @id @default(autoincrement())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
   /// Serialized servers-table filter + column-visibility state
   paramsJson String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
   @@index([userId])
 }
 
 // ─── Notification Preferences ────────────────────────────────────────────────
 model NotificationPreference {
-  id              Int      @id @default(autoincrement())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  newServerAdded  Boolean  @default(false)
-  serverUpDown    Boolean  @default(false)
-  gpuCountChanged Boolean  @default(false)
-  diskUnmounted   Boolean  @default(false)
-  diskFull        Boolean  @default(false)
-  ramFull         Boolean  @default(false)
-  highCpu         Boolean  @default(false)
-  userRegistered  Boolean  @default(false) // Admin only
+  id     Int    @id @default(autoincrement())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  newServerAdded  Boolean @default(false)
+  serverUpDown    Boolean @default(false)
+  gpuCountChanged Boolean @default(false)
+  diskUnmounted   Boolean @default(false)
+  diskFull        Boolean @default(false)
+  ramFull         Boolean @default(false)
+  highCpu         Boolean @default(false)
+  userRegistered  Boolean @default(false) // Admin only
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([userId])
 }
 
 // ─── Services ────────────────────────────────────────────────────────────────
 model Service {
-  id            Int          @id @default(autoincrement())
-  serviceName   String       @map("service_name")
-  serviceType   String?      @map("service_type")
-  serverIp      String?      @map("server_ip")
-  port          String?
-  domain        String?
-  username      String?
-  passwordEnc   String?      @map("password")
-  documentLink  String?      @map("document_link")
-  project       String?
-  version       String?
-  environment   String?      @default("on-premise")
-  dbName        String?      @map("db_name")
-  managedBy     String?      @map("managed_by")
-  remark        String?
-  healthUrl     String?      @map("health_url")
-  status        String?      @default("working")
-  
-  lastStatus    String       @default("unknown") @map("last_status")
-  lastCheckedAt DateTime?    @map("last_checked_at")
-  lastLatencyMs Int?         @map("last_latency_ms")
-  downStreak    Int          @default(0) @map("down_streak")
-  notifiedDown  Boolean      @default(false) @map("notified_down")
+  id           Int     @id @default(autoincrement())
+  serviceName  String  @map("service_name")
+  serviceType  String? @map("service_type")
+  serverIp     String? @map("server_ip")
+  port         String?
+  domain       String?
+  username     String?
+  passwordEnc  String? @map("password")
+  documentLink String? @map("document_link")
+  project      String?
+  version      String?
+  environment  String? @default("on-premise")
+  dbName       String? @map("db_name")
+  managedBy    String? @map("managed_by")
+  remark       String?
+  healthUrl    String? @map("health_url")
+  status       String? @default("working")
 
-  tags          ServiceTag[]
+  lastStatus    String    @default("unknown") @map("last_status")
+  lastCheckedAt DateTime? @map("last_checked_at")
+  lastLatencyMs Int?      @map("last_latency_ms")
+  downStreak    Int       @default(0) @map("down_streak")
+  notifiedDown  Boolean   @default(false) @map("notified_down")
 
-  deletedAt     DateTime?    @map("deleted_at")
-  createdAt     DateTime?    @default(now()) @map("created_at")
-  updatedAt     DateTime     @updatedAt @map("updated_at")
+  tags ServiceTag[]
 
-  sslStatuses   SslStatus[]
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime? @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  sslStatuses    SslStatus[]
+  accessRequests AccessRequest[]
 
   @@map("services")
 }
@@ -367,33 +382,34 @@ model ServiceTag {
   tagId     Int
   service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
   @@id([serviceId, tagId])
   @@index([tagId])
 }
 
 // ─── SSL Status ──────────────────────────────────────────────────────────────
 model SslStatus {
-  id          Int       @id @default(autoincrement())
-  domain      String    @unique
-  team        String?
-  project     String?
-  
-  serverId    Int?
-  server      Server?   @relation(fields: [serverId], references: [id], onDelete: SetNull)
-  serviceId   Int?
-  service     Service?  @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  id      Int     @id @default(autoincrement())
+  domain  String  @unique
+  team    String?
+  project String?
 
-  issuer      String?
-  validFrom   DateTime?
-  validTo     DateTime?
+  serverId  Int?
+  server    Server?  @relation(fields: [serverId], references: [id], onDelete: SetNull)
+  serviceId Int?
+  service   Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  issuer        String?
+  validFrom     DateTime?
+  validTo       DateTime?
   daysRemaining Int?
-  
-  status      String    @default("unknown")
-  lastError   String?
+
+  status        String    @default("unknown")
+  lastError     String?
   lastScannedAt DateTime?
 
-  isManual    Boolean   @default(false)
+  isManual Boolean @default(false)
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

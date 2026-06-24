@@ -26,7 +26,7 @@ export const Route = createFileRoute("/_auth/access-requests")({
 
 interface AccessRequest {
   id: number;
-  type: "ssh" | "password_reveal";
+  type: "ssh" | "password_reveal" | "service_password_reveal";
   status: "pending" | "approved" | "rejected";
   note?: string | null;
   adminNote?: string | null;
@@ -34,7 +34,8 @@ interface AccessRequest {
   resolvedAt?: string | null;
   expiresAt?: string | null;
   requester: { id: string; name: string; email: string };
-  server: { id: number; hostname: string; ip: string };
+  server?: { id: number; hostname: string; ip: string } | null;
+  service?: { id: number; serviceName: string } | null;
   resolver?: { id: string; name: string } | null;
 }
 
@@ -137,8 +138,8 @@ function AccessRequestsPage() {
             <div className="space-y-4 mt-2">
               <div className="rounded-lg bg-muted/40 p-3 text-sm space-y-1">
                 <div className="flex gap-2"><span className="text-muted-foreground">User:</span><strong>{resolveTarget.requester.name}</strong></div>
-                <div className="flex gap-2"><span className="text-muted-foreground">Server:</span><strong>{resolveTarget.server.hostname}</strong></div>
-                <div className="flex gap-2"><span className="text-muted-foreground">Type:</span><strong>{resolveTarget.type === "ssh" ? "SSH Terminal" : "Password Reveal"}</strong></div>
+                <div className="flex gap-2"><span className="text-muted-foreground">Target:</span><strong>{resolveTarget.server?.hostname || resolveTarget.service?.serviceName || "Unknown"}</strong></div>
+                <div className="flex gap-2"><span className="text-muted-foreground">Type:</span><strong>{resolveTarget.type === "ssh" ? "SSH Terminal" : resolveTarget.type === "password_reveal" ? "Server Password Reveal" : "Service Password Reveal"}</strong></div>
                 {resolveTarget.note && <div className="flex gap-2"><span className="text-muted-foreground">Note:</span><span>{resolveTarget.note}</span></div>}
               </div>
               {resolveStatus === "approved" && (
@@ -208,9 +209,9 @@ function RequestRow({
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium text-sm">{req.requester.name}</span>
           <span className="text-muted-foreground text-xs">requested</span>
-          <Badge variant="outline" className="text-xs">{req.type === "ssh" ? "SSH Terminal" : "Password Reveal"}</Badge>
+          <Badge variant="outline" className="text-xs">{req.type === "ssh" ? "SSH Terminal" : req.type === "password_reveal" ? "Server Password Reveal" : "Service Password Reveal"}</Badge>
           <span className="text-muted-foreground text-xs">for</span>
-          <span className="font-mono text-xs flex items-center gap-1"><Server className="h-3 w-3" />{req.server.hostname}</span>
+          <span className="font-mono text-xs flex items-center gap-1"><Server className="h-3 w-3" />{req.server?.hostname || req.service?.serviceName || "Unknown"}</span>
         </div>
         {req.note && <p className="text-xs text-muted-foreground mt-0.5 truncate">"{req.note}"</p>}
         {req.adminNote && <p className="text-xs text-muted-foreground mt-0.5 truncate">Admin: "{req.adminNote}"</p>}

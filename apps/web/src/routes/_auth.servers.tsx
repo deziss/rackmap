@@ -33,63 +33,7 @@ export const Route = createFileRoute("/_auth/servers")({
   component: ServersPage,
 });
 
-function RequestAccessButton({ serverId, type, label }: { serverId: number; type: "ssh" | "password_reveal"; label: string }) {
-  const [open, setOpen] = useState(false);
-  const [note, setNote] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      await apiFetch("/api/v1/access-requests", {
-        method: "POST",
-        body: JSON.stringify({ serverId, type, note: note || undefined }),
-      });
-      toast.success("Access request submitted — await admin approval");
-      setOpen(false);
-      setNote("");
-    } catch (err: unknown) {
-      toast.error((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-7 w-7 text-amber-500 hover:text-amber-400"
-            onClick={() => setOpen(true)}
-          >
-            <KeyRound className="h-3.5 w-3.5" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Request {label} access</TooltipContent>
-      </Tooltip>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Request {label} Access</DialogTitle></DialogHeader>
-          <form onSubmit={submit} className="space-y-4 mt-2">
-            <p className="text-sm text-muted-foreground">Your request will be reviewed by an admin. You'll be notified when approved.</p>
-            <div className="space-y-1">
-              <Label>Reason (optional)</Label>
-              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Briefly describe why you need access…" className="h-8 text-sm" />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={loading}>{loading ? "Sending…" : "Submit Request"}</Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
+import { RequestAccessButton } from "@/components/request-access-button";
 
 function DeleteConfirm({ server, onConfirm, isPending }: { server: ServerDto; onConfirm: () => void; isPending: boolean }) {
   const [open, setOpen] = useState(false);
@@ -390,7 +334,7 @@ function ServersPage() {
                   <td className="px-3 py-2.5">
                     {server.hasPassword ? (
                       role === "viewer" && !viewerApproved(server.id, "password_reveal") ? (
-                        <RequestAccessButton serverId={server.id} type="password_reveal" label="Password" />
+                        <RequestAccessButton entityId={server.id} entityType="server" type="password_reveal" label="Password" />
                       ) : (
                         <div className="flex items-center gap-1">
                           <span className="font-mono text-xs">
@@ -548,7 +492,7 @@ function ServersPage() {
                         </Tooltip>
                       )}
                       {!isDeleted && role !== "admin" && !viewerApproved(server.id, "ssh") && (
-                        <RequestAccessButton serverId={server.id} type="ssh" label="SSH Terminal" />
+                        <RequestAccessButton entityId={server.id} entityType="server" type="ssh" label="SSH Terminal" />
                       )}
 
                       {/* Edit + Delete for editor/admin on active servers */}

@@ -8,10 +8,11 @@ import { prisma } from "../../db.js";
 import { notifyAccessRequest } from "../../services/notify.service.js";
 
 const createSchema = z.object({
-  serverId: z.number().int().positive(),
-  type: z.enum(["ssh", "password_reveal"]),
+  serverId: z.number().int().positive().optional(),
+  serviceId: z.number().int().positive().optional(),
+  type: z.enum(["ssh", "password_reveal", "service_password_reveal"]),
   note: z.string().max(500).optional(),
-});
+}).refine(data => data.serverId || data.serviceId, { message: "Must provide serverId or serviceId" });
 
 const resolveSchema = z.object({
   status: z.enum(["approved", "rejected"]),
@@ -42,6 +43,7 @@ export const accessRequestRoutes = new Hono()
       include: {
         requester: { select: { id: true, name: true, email: true } },
         server: { select: { id: true, hostname: true, ip: true } },
+        service: { select: { id: true, serviceName: true } },
         resolver: { select: { id: true, name: true } },
       },
       orderBy: { requestedAt: "desc" },
@@ -62,19 +64,27 @@ export const accessRequestRoutes = new Hono()
   .post("/", zValidator("json", createSchema), async (c) => {
     const user = getUser(c);
     if (!user?.id) throw forbidden();
-    const { serverId, type, note } = c.req.valid("json");
+    const { serverId, serviceId, type, note } = c.req.valid("json");
 
-    const server = await prisma.server.findFirst({ where: { id: serverId, deletedAt: null } });
-    if (!server) throw notFound("Server");
+    let entityName = "Unknown";
+    if (serverId) {
+      const server = await prisma.server.findFirst({ where: { id: serverId, deletedAt: null } });
+      if (!server) throw notFound("Server");
+      entityName = server.hostname;
+    } else if (serviceId) {
+      const service = await prisma.service.findFirst({ where: { id: serviceId, deletedAt: null } });
+      if (!service) throw notFound("Service");
+      entityName = service.serviceName;
+    }
 
-    // Cancel any existing pending request for same user+server+type
+    // Cancel any existing pending request for same user+entity+type
     await prisma.accessRequest.updateMany({
-      where: { requesterId: user.id, serverId, type, status: "pending" },
+      where: { requesterId: user.id, serverId: serverId || undefined, serviceId: serviceId || undefined, type, status: "pending" },
       data: { status: "rejected", adminNote: "Superseded by new request" },
     });
 
     const req = await prisma.accessRequest.create({
-      data: { requesterId: user.id, serverId, type, note },
+      data: { requesterId: user.id, serverId, serviceId, type, note },
     });
 
     await writeAuditDirect({
@@ -83,7 +93,7 @@ export const accessRequestRoutes = new Hono()
       action: "access_request.create",
       entity: "AccessRequest",
       entityId: String(req.id),
-      after: { type, serverId, hostname: server.hostname },
+      after: { type, serverId, serviceId, entityName },
     });
 
     return c.json(req, 201);
@@ -123,18 +133,27 @@ export const accessRequestRoutes = new Hono()
       action: status === "approved" ? "access_request.approved" : "access_request.rejected",
       entity: "AccessRequest",
       entityId: String(id),
-      after: { status, type: existing.type, serverId: existing.serverId, adminNote, expiresAt },
+      after: { status, type: existing.type, serverId: existing.serverId, serviceId: existing.serviceId, adminNote, expiresAt },
     });
 
     // Fire-and-forget notification
     const requester = await prisma.user.findUnique({ where: { id: existing.requesterId }, select: { email: true } });
-    const server = await prisma.server.findUnique({ where: { id: existing.serverId }, select: { hostname: true } });
+    
+    let entityName = "Unknown";
+    if (existing.serverId) {
+      const server = await prisma.server.findUnique({ where: { id: existing.serverId }, select: { hostname: true } });
+      entityName = server?.hostname ?? String(existing.serverId);
+    } else if (existing.serviceId) {
+      const service = await prisma.service.findUnique({ where: { id: existing.serviceId }, select: { serviceName: true } });
+      entityName = service?.serviceName ?? String(existing.serviceId);
+    }
+
     void notifyAccessRequest({
       requestId: id,
       status,
-      type: existing.type as "ssh" | "password_reveal",
+      type: existing.type as "ssh" | "password_reveal" | "service_password_reveal",
       requesterEmail: requester?.email ?? "unknown",
-      hostname: server?.hostname ?? String(existing.serverId),
+      hostname: entityName,
       adminNote,
       expiresAt,
     });
@@ -152,19 +171,21 @@ export const accessRequestRoutes = new Hono()
     return c.json({ ok: true });
   })
 
-  // GET /access-requests/check — viewer checks if they have valid approval for a server+type
+  // GET /access-requests/check — viewer checks if they have valid approval for a server/service+type
   .get("/check", async (c) => {
     const user = getUser(c);
     if (!user?.id) throw forbidden();
     const serverId = Number(c.req.query("serverId"));
-    const type = c.req.query("type") as "ssh" | "password_reveal";
+    const serviceId = Number(c.req.query("serviceId"));
+    const type = c.req.query("type") as "ssh" | "password_reveal" | "service_password_reveal";
 
-    if (!serverId || !type) return c.json({ approved: false });
+    if ((!serverId && !serviceId) || !type) return c.json({ approved: false });
 
     const request = await prisma.accessRequest.findFirst({
       where: {
         requesterId: user.id,
-        serverId,
+        serverId: serverId || undefined,
+        serviceId: serviceId || undefined,
         type,
         status: "approved",
         OR: [
