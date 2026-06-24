@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import type { ServiceDto } from "@inv/shared";
 import { useDebounce } from "@/hooks/use-debounce";
+import { ServiceDetailModal } from "@/components/service-detail-modal";
 import { ServiceFormDialog } from "@/components/service-form-dialog";
 import { ServiceImportWizard } from "@/components/service-import-wizard";
 import { authClient } from "@/lib/auth-client";
@@ -127,6 +128,8 @@ function ServicesPage() {
   const isEditor = userRole === "editor";
   const canModify = isAdmin || isEditor;
   const canReveal = isAdmin || isEditor;
+
+  const [detailServiceId, setDetailServiceId] = useState<number | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -328,9 +331,13 @@ function ServicesPage() {
                       </Tooltip>
                     </td>
                     <td className="px-3 py-2 font-medium whitespace-nowrap">
-                      <a href={`/services/${svc.id}`} className="hover:underline cursor-pointer text-primary">
+                      <button
+                        type="button"
+                        className="text-primary hover:underline cursor-pointer text-left"
+                        onClick={() => setDetailServiceId(svc.id)}
+                      >
                         {svc.serviceName}
-                      </a>
+                      </button>
                       {svc.version && <span className="ml-2 text-xs text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">v{svc.version}</span>}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
@@ -445,6 +452,8 @@ function ServicesPage() {
           </div>
         </div>
       )}
+
+      <ServiceDetailModal serviceId={detailServiceId} onClose={() => setDetailServiceId(null)} />
     </div>
   );
 }
