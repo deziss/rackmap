@@ -7,7 +7,6 @@ import { apiFetch } from "@/lib/api";
 import { StatusDot } from "@/components/status-dot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -15,12 +14,11 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import {
   RefreshCw, Eye, EyeOff, Trash2, RotateCcw, Zap,
-  Download, AlertTriangle, Terminal, KeyRound, Copy, ShieldCheck,
+  Download, AlertTriangle, Terminal, Copy, ShieldCheck,
 } from "lucide-react";
 import type { ServerDto } from "@inv/shared";
 import { useDebounce } from "@/hooks/use-debounce";

@@ -14,9 +14,15 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import {
-  RefreshCw, Eye, EyeOff, Trash2, Zap,
-  Copy, Download
+  RefreshCw,
+  Eye,
+  EyeOff,
+  Copy,
+  Download,
+  Trash2,
+  Zap,
 } from "lucide-react";
+import { apiFetch } from "@/lib/api";
 import type { ServiceDto } from "@inv/shared";
 import { useDebounce } from "@/hooks/use-debounce";
 import { ServiceDetailModal } from "@/components/service-detail-modal";
@@ -151,7 +157,7 @@ function ServicesPage() {
     if (!isViewer || !myRequests) return false;
     const now = Date.now();
     return myRequests.some(
-      (r) =>
+      (r: { serviceId?: number; type: string; status: string; expiresAt: string | null }) =>
         r.serviceId === serviceId &&
         r.type === type &&
         r.status === "approved" &&
