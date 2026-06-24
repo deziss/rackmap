@@ -88,8 +88,9 @@ export function ServiceImportWizard({ onImported }: ServiceImportWizardProps) {
       fd.append("mapping", JSON.stringify(mapping));
       fd.append("dryRun", "true");
       const res = await fetch("/api/v1/services/import", { method: "POST", body: fd });
-      const data = await res.json() as ImportResult;
-      setDryResult(data);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || "Failed to parse import preview");
+      setDryResult(data as ImportResult);
       setStep("preview");
     } catch (e: unknown) {
       toast.error((e as Error).message);
@@ -107,8 +108,11 @@ export function ServiceImportWizard({ onImported }: ServiceImportWizardProps) {
       fd.append("mapping", JSON.stringify(mapping));
       fd.append("dryRun", "false");
       const res = await fetch("/api/v1/services/import", { method: "POST", body: fd });
-      const data = await res.json() as ImportResult;
-      toast.success(`Imported ${data.created} services`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || "Failed to run import");
+      
+      const result = data as ImportResult;
+      toast.success(`Imported ${result.created} services`);
       setStep("done");
       onImported();
     } catch (e: unknown) {

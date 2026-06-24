@@ -7,7 +7,7 @@ import { importServices, exportServices, exportServicesJson } from "./service-im
 const serviceImportRoutes = new Hono();
 
 // POST /services/import — multipart, editor+
-serviceImportRoutes.post("/import", requireSession, requirePermission({ service: ["create"] }), async (c) => {
+serviceImportRoutes.post("/import", requireSession, requirePermission({ server: ["create"] }), async (c) => {
   const formData = await c.req.formData();
   const file = formData.get("file") as File | null;
   const mappingRaw = formData.get("mapping");
