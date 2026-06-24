@@ -20,9 +20,13 @@ export function tcpProbe(host: string, port: number, timeoutMs = 3000): Promise<
 
     socket.setTimeout(timeoutMs);
 
-    socket.connect(port, host, () => {
-      done({ status: "up", latencyMs: Date.now() - start, errorCode: null });
-    });
+    try {
+      socket.connect(port, host, () => {
+        done({ status: "up", latencyMs: Date.now() - start, errorCode: null });
+      });
+    } catch (err: unknown) {
+      done({ status: "down", latencyMs: null, errorCode: "SYNC_ERR" });
+    }
 
     socket.on("timeout", () => {
       done({ status: "down", latencyMs: null, errorCode: "ETIMEDOUT" });

@@ -92,14 +92,14 @@ function PasswordCell({ serviceId, hasPassword, canReveal }: { serviceId: number
   };
 
   return (
-    <div className="flex items-center gap-1.5 min-w-[80px]">
-      <span className="font-mono text-xs w-[60px] inline-block tracking-wider">
+    <div className="flex items-center gap-1 min-w-[80px]">
+      <span className="font-mono text-xs min-w-[60px] max-w-[150px] truncate block tracking-wider" title={revealed ?? "Hidden password"}>
         {revealed ? revealed : "••••••••"}
       </span>
       {canReveal && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button size="icon" variant="ghost" className="h-5 w-5" onClick={toggle} disabled={loading}>
+            <Button size="icon" variant="ghost" className="h-5 w-5 shrink-0" onClick={toggle} disabled={loading}>
               {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : revealed ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
             </Button>
           </TooltipTrigger>
@@ -109,7 +109,7 @@ function PasswordCell({ serviceId, hasPassword, canReveal }: { serviceId: number
       {revealed && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button size="icon" variant="ghost" className="h-5 w-5" onClick={copy}>
+            <Button size="icon" variant="ghost" className="h-5 w-5 shrink-0" onClick={copy}>
               <Copy className="h-3 w-3" />
             </Button>
           </TooltipTrigger>
@@ -262,17 +262,22 @@ function ServicesPage() {
 
       {/* Main Table */}
       <div className="border rounded-lg bg-card text-card-foreground shadow-sm overflow-x-auto relative">
-        <div className="min-w-[1000px]">
+        <div className="min-w-[1600px]">
           <table className="w-full text-sm text-left">
             <thead className="bg-muted/50 border-b">
-              <tr>
+              <tr className="whitespace-nowrap">
                 <th className="px-3 py-2.5 font-medium w-6">Status</th>
                 <th className="px-3 py-2.5 font-medium">Service Name</th>
+                <th className="px-3 py-2.5 font-medium">Project</th>
                 <th className="px-3 py-2.5 font-medium">Type</th>
                 <th className="px-3 py-2.5 font-medium">Endpoint</th>
                 <th className="px-3 py-2.5 font-medium">Auth</th>
                 <th className="px-3 py-2.5 font-medium">Environment</th>
-                <th className="px-3 py-2.5 font-medium text-right">Actions</th>
+                <th className="px-3 py-2.5 font-medium">DB Name</th>
+                <th className="px-3 py-2.5 font-medium">Managed By</th>
+                <th className="px-3 py-2.5 font-medium">Docs / Health</th>
+                <th className="px-3 py-2.5 font-medium max-w-[200px]">Remark</th>
+                <th className="px-3 py-2.5 font-medium text-right sticky right-0 bg-muted/50 z-10">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -281,29 +286,34 @@ function ServicesPage() {
                   <tr key={i}>
                     <td className="px-3 py-3"><Skeleton className="h-3 w-3 rounded-full" /></td>
                     <td className="px-3 py-3"><Skeleton className="h-4 w-32" /></td>
+                    <td className="px-3 py-3"><Skeleton className="h-4 w-20" /></td>
                     <td className="px-3 py-3"><Skeleton className="h-4 w-24" /></td>
                     <td className="px-3 py-3"><Skeleton className="h-4 w-40" /></td>
                     <td className="px-3 py-3"><Skeleton className="h-4 w-24" /></td>
                     <td className="px-3 py-3"><Skeleton className="h-4 w-24" /></td>
+                    <td className="px-3 py-3"><Skeleton className="h-4 w-24" /></td>
+                    <td className="px-3 py-3"><Skeleton className="h-4 w-24" /></td>
+                    <td className="px-3 py-3"><Skeleton className="h-4 w-20" /></td>
+                    <td className="px-3 py-3"><Skeleton className="h-4 w-32" /></td>
                     <td className="px-3 py-3 text-right"><Skeleton className="h-6 w-20 ml-auto" /></td>
                   </tr>
                 ))
               ) : isError ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-destructive">
+                  <td colSpan={12} className="px-4 py-8 text-center text-destructive">
                     Error: {(error as Error).message}
                   </td>
                 </tr>
               ) : data?.items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={12} className="px-4 py-8 text-center text-muted-foreground">
                     No services found matching the criteria.
                   </td>
                 </tr>
               ) : (
                 data?.items.map((svc: ServiceDto) => (
                   <tr key={svc.id} className="hover:bg-muted/30 transition-colors group">
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <div className="flex items-center justify-center w-6 cursor-help">
@@ -317,33 +327,53 @@ function ServicesPage() {
                         </TooltipContent>
                       </Tooltip>
                     </td>
-                    <td className="px-3 py-2 font-medium">
-                      {svc.serviceName}
+                    <td className="px-3 py-2 font-medium whitespace-nowrap">
+                      <a href={`/services/${svc.id}`} className="hover:underline cursor-pointer text-primary">
+                        {svc.serviceName}
+                      </a>
                       {svc.version && <span className="ml-2 text-xs text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">v{svc.version}</span>}
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                      {svc.project || "—"}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
                       {svc.serviceType || "—"}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <div className="flex flex-col">
                         <span className="font-mono text-xs">{svc.serverIp || "—"}{svc.port ? `:${svc.port}` : ""}</span>
                         {svc.domain && <span className="text-xs text-muted-foreground">{svc.domain}</span>}
                       </div>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <div className="flex flex-col text-xs gap-1">
                         <span className="font-mono text-muted-foreground">{svc.username || "—"}</span>
                         <PasswordCell serviceId={svc.id} hasPassword={svc.hasPassword} canReveal={canReveal} />
                       </div>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       {svc.environment ? (
                         <span className="text-xs px-1.5 py-0.5 bg-secondary text-secondary-foreground rounded border">
                           {svc.environment}
                         </span>
                       ) : "—"}
                     </td>
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                      {svc.dbName || "—"}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                      {svc.managedBy || "—"}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <div className="flex gap-2 text-xs">
+                        {svc.documentLink ? <a href={svc.documentLink} target="_blank" rel="noreferrer" className="text-primary hover:underline">Docs</a> : <span className="text-muted-foreground/50">—</span>}
+                        {svc.healthUrl ? <a href={svc.healthUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">Health</a> : ""}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground max-w-[200px] truncate" title={svc.remark || ""}>
+                      {svc.remark || "—"}
+                    </td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap sticky right-0 bg-card group-hover:bg-muted/30 transition-colors z-10 border-l">
                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Tooltip>
                           <TooltipTrigger asChild>

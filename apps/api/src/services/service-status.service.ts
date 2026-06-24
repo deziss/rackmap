@@ -23,8 +23,14 @@ export async function runServiceCheck(serviceId: number) {
     result = await httpProbe(service.healthUrl, env.PING_TIMEOUT_MS);
   } else if (service.serverIp && service.port) {
     const portNum = parseInt(service.port, 10);
-    if (!isNaN(portNum)) {
-      result = await tcpProbe(service.serverIp, portNum, env.PING_TIMEOUT_MS);
+    if (!isNaN(portNum) && portNum > 0 && portNum <= 65535) {
+      try {
+        result = await tcpProbe(service.serverIp, portNum, env.PING_TIMEOUT_MS);
+      } catch (err: unknown) {
+        result = { status: "down", latencyMs: null, errorCode: "SYNC_CONNECT_ERROR" };
+      }
+    } else {
+      result = { status: "down", latencyMs: null, errorCode: "INVALID_PORT" };
     }
   }
 
