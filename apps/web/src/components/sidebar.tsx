@@ -91,7 +91,7 @@ export function Sidebar({ user }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar/90 backdrop-blur-xl transition-all duration-200",
+        "print:hidden flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar/90 backdrop-blur-xl transition-all duration-200",
         w,
       )}
     >

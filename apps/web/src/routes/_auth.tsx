@@ -17,9 +17,9 @@ export const Route = createFileRoute("/_auth")({
 function AuthLayout() {
   const { session } = Route.useRouteContext();
   return (
-    <div className="mesh-bg flex h-screen overflow-hidden bg-background text-foreground">
+    <div className="mesh-bg flex h-screen overflow-hidden print:h-auto print:overflow-visible print:block bg-background text-foreground">
       <Sidebar user={session.user} />
-      <main className="flex-1 overflow-y-auto p-6">
+      <main className="flex-1 overflow-y-auto p-6 print:overflow-visible print:p-0">
         <Outlet />
       </main>
       <CommandPalette userRole={session.user.role ?? "viewer"} />

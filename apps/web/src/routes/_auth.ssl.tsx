@@ -82,7 +82,7 @@ function SslPage() {
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-white/10 px-6 py-4 bg-card/40 backdrop-blur-sm">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+          <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" /> SSL Status
           </h1>
           <p className="text-sm text-muted-foreground mt-1">

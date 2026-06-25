@@ -60,7 +60,21 @@ export async function listServices(query: ServiceListQuery, isAdmin: boolean) {
     ...(cursor && !sortBy ? { id: { lt: cursor } } : {}),
   };
 
-  const orderBy = sortBy ? { [sortBy]: sortDir || "asc" } : { id: "desc" };
+  let finalOrderBy: any = { id: "desc" };
+  if (sortBy) {
+    switch (sortBy) {
+      case "tags":
+        finalOrderBy = { id: sortDir || "desc" }; // Fallback since relation sort is unsupported natively
+        break;
+      case "password":
+        finalOrderBy = { passwordEnc: sortDir || "asc" };
+        break;
+      default:
+        finalOrderBy = { [sortBy]: sortDir || "asc" };
+    }
+  }
+
+  const orderBy = finalOrderBy;
   const skip = sortBy ? (cursor || 0) : undefined;
 
   const [items, total] = await Promise.all([

@@ -61,6 +61,9 @@ export async function listServers(query: ServerListQuery, isAdmin: boolean) {
         { ip: { contains: q } },
         { username: { contains: q } },
         { remark: { contains: q } },
+        { networkType: { name: { contains: q } } },
+        { allocatedTo: { name: { contains: q } } },
+        { location: { name: { contains: q } } },
       ],
     } : {}),
     ...(cloudProviderId ? { cloudProviderId } : {}),
@@ -73,7 +76,36 @@ export async function listServers(query: ServerListQuery, isAdmin: boolean) {
     ...(cursor && !sortBy ? { id: { lt: cursor } } : {}),
   };
 
-  const orderBy = sortBy ? { [sortBy]: sortDir || "asc" } : { id: "desc" };
+  let finalOrderBy: any = { id: "desc" };
+  if (sortBy) {
+    switch (sortBy) {
+      case "gpu":
+        finalOrderBy = { gpuCount: sortDir || "asc" };
+        break;
+      case "tags":
+        finalOrderBy = { id: sortDir || "desc" }; // Fallback since many-to-many sort is unsupported natively
+        break;
+      case "port":
+        finalOrderBy = { sshPort: sortDir || "asc" };
+        break;
+      case "password":
+        finalOrderBy = { passwordEnc: sortDir || "asc" }; // Non-null sorted first/last
+        break;
+      case "project":
+        finalOrderBy = { allocatedTo: { name: sortDir || "asc" } };
+        break;
+      case "network":
+        finalOrderBy = { networkType: { name: sortDir || "asc" } };
+        break;
+      case "location":
+        finalOrderBy = { location: { name: sortDir || "asc" } };
+        break;
+      default:
+        finalOrderBy = { [sortBy]: sortDir || "asc" };
+    }
+  }
+
+  const orderBy = finalOrderBy;
   const skip = sortBy ? (cursor || 0) : undefined;
 
   const [items, total] = await Promise.all([

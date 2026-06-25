@@ -255,55 +255,58 @@ function ServicesPage() {
 
   return (
     <div className="space-y-4">
-      {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Services Inventory</h1>
-        <div className="flex items-center gap-2">
-          {canModify && (
+      {/* Sticky Header & Toolbar */}
+      <div className="sticky top-[-24px] z-30 -mx-6 px-6 pt-[24px] pb-4 bg-background/95 backdrop-blur-md border-b border-white/10 flex flex-col gap-4">
+        {/* Header Bar */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Services Inventory</h1>
+          <div className="flex items-center gap-2">
+            {canModify && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2"
+                onClick={() => checkAllMut.mutate()}
+                disabled={checkAllMut.isPending}
+              >
+                <RefreshCw className={`h-4 w-4 ${checkAllMut.isPending ? "animate-spin" : ""}`} />
+                Check All Health
+              </Button>
+            )}
             <Button
               size="sm"
               variant="outline"
-              className="gap-2"
-              onClick={() => checkAllMut.mutate()}
-              disabled={checkAllMut.isPending}
+              className="gap-1.5"
+              onClick={() => triggerDownload("xlsx", debouncedSearch)}
             >
-              <RefreshCw className={`h-4 w-4 ${checkAllMut.isPending ? "animate-spin" : ""}`} />
-              Check All Health
+              <Download className="h-3.5 w-3.5" /> XLSX
             </Button>
-          )}
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5"
-            onClick={() => triggerDownload("xlsx", debouncedSearch)}
-          >
-            <Download className="h-3.5 w-3.5" /> XLSX
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5"
-            onClick={() => triggerDownload("json", debouncedSearch)}
-          >
-            <Download className="h-3.5 w-3.5" /> JSON
-          </Button>
-          {canModify && <ServiceImportWizard onImported={() => queryClient.invalidateQueries({ queryKey: serviceKeys.all })} />}
-          {canModify && <ServiceFormDialog onSaved={() => queryClient.invalidateQueries({ queryKey: serviceKeys.all })} />}
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => triggerDownload("json", debouncedSearch)}
+            >
+              <Download className="h-3.5 w-3.5" /> JSON
+            </Button>
+            {canModify && <ServiceImportWizard onImported={() => queryClient.invalidateQueries({ queryKey: serviceKeys.all })} />}
+            {canModify && <ServiceFormDialog onSaved={() => queryClient.invalidateQueries({ queryKey: serviceKeys.all })} />}
+          </div>
         </div>
-      </div>
 
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 p-1">
-        <div className="relative max-w-sm w-full flex-1">
-          <Input
-            placeholder="Search services, IPs, domains..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-8 pl-8 text-sm"
-          />
-          <svg className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
+        {/* Toolbar */}
+        <div className="flex items-center gap-2 p-1">
+          <div className="relative max-w-sm w-full flex-1">
+            <Input
+              placeholder="Search services, IPs, domains..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-8 pl-8 text-sm"
+            />
+            <svg className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
         </div>
       </div>
 

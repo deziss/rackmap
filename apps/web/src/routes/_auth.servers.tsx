@@ -191,7 +191,7 @@ function ServersPage() {
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="flex items-center gap-2.5 flex-wrap">
+      <div className="sticky top-[-24px] z-30 -mx-6 px-6 pt-[24px] pb-4 bg-background/95 backdrop-blur-md border-b border-white/10 flex items-center gap-2.5 flex-wrap">
         <h1 className="text-xl font-semibold mr-auto tracking-tight">Servers</h1>
         <Input
           placeholder="Search hostname, IP, user…"
@@ -262,6 +262,9 @@ function ServersPage() {
                 { key: "username", label: "User" },
                 { key: "password", label: "Password" },
                 { key: "gpu", label: "GPU" },
+                { key: "project", label: "Project" },
+                { key: "network", label: "Network" },
+                { key: "location", label: "Location" },
                 { key: "tags", label: "Tags" },
                 { key: "updatedByEmail", label: "Last Updated By" },
               ].map(col => (
@@ -294,7 +297,7 @@ function ServersPage() {
             {isLoading && (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b border-white/5">
-                  {Array.from({ length: 11 }).map((__, j) => (
+                  {Array.from({ length: 14 }).map((__, j) => (
                     <td key={j} className="px-3 py-3">
                       <Skeleton className="h-4 w-full" />
                     </td>
@@ -304,7 +307,7 @@ function ServersPage() {
             )}
             {!isLoading && data?.items.length === 0 && (
               <tr>
-                <td colSpan={11} className="px-3 py-12 text-center text-muted-foreground text-sm">
+                <td colSpan={14} className="px-3 py-12 text-center text-muted-foreground text-sm">
                   No servers found
                 </td>
               </tr>
@@ -383,6 +386,15 @@ function ServersPage() {
                     {server.gpuCount != null && server.gpuType
                       ? `${server.gpuCount}× ${server.gpuType.name}`
                       : (server.gpuType?.name ?? "—")}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                    {server.allocatedTo?.name ?? "—"}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                    {server.networkType?.name ?? "—"}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                    {server.location?.name ?? "—"}
                   </td>
                   <td className="px-3 py-2.5">
                     <div className="flex gap-1 flex-wrap">

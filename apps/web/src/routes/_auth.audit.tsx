@@ -31,14 +31,14 @@ interface AuditResponse {
 }
 
 const ACTION_COLORS: Record<string, string> = {
-  "server.create": "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-  "server.update": "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  "server.delete": "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  "server.restore": "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
-  "server.password_reveal": "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
-  "auth.sign_in": "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
-  "auth.sign_in_failed": "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-  "auth.sign_out": "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300",
+  "server.create": "bg-green-500/15 text-green-700 dark:text-green-400 border border-green-500/30",
+  "server.update": "bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/30",
+  "server.delete": "bg-red-500/15 text-red-700 dark:text-red-400 border border-red-500/30",
+  "server.restore": "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border border-yellow-500/30",
+  "server.password_reveal": "bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-500/30",
+  "auth.sign_in": "bg-purple-500/15 text-purple-700 dark:text-purple-400 border border-purple-500/30",
+  "auth.sign_in_failed": "bg-red-500/15 text-red-700 dark:text-red-400 border border-red-500/30",
+  "auth.sign_out": "bg-slate-500/15 text-slate-700 dark:text-slate-400 border border-slate-500/30",
 };
 
 function formatDate(ts: string) {
@@ -156,29 +156,40 @@ function AuditPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3 flex-wrap">
-        <h1 className="text-xl font-semibold mr-auto">Audit Log</h1>
-        <Input
-          placeholder="Search IP, name, domain..."
-          className="w-48 h-8 text-sm"
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); reset(); }}
-        />
-        <Input
-          placeholder="Category (data/auth/notification)"
-          className="w-56 h-8 text-sm"
-          value={category}
-          onChange={(e) => { setCategory(e.target.value); reset(); }}
-        />
-        <Input
-          placeholder="Action filter…"
-          className="w-48 h-8 text-sm"
-          value={action}
-          onChange={(e) => { setAction(e.target.value); reset(); }}
-        />
-        <Button size="sm" variant="outline" onClick={() => { reset(); refetch(); }}>
-          <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-        </Button>
+      {/* Sticky Header & Toolbar */}
+      <div className="sticky top-[-24px] z-30 -mx-6 px-6 pt-[24px] pb-4 bg-background/95 backdrop-blur-md border-b border-white/10 flex flex-col gap-4">
+        {/* Header Bar */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Audit Log</h1>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => { reset(); refetch(); }} className="gap-2">
+              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
+        </div>
+
+        {/* Toolbar */}
+        <div className="flex items-center gap-3 flex-wrap p-1">
+          <Input
+            placeholder="Search IP, name, domain..."
+            className="w-48 h-8 text-sm"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); reset(); }}
+          />
+          <Input
+            placeholder="Category (data/auth/notification)"
+            className="w-56 h-8 text-sm"
+            value={category}
+            onChange={(e) => { setCategory(e.target.value); reset(); }}
+          />
+          <Input
+            placeholder="Action filter…"
+            className="w-48 h-8 text-sm"
+            value={action}
+            onChange={(e) => { setAction(e.target.value); reset(); }}
+          />
+        </div>
       </div>
 
       <div className="rounded-md border">

@@ -65,6 +65,28 @@ export const auditRoutes = new Hono()
       prisma.auditLog.count({ where: baseWhere }),
     ]);
 
+    const serverIds = [...new Set(items.filter(i => i.entity === "server").map(i => parseInt(i.entityId || "")).filter(id => !isNaN(id)))];
+    const serviceIds = [...new Set(items.filter(i => i.entity === "service").map(i => parseInt(i.entityId || "")).filter(id => !isNaN(id)))];
+    const userIds = [...new Set(items.filter(i => i.entity?.toLowerCase() === "user").map(i => i.entityId!).filter(Boolean))];
+
+    const [servers, services, users] = await Promise.all([
+      serverIds.length ? prisma.server.findMany({ where: { id: { in: serverIds } }, select: { id: true, ip: true, domain: true, hostname: true } }) : [],
+      serviceIds.length ? prisma.service.findMany({ where: { id: { in: serviceIds } }, select: { id: true, serviceName: true, serverIp: true, domain: true } }) : [],
+      userIds.length ? prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true, email: true } }) : []
+    ]);
+
+    const serverMap = Object.fromEntries(servers.map(s => [String(s.id), [s.hostname, s.domain, s.ip].filter(Boolean).join(" | ")]));
+    const serviceMap = Object.fromEntries(services.map(s => [String(s.id), [s.serviceName, s.domain, s.serverIp].filter(Boolean).join(" | ")]));
+    const userMap = Object.fromEntries(users.map(u => [u.id, [u.name, u.email].filter(Boolean).join(" | ")]));
+
+    const enrichedItems = items.map(item => {
+      let entityName = undefined;
+      if (item.entity === "server" && item.entityId) entityName = serverMap[item.entityId];
+      if (item.entity === "service" && item.entityId) entityName = serviceMap[item.entityId];
+      if (item.entity?.toLowerCase() === "user" && item.entityId) entityName = userMap[item.entityId];
+      return { ...item, entityName };
+    });
+
     const nextCursor = items.length === limit ? (items[items.length - 1]?.id ?? null) : null;
-    return c.json({ items, nextCursor, total });
+    return c.json({ items: enrichedItems, nextCursor, total });
   });

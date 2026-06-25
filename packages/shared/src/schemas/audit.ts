@@ -19,6 +19,7 @@ export const AuditEntryDto = z.object({
   action: z.string(),
   entity: z.string().nullable(),
   entityId: z.string().nullable(),
+  entityName: z.string().optional(),
   actorId: z.string().nullable(),
   actorEmail: z.string().nullable(),
   before: z.record(z.string(), z.unknown()).nullable(),

@@ -149,6 +149,27 @@ function DashboardPage() {
   const expiringSsls = ssls.filter((s: any) => s.daysRemaining !== null && s.daysRemaining <= 30);
   const totalSsls = ssls.length;
 
+  const freeServers = servers.filter((s) => {
+    const isUnassigned = !s.allocatedTo?.name || s.allocatedTo.name.toLowerCase() === "unassigned";
+    const hasFreeTag = s.tags?.some((t) => ["free", "unassigned"].includes(t.name.toLowerCase()));
+    return isUnassigned || hasFreeTag;
+  }).length;
+
+  const projectCounts = servers.reduce((acc, s) => {
+    const p = s.allocatedTo?.name ?? "Unassigned";
+    acc[p] = (acc[p] ?? 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  const projectData = Object.entries(projectCounts).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }));
+
+  const networkCounts = servers.reduce((acc, s) => {
+    const n = s.networkType?.name ?? "Unknown";
+    acc[n] = (acc[n] ?? 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  const networkData = Object.entries(networkCounts).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count, color: "oklch(0.65 0.26 275)" }));
+
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -158,11 +179,12 @@ function DashboardPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard label="Servers"  value={`${online}/${total}`}      icon={Server}  color="bg-linear-to-br from-primary/20 to-primary/5"        delay={50} sub={`${offline} offline`} />
         <StatCard label="Services"         value={`${onlineServices}/${services.length}`}     icon={Activity}    color="bg-linear-to-br from-blue-500/25 to-blue-500/5"  delay={100} sub={`${offlineServices} offline`} />
-        <StatCard label="Avg Latency"        value={avgLatency != null ? `${avgLatency}ms` : "—"}    icon={Zap} color="bg-linear-to-br from-emerald-500/25 to-emerald-500/5"          delay={150} sub={uptimePct > 0 ? `${uptimePct}% uptime` : "Fleet health"} />
-        <StatCard label="SSL Warnings"          value={expiringSsls.length} icon={ShieldAlert}   color="bg-linear-to-br from-red-400/20 to-red-400/5"        delay={200} sub={`Out of ${totalSsls} tracked certs`} />
+        <StatCard label="Free Servers"   value={freeServers}   icon={CheckCircle2}   color="bg-linear-to-br from-green-500/25 to-green-500/5"        delay={150} sub={`Ready for allocation`} />
+        <StatCard label="Avg Latency"        value={avgLatency != null ? `${avgLatency}ms` : "—"}    icon={Zap} color="bg-linear-to-br from-emerald-500/25 to-emerald-500/5"          delay={200} sub={uptimePct > 0 ? `${uptimePct}% uptime` : "Fleet health"} />
+        <StatCard label="SSL Warnings"          value={expiringSsls.length} icon={ShieldAlert}   color="bg-linear-to-br from-red-400/20 to-red-400/5"        delay={250} sub={`Out of ${totalSsls} tracked certs`} />
       </div>
 
       {/* Charts */}
@@ -218,6 +240,64 @@ function DashboardPage() {
             </ResponsiveContainer>
           ) : (
             <div className="flex items-center justify-center h-36 text-sm text-muted-foreground">No cloud servers</div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="col-span-1 md:col-span-2 rounded-xl border border-white/10 bg-card/60 backdrop-blur-xl shadow-xl p-5 animate-fade-up" style={{ animationDelay: "320ms" }}>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">Project Allocation</p>
+          {projectData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={165}>
+              <BarChart data={projectData.slice(0, 8)} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="oklch(1 0 0 / 0.06)" />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }} tickLine={false} axisLine={false} />
+                <ReTooltip 
+                  contentStyle={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: "10px", fontSize: 12, color: "var(--color-foreground)" }} 
+                  itemStyle={{ color: "var(--color-foreground)" }}
+                  cursor={{ fill: "oklch(var(--color-muted) / 0.5)" }}
+                />
+                <Bar dataKey="count" fill="oklch(0.55 0.22 250)" radius={[6, 6, 0, 0]} maxBarSize={52} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-36 text-sm text-muted-foreground">No projects assigned</div>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-card/60 backdrop-blur-xl shadow-xl p-5 animate-fade-up" style={{ animationDelay: "340ms" }}>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">Network Distribution</p>
+          {networkData.length > 0 ? (
+            <div className="flex flex-col items-center">
+              <ResponsiveContainer width="100%" height={140}>
+                <PieChart>
+                  <Pie data={networkData} cx="50%" cy="50%" innerRadius={42} outerRadius={60} paddingAngle={4} dataKey="count">
+                    {networkData.map((_, i) => (
+                      <Cell key={i} fill={`oklch(0.${65 - (i * 10)} 0.20 ${200 + (i * 30)})`} stroke="transparent" />
+                    ))}
+                  </Pie>
+                  <ReTooltip
+                    contentStyle={{ background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: "10px", fontSize: 12, color: "var(--color-foreground)" }}
+                    itemStyle={{ color: "var(--color-foreground)" }}
+                    formatter={(v) => [`${v} servers`]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="flex flex-col gap-1.5 w-full mt-1">
+                {networkData.slice(0, 3).map((n, i) => (
+                  <div key={n.name} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full shrink-0" style={{ background: `oklch(0.${65 - (i * 10)} 0.20 ${200 + (i * 30)})` }} />
+                      <span className="text-muted-foreground truncate max-w-[120px]">{n.name}</span>
+                    </div>
+                    <span className="font-semibold">{n.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-36 text-sm text-muted-foreground">No network data</div>
           )}
         </div>
       </div>
