@@ -77,15 +77,17 @@ export async function scanAllDomains(triggerEmail: boolean = false) {
           isManual: false,
         }
       });
-    } else if (!existing.serverId && links.serverId) {
-      await prisma.sslStatus.update({ where: { id: existing.id }, data: { serverId: links.serverId } });
-    } else if (!existing.serviceId && links.serviceId) {
-      await prisma.sslStatus.update({ where: { id: existing.id }, data: { serviceId: links.serviceId } });
+    } else if (!existing.deletedAt) {
+      if (!existing.serverId && links.serverId) {
+        await prisma.sslStatus.update({ where: { id: existing.id }, data: { serverId: links.serverId } });
+      } else if (!existing.serviceId && links.serviceId) {
+        await prisma.sslStatus.update({ where: { id: existing.id }, data: { serviceId: links.serviceId } });
+      }
     }
   }
 
-  // Scan all domains in SslStatus
-  const allStatuses = await prisma.sslStatus.findMany();
+  // Scan all active domains in SslStatus
+  const allStatuses = await prisma.sslStatus.findMany({ where: { deletedAt: null } });
   const expiringSoon: any[] = [];
   const expiredList: any[] = [];
 

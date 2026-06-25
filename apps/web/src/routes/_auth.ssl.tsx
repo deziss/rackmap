@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SslFormDialog } from "@/components/ssl-form-dialog";
 import { toast } from "sonner";
-import { RefreshCw, Trash2, Shield, AlertTriangle } from "lucide-react";
+import { RefreshCw, Trash2, Shield, AlertTriangle, RotateCcw } from "lucide-react";
 import type { SslStatusDto } from "@inv/shared";
+import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/_auth/ssl")({
   component: SslPage,
@@ -16,12 +17,30 @@ export const Route = createFileRoute("/_auth/ssl")({
 
 function SslPage() {
   const qc = useQueryClient();
-  const [q] = useState("");
-  
+  const { data: session } = authClient.useSession();
+  const role = (session?.user as { role?: string })?.role ?? "viewer";
+  const isAdmin = role === "admin";
+
+  const [includeDeleted, setIncludeDeleted] = useState(false);
+  const [sortBy, setSortBy] = useState<string>("id");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [cursorHistory, setCursorHistory] = useState<number[]>([]);
+  const currentCursor = cursorHistory.length > 0 ? cursorHistory[cursorHistory.length - 1] : undefined;
+
   const { data, isLoading } = useQuery({
-    queryKey: sslKeys.list({ q }),
-    queryFn: () => fetchSslList({ q }),
+    queryKey: sslKeys.list({ cursor: currentCursor, limit: 50, sortBy, sortDir, includeDeleted }),
+    queryFn: () => fetchSslList({ cursor: currentCursor, limit: 50, sortBy, sortDir, includeDeleted }),
   });
+
+  const handleSort = (key: string) => {
+    if (sortBy === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(key);
+      setSortDir("asc");
+    }
+    setCursorHistory([]);
+  };
 
   const scanAllMutation = useMutation({
     mutationFn: scanAllSsl,
@@ -50,6 +69,15 @@ function SslPage() {
     onError: (e: Error) => toast.error(`Delete failed: ${e.message}`)
   });
 
+  const restoreMutation = useMutation({
+    mutationFn: (id: number) => fetch(`/api/v1/ssl/${id}/restore`, { method: "POST", credentials: "include" }).then(r => r.json()),
+    onSuccess: () => {
+      toast.success("Domain restored");
+      qc.invalidateQueries({ queryKey: sslKeys.all });
+    },
+    onError: (e: Error) => toast.error(`Restore failed: ${e.message}`)
+  });
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-white/10 px-6 py-4 bg-card/40 backdrop-blur-sm">
@@ -62,6 +90,20 @@ function SslPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {isAdmin && (
+            <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={includeDeleted}
+                onChange={(e) => {
+                  setIncludeDeleted(e.target.checked);
+                  setCursorHistory([]);
+                }}
+                className="accent-primary"
+              />
+              Show deleted
+            </label>
+          )}
           {scanAllMutation.isPending ? (
             <Button size="sm" variant="outline" disabled className="gap-2 text-muted-foreground border-amber-500/50 bg-amber-500/10">
               <RefreshCw className="h-4 w-4 animate-spin text-amber-500" />
@@ -83,13 +125,28 @@ function SslPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/8 bg-white/3">
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Domain</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Valid To</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Days Left</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Issuer</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Team / Project</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Linked To</th>
+                {[
+                  { key: "domain", label: "Domain" },
+                  { key: "status", label: "Status" },
+                  { key: "validTo", label: "Valid To" },
+                  { key: "daysRemaining", label: "Days Left" },
+                  { key: "issuer", label: "Issuer" },
+                  { key: "project", label: "Team / Project" },
+                  { key: "serverId", label: "Linked To" },
+                ].map(col => (
+                  <th
+                    key={col.key}
+                    className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-white/5 transition-colors"
+                    onClick={() => handleSort(col.key)}
+                  >
+                    <div className="flex items-center gap-1">
+                      {col.label}
+                      {sortBy === col.key && (
+                        <span className="text-[10px]">{sortDir === "asc" ? "▲" : "▼"}</span>
+                      )}
+                    </div>
+                  </th>
+                ))}
                 <th className="px-3 py-2.5 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
@@ -110,8 +167,10 @@ function SslPage() {
                   </td>
                 </tr>
               )}
-              {data?.items.map((ssl: SslStatusDto) => (
-                <tr key={ssl.id} className="border-b border-white/5 last:border-0 hover:bg-white/4">
+              {data?.items.map((ssl: SslStatusDto) => {
+                const isDeleted = !!(ssl as any).deletedAt;
+                return (
+                <tr key={ssl.id} className={`border-b border-white/5 last:border-0 hover:bg-white/4 ${isDeleted ? "opacity-50" : ""}`}>
                   <td className="px-3 py-3 font-mono font-medium">
                     {ssl.domain}
                     {ssl.isManual && <span className="ml-2 text-[10px] text-muted-foreground">(Manual)</span>}
@@ -141,19 +200,54 @@ function SslPage() {
                   </td>
                   <td className="px-3 py-3 text-right">
                     <div className="flex justify-end gap-1">
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => scanSingleMutation.mutate(ssl.id)} disabled={scanSingleMutation.isPending}>
-                        <RefreshCw className="h-3.5 w-3.5" />
-                      </Button>
-                      <SslFormDialog ssl={ssl} onSaved={() => qc.invalidateQueries({ queryKey: sslKeys.all })} />
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => { if(confirm("Remove domain?")) deleteMutation.mutate(ssl.id); }}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      {isDeleted ? (
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-primary hover:text-primary hover:bg-primary/10" onClick={() => { if(confirm("Restore domain?")) restoreMutation.mutate(ssl.id); }}>
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        </Button>
+                      ) : (
+                        <>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => scanSingleMutation.mutate(ssl.id)} disabled={scanSingleMutation.isPending}>
+                            <RefreshCw className="h-3.5 w-3.5" />
+                          </Button>
+                          <SslFormDialog ssl={ssl} onSaved={() => qc.invalidateQueries({ queryKey: sslKeys.all })} />
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => { if(confirm("Remove domain?")) deleteMutation.mutate(ssl.id); }}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
+        </div>
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-sm text-muted-foreground">
+            {data?.items.length ? `Showing ${data.items.length} domains` : "No domains"}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={cursorHistory.length === 0}
+              onClick={() => setCursorHistory((prev) => prev.slice(0, -1))}
+            >
+              Previous
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!data?.nextCursor}
+              onClick={() => {
+                if (data?.nextCursor) {
+                  setCursorHistory((prev) => [...prev, data.nextCursor!]);
+                }
+              }}
+            >
+              Next
+            </Button>
+          </div>
         </div>
       </div>
     </div>

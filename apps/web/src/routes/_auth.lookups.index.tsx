@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { useState } from "react";
-import { Pencil, Trash2, Plus, Check, X, AlertTriangle, Cloud, Cpu, User, MapPin, Server } from "lucide-react";
+import { Pencil, Trash2, Plus, Check, X, AlertTriangle, Cloud, Cpu, User, MapPin, Server, Network } from "lucide-react";
 
 export const Route = createFileRoute("/_auth/lookups/")({
   component: LookupsPage,
@@ -26,6 +26,7 @@ const TYPE_ICONS: Record<LookupType, React.ElementType> = {
   "allocated-to": User,
   "locations": MapPin,
   "server-types": Server,
+  "network-types": Network,
 };
 
 function LookupTable({ type }: { type: LookupType }) {

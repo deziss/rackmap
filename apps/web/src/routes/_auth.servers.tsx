@@ -85,13 +85,15 @@ function ServersPage() {
 
   const [q, setQ] = useState("");
   const [cursor, setCursor] = useState<number | undefined>();
+  const [sortBy, setSortBy] = useState<string>("id");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [cursorHistory, setCursorHistory] = useState<number[]>([]);
   const [includeDeleted, setIncludeDeleted] = useState(false);
   const [detailServerId, setDetailServerId] = useState<number | null>(null);
   const [revealedPasswords, setRevealedPasswords] = useState<Record<number, string | null>>({});
   const debouncedQ = useDebounce(q, 300);
 
-  const params = { q: debouncedQ || undefined, limit: 50, cursor, includeDeleted: includeDeleted || undefined };
+  const params = { q: debouncedQ || undefined, limit: 50, cursor, sortBy, sortDir, includeDeleted: includeDeleted || undefined };
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: serverKeys.list(params),
@@ -251,16 +253,40 @@ function ServersPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-white/8 bg-white/3">
-              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider w-10">#</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Hostname</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">IP</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Port</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">User</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Password</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">GPU</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tags</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Last Updated By</th>
+              {[
+                { key: "id", label: "#" },
+                { key: "hostname", label: "Hostname" },
+                { key: "ip", label: "IP" },
+                { key: "port", label: "Port" },
+                { key: "lastStatus", label: "Status" },
+                { key: "username", label: "User" },
+                { key: "password", label: "Password" },
+                { key: "gpu", label: "GPU" },
+                { key: "tags", label: "Tags" },
+                { key: "updatedByEmail", label: "Last Updated By" },
+              ].map(col => (
+                <th
+                  key={col.key}
+                  className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-white/5 transition-colors"
+                  onClick={() => {
+                    if (sortBy === col.key) {
+                      setSortDir(sortDir === "asc" ? "desc" : "asc");
+                    } else {
+                      setSortBy(col.key);
+                      setSortDir("asc");
+                    }
+                    setCursor(undefined);
+                    setCursorHistory([]);
+                  }}
+                >
+                  <div className="flex items-center gap-1">
+                    {col.label}
+                    {sortBy === col.key && (
+                      <span className="text-[10px]">{sortDir === "asc" ? "▲" : "▼"}</span>
+                    )}
+                  </div>
+                </th>
+              ))}
               <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
             </tr>
           </thead>

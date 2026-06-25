@@ -23,6 +23,7 @@ export const serverSelect = {
   allocatedTo: { select: { id: true, name: true } },
   location: { select: { id: true, name: true } },
   serverType: { select: { id: true, name: true } },
+  networkType: { select: { id: true, name: true } },
   tags: { select: { tag: { select: { id: true, name: true, color: true } } } },
   lastStatus: true,
   lastCheckedAt: true,
@@ -48,7 +49,7 @@ function toDto(raw: { passwordEnc: string | null; tags: { tag: { id: number; nam
 }
 
 export async function listServers(query: ServerListQuery, isAdmin: boolean) {
-  const { cursor, limit = 50, q, cloudProviderId, gpuTypeId, allocatedToId, locationId, serverTypeId, tagId, status, includeDeleted } = query;
+  const { cursor, limit = 50, sortBy, sortDir, q, cloudProviderId, gpuTypeId, allocatedToId, locationId, serverTypeId, tagId, status, includeDeleted } = query;
 
   const showDeleted = isAdmin && includeDeleted;
 
@@ -69,21 +70,25 @@ export async function listServers(query: ServerListQuery, isAdmin: boolean) {
     ...(serverTypeId ? { serverTypeId } : {}),
     ...(tagId ? { tags: { some: { tagId } } } : {}),
     ...(status ? { lastStatus: status } : {}),
-    ...(cursor ? { id: { lt: cursor } } : {}),
+    ...(cursor && !sortBy ? { id: { lt: cursor } } : {}),
   };
+
+  const orderBy = sortBy ? { [sortBy]: sortDir || "asc" } : { id: "desc" };
+  const skip = sortBy ? (cursor || 0) : undefined;
 
   const [items, total] = await Promise.all([
     prisma.server.findMany({
       where,
       select: serverSelect,
-      orderBy: { id: "desc" },
+      orderBy: orderBy as any,
       take: limit,
+      skip,
     }),
     prisma.server.count({ where: { ...(showDeleted ? {} : { deletedAt: null }) } }),
   ]);
 
   const dtos = items.map(toDto);
-  const nextCursor = items.length === limit ? (items[items.length - 1]?.id ?? null) : null;
+  const nextCursor = items.length === limit ? (sortBy ? (cursor || 0) + limit : (items[items.length - 1]?.id ?? null)) : null;
 
   return { items: dtos, nextCursor, total };
 }
@@ -153,6 +158,40 @@ export async function updateServer(id: number, input: ServerUpdateInput, ctx: Au
       data: { ...data, ...(passwordEnc !== undefined ? { passwordEnc } : {}), updatedByEmail: ctx.actorEmail ?? null },
       select: serverSelect,
     });
+
+    if (data.networkTypeId !== undefined && data.networkTypeId !== existing.networkTypeId) {
+      const oldNet = existing.networkTypeId ? await tx.networkType.findUnique({ where: { id: existing.networkTypeId } }) : null;
+      const newNet = data.networkTypeId ? await tx.networkType.findUnique({ where: { id: data.networkTypeId } }) : null;
+      await tx.auditLog.create({
+        data: {
+          category: "data",
+          action: "server.update_network",
+          entity: "server",
+          entityId: String(id),
+          actorId: ctx.actorId ?? null,
+          actorEmail: ctx.actorEmail ?? null,
+          afterJson: JSON.stringify({ old: oldNet?.name ?? "None", new: newNet?.name ?? "None" }),
+          ip: ctx.ip ?? null,
+        },
+      });
+    }
+
+    if (data.allocatedToId !== undefined && data.allocatedToId !== existing.allocatedToId) {
+      const oldProj = existing.allocatedToId ? await tx.allocatedTo.findUnique({ where: { id: existing.allocatedToId } }) : null;
+      const newProj = data.allocatedToId ? await tx.allocatedTo.findUnique({ where: { id: data.allocatedToId } }) : null;
+      await tx.auditLog.create({
+        data: {
+          category: "data",
+          action: "server.reassign",
+          entity: "server",
+          entityId: String(id),
+          actorId: ctx.actorId ?? null,
+          actorEmail: ctx.actorEmail ?? null,
+          afterJson: JSON.stringify({ old: oldProj?.name ?? "None", new: newProj?.name ?? "None" }),
+          ip: ctx.ip ?? null,
+        },
+      });
+    }
 
     await tx.auditLog.create({
       data: {

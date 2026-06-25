@@ -10,6 +10,7 @@ function delegate(type: LookupType) {
     "allocated-to": prisma.allocatedTo,
     locations: prisma.location,
     "server-types": prisma.serverType,
+    "network-types": prisma.networkType,
   } as const;
   return map[type] as {
     findMany: (args?: object) => Promise<{ id: number; name: string; createdAt: Date; updatedAt: Date }[]>;
@@ -49,6 +50,7 @@ export async function deleteLookup(type: LookupType, id: number) {
     "allocated-to": "allocatedToId",
     locations: "locationId",
     "server-types": "serverTypeId",
+    "network-types": "networkTypeId",
   }[type] as string;
   const serverCount = await prisma.server.count({ where: { [fkCol]: id } });
   if (serverCount > 0) {

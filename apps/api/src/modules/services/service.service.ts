@@ -41,7 +41,7 @@ function toDto(raw: { passwordEnc: string | null; tags: { tag: { id: number; nam
 }
 
 export async function listServices(query: ServiceListQuery, isAdmin: boolean) {
-  const { cursor, limit = 50, q, tagId, lastStatus, includeDeleted } = query;
+  const { cursor, limit = 50, sortBy, sortDir, q, tagId, lastStatus, includeDeleted } = query;
   const showDeleted = isAdmin && includeDeleted;
 
   const where = {
@@ -57,21 +57,25 @@ export async function listServices(query: ServiceListQuery, isAdmin: boolean) {
     } : {}),
     ...(tagId ? { tags: { some: { tagId } } } : {}),
     ...(lastStatus ? { lastStatus } : {}),
-    ...(cursor ? { id: { lt: cursor } } : {}),
+    ...(cursor && !sortBy ? { id: { lt: cursor } } : {}),
   };
+
+  const orderBy = sortBy ? { [sortBy]: sortDir || "asc" } : { id: "desc" };
+  const skip = sortBy ? (cursor || 0) : undefined;
 
   const [items, total] = await Promise.all([
     prisma.service.findMany({
       where,
       select: serviceSelect,
-      orderBy: { id: "desc" },
+      orderBy: orderBy as any,
       take: limit,
+      skip,
     }),
     prisma.service.count({ where: { ...(showDeleted ? {} : { deletedAt: null }) } }),
   ]);
 
   const dtos = items.map(toDto);
-  const nextCursor = items.length === limit ? (items[items.length - 1]?.id ?? null) : null;
+  const nextCursor = items.length === limit ? (sortBy ? (cursor || 0) + limit : (items[items.length - 1]?.id ?? null)) : null;
 
   return { items: dtos, nextCursor, total };
 }

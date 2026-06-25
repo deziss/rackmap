@@ -20,6 +20,7 @@ export const LOOKUP_TYPES = {
   "allocated-to": "Allocated To",
   locations: "Location",
   "server-types": "Server Type",
+  "network-types": "Network Type",
 } as const;
 export type LookupType = keyof typeof LOOKUP_TYPES;
 export const LOOKUP_TYPE_KEYS = Object.keys(LOOKUP_TYPES) as LookupType[];
@@ -33,6 +34,8 @@ export const AUDIT_ACTIONS = [
   "server.delete",
   "server.restore",
   "server.password_reveal",
+  "server.update_network",
+  "server.reassign",
   "server.import",
   "server.metrics_view",
   "server.ssh_open",
@@ -40,6 +43,8 @@ export const AUDIT_ACTIONS = [
   "lookup.create",
   "lookup.update",
   "lookup.delete",
+  "ssl.delete",
+  "ssl.restore",
   "tag.create",
   "tag.delete",
   "auth.sign_in",

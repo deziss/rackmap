@@ -47,6 +47,7 @@ const nav = [
   { to: "/access-requests" as const, label: "Access Requests", icon: KeyRound, roles: ["admin"] },
   { to: "/users" as const, label: "Users", icon: Users, roles: ["admin"] },
   { to: "/audit" as const, label: "Audit Log", icon: Clock, roles: ["admin"] },
+  { to: "/reports" as const, label: "Reports", icon: List, roles: ["admin"] },
   { to: "/security" as const, label: "Security", icon: Shield },
   { to: "/settings" as const, label: "Settings", icon: Settings },
 ];

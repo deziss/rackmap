@@ -131,6 +131,7 @@ function ServerDetailPage() {
         {server?.environment && <Badge variant="secondary" className="text-xs uppercase">{server.environment}</Badge>}
         {server?.cloudProvider && <Badge variant="secondary" className="text-xs">{server.cloudProvider.name}</Badge>}
         {server?.location && <Badge variant="outline" className="text-xs">{server.location.name}</Badge>}
+        {server?.networkType && <Badge variant="secondary" className="text-xs bg-indigo-500/20 text-indigo-300">{server.networkType.name}</Badge>}
         <span className="text-sm text-muted-foreground font-mono ml-auto">{server?.ip}:{server?.sshPort}</span>
         {server && (
           <>

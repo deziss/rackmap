@@ -169,13 +169,15 @@ function ServicesPage() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
   const [limit] = useState(50);
+  const [sortBy, setSortBy] = useState<string>("id");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   
   const [cursorHistory, setCursorHistory] = useState<number[]>([]);
   const currentCursor = cursorHistory.length > 0 ? cursorHistory[cursorHistory.length - 1] : undefined;
 
   const { data, isLoading, isError, error, isFetching } = useQuery({
-    queryKey: serviceKeys.list({ q: debouncedSearch, cursor: currentCursor, limit }),
-    queryFn: () => fetchServices({ q: debouncedSearch, cursor: currentCursor, limit }),
+    queryKey: serviceKeys.list({ q: debouncedSearch, cursor: currentCursor, limit, sortBy, sortDir }),
+    queryFn: () => fetchServices({ q: debouncedSearch, cursor: currentCursor, limit, sortBy, sortDir }),
     placeholderData: (prev) => prev,
   });
 
@@ -195,6 +197,16 @@ function ServicesPage() {
 
   // Reset pagination on search change
   useState(() => { resetPagination(); });
+
+  const handleSort = (key: string) => {
+    if (sortBy === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(key);
+      setSortDir("asc");
+    }
+    resetPagination();
+  };
 
   async function triggerDownload(format: "xlsx" | "json", searchQ: string) {
     const url = `/api/v1/services/export.${format}?q=${encodeURIComponent(searchQ)}`;
@@ -301,17 +313,32 @@ function ServicesPage() {
           <table className="w-full text-sm text-left">
             <thead className="bg-muted/50 border-b">
               <tr className="whitespace-nowrap">
-                <th className="px-3 py-2.5 font-medium w-6">Status</th>
-                <th className="px-3 py-2.5 font-medium">Service Name</th>
-                <th className="px-3 py-2.5 font-medium">Project</th>
-                <th className="px-3 py-2.5 font-medium">Type</th>
-                <th className="px-3 py-2.5 font-medium">Endpoint</th>
-                <th className="px-3 py-2.5 font-medium">Auth</th>
-                <th className="px-3 py-2.5 font-medium">Environment</th>
-                <th className="px-3 py-2.5 font-medium">DB Name</th>
-                <th className="px-3 py-2.5 font-medium">Managed By</th>
-                <th className="px-3 py-2.5 font-medium">Docs / Health</th>
-                <th className="px-3 py-2.5 font-medium max-w-[200px]">Remark</th>
+                {[
+                  { key: "lastStatus", label: "Status" },
+                  { key: "serviceName", label: "Service Name" },
+                  { key: "project", label: "Project" },
+                  { key: "serviceType", label: "Type" },
+                  { key: "domain", label: "Endpoint" },
+                  { key: "username", label: "Auth" },
+                  { key: "environment", label: "Environment" },
+                  { key: "dbName", label: "DB Name" },
+                  { key: "managedBy", label: "Managed By" },
+                  { key: "documentLink", label: "Docs / Health" },
+                  { key: "remark", label: "Remark" },
+                ].map(col => (
+                  <th
+                    key={col.key}
+                    className="px-3 py-2.5 font-medium cursor-pointer hover:bg-muted transition-colors"
+                    onClick={() => handleSort(col.key)}
+                  >
+                    <div className="flex items-center gap-1">
+                      {col.label}
+                      {sortBy === col.key && (
+                        <span className="text-[10px]">{sortDir === "asc" ? "▲" : "▼"}</span>
+                      )}
+                    </div>
+                  </th>
+                ))}
                 <th className="px-3 py-2.5 font-medium text-right sticky right-0 bg-muted/50 z-10">Actions</th>
               </tr>
             </thead>

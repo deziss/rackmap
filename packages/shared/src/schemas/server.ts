@@ -23,6 +23,7 @@ export const ServerCreateInput = z.object({
   allocatedToId: nullableId,
   locationId: nullableId,
   serverTypeId: nullableId,
+  networkTypeId: nullableId,
   tagIds: z.array(z.number().int().positive()).max(50).optional(),
   osType: z.string().trim().max(50).nullable().optional(),
   isPrivateIp: z.boolean().default(false).optional(),
@@ -42,6 +43,7 @@ export const ServerListQuery = CursorQuery.extend({
   allocatedToId: z.coerce.number().int().positive().optional(),
   locationId: z.coerce.number().int().positive().optional(),
   serverTypeId: z.coerce.number().int().positive().optional(),
+  networkTypeId: z.coerce.number().int().positive().optional(),
   tagId: z.coerce.number().int().positive().optional(),
   status: z.enum(SERVER_STATUS).optional(),
   includeDeleted: z
@@ -69,6 +71,7 @@ export const ServerDto = z.object({
   allocatedTo: lookupRef.nullable(),
   location: lookupRef.nullable(),
   serverType: lookupRef.nullable(),
+  networkType: lookupRef.nullable(),
   tags: z.array(z.object({ id: z.number().int(), name: z.string(), color: z.string().nullable() })),
   lastStatus: z.enum(SERVER_STATUS),
   lastCheckedAt: z.string().nullable(),

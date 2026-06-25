@@ -11,13 +11,19 @@ const sslRoutes = new Hono().use(requireSession);
 // List SSL Statuses
 sslRoutes.get("/", zValidator("query", SslStatusListQuery), async (c) => {
   const query = c.req.valid("query");
-  const { cursor, limit = 50, q, status } = query;
+  const { cursor, limit = 50, sortBy, sortDir, q, status, includeDeleted } = query;
+
+  const showDeleted = includeDeleted;
 
   const where = {
+    ...(showDeleted ? {} : { deletedAt: null }),
     ...(q ? { domain: { contains: q } } : {}),
     ...(status ? { status } : {}),
-    ...(cursor ? { id: { lt: cursor } } : {}),
+    ...(cursor && !sortBy ? { id: { lt: cursor } } : {}),
   };
+
+  const orderBy = sortBy ? { [sortBy]: sortDir || "asc" } : { id: "desc" };
+  const skip = sortBy ? (cursor || 0) : undefined;
 
   const [items, total] = await Promise.all([
     prisma.sslStatus.findMany({
@@ -26,8 +32,9 @@ sslRoutes.get("/", zValidator("query", SslStatusListQuery), async (c) => {
         server: { select: { id: true, hostname: true } },
         service: { select: { id: true, serviceName: true } }
       },
-      orderBy: { id: "desc" },
+      orderBy: orderBy as any,
       take: limit,
+      skip,
     }),
     prisma.sslStatus.count({ where }),
   ]);
@@ -47,11 +54,12 @@ sslRoutes.get("/", zValidator("query", SslStatusListQuery), async (c) => {
     lastError: item.lastError,
     lastScannedAt: item.lastScannedAt?.toISOString() ?? null,
     isManual: item.isManual,
+    deletedAt: item.deletedAt?.toISOString() ?? null,
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   }));
 
-  const nextCursor = items.length === limit ? (items[items.length - 1]?.id ?? null) : null;
+  const nextCursor = items.length === limit ? (sortBy ? (cursor || 0) + limit : (items[items.length - 1]?.id ?? null)) : null;
   return c.json({ items: dtos, nextCursor, total });
 });
 
@@ -135,10 +143,17 @@ sslRoutes.patch("/:id", zValidator("json", SslStatusUpdateInput), async (c) => {
   return c.json(ssl);
 });
 
-// Delete
+// Delete (soft delete)
 sslRoutes.delete("/:id", async (c) => {
   const id = parseInt(c.req.param("id"), 10);
-  await prisma.sslStatus.delete({ where: { id } });
+  await prisma.sslStatus.update({ where: { id }, data: { deletedAt: new Date() } });
+  return c.json({ success: true });
+});
+
+// Restore
+sslRoutes.post("/:id/restore", async (c) => {
+  const id = parseInt(c.req.param("id"), 10);
+  await prisma.sslStatus.update({ where: { id }, data: { deletedAt: null } });
   return c.json({ success: true });
 });
 

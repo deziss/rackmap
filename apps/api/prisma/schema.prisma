@@ -163,6 +163,14 @@ model ServerType {
   servers   Server[]
 }
 
+model NetworkType {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  servers   Server[]
+}
+
 // ─── Tags ────────────────────────────────────────────────────────────────────
 model Tag {
   id       Int          @id @default(autoincrement())
@@ -208,6 +216,8 @@ model Server {
   location        Location?       @relation(fields: [locationId], references: [id], onDelete: Restrict)
   serverTypeId    Int?
   serverType      ServerType?     @relation(fields: [serverTypeId], references: [id], onDelete: Restrict)
+  networkTypeId   Int?
+  networkType     NetworkType?    @relation(fields: [networkTypeId], references: [id], onDelete: Restrict)
   tags            ServerTag[]
   /// Denormalized latest probe result (updated by scheduler; NOT audited)
   lastStatus      String          @default("unknown")
@@ -233,6 +243,7 @@ model Server {
   @@index([allocatedToId])
   @@index([locationId])
   @@index([serverTypeId])
+  @@index([networkTypeId])
   @@index([deletedAt])
   @@index([hostname])
   @@index([ip])
@@ -409,6 +420,8 @@ model SslStatus {
   lastScannedAt DateTime?
 
   isManual Boolean @default(false)
+
+  deletedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

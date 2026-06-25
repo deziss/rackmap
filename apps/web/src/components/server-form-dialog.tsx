@@ -67,6 +67,7 @@ export function ServerFormDialog({ server, onSaved }: ServerFormDialogProps) {
       allocatedToId: server?.allocatedTo?.id ?? undefined,
       locationId: server?.location?.id ?? undefined,
       serverTypeId: server?.serverType?.id ?? undefined,
+      networkTypeId: server?.networkType?.id ?? undefined,
       osType: server?.osType ?? "",
       isPrivateIp: server?.isPrivateIp ?? false,
       purpose: server?.purpose ?? "",
@@ -79,6 +80,7 @@ export function ServerFormDialog({ server, onSaved }: ServerFormDialogProps) {
   const allocatedToId = watch("allocatedToId");
   const locationId = watch("locationId");
   const serverTypeId = watch("serverTypeId");
+  const networkTypeId = watch("networkTypeId");
 
   async function onSubmit(data: Record<string, unknown>) {
     try {
@@ -185,6 +187,7 @@ export function ServerFormDialog({ server, onSaved }: ServerFormDialogProps) {
           <LookupSelect label="Allocated To" type="allocated-to" value={allocatedToId ?? undefined} onChange={(v) => setValue("allocatedToId", v)} />
           <LookupSelect label="Location" type="locations" value={locationId ?? undefined} onChange={(v) => setValue("locationId", v)} />
           <LookupSelect label="Server Type" type="server-types" value={serverTypeId ?? undefined} onChange={(v) => setValue("serverTypeId", v)} />
+          <LookupSelect label="Network Type" type="network-types" value={networkTypeId ?? undefined} onChange={(v) => setValue("networkTypeId", v)} />
 
           <div className="space-y-1">
             <Label>Remark</Label>
