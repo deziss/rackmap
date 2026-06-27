@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchServer, fetchServerMetrics, serverKeys, revealPassword } from "@/lib/queries";
+import { fetchServer, fetchServerMetrics, serverKeys, revealPassword, systemKeys, fetchMe } from "@/lib/queries";
 import { authClient } from "@/lib/auth-client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusDot } from "@/components/status-dot";
@@ -11,10 +11,24 @@ import { SshTerminal } from "@/components/ssh-terminal";
 import { cn } from "@/lib/utils";
 import {
   Cpu, MemoryStick, HardDrive, Network, Zap, AlertTriangle,
-  Terminal, Copy, Check, ShieldCheck, Server,
+  Terminal, Copy, Check, ShieldCheck, Server, Lock, Activity, Globe, Tag
 } from "lucide-react";
 import { toast } from "sonner";
 import type { ProcInfo } from "@inv/shared";
+
+function InfoRow({ label, value, icon: Icon }: { label: string; value: React.ReactNode; icon?: React.ElementType }) {
+  return (
+    <div className="flex py-3 border-b border-border/50 last:border-0 items-start">
+      <div className="w-1/3 text-muted-foreground text-sm flex items-center gap-2">
+        {Icon && <Icon className="h-4 w-4" />}
+        {label}
+      </div>
+      <div className="w-2/3 text-sm font-medium break-all">
+        {value || <span className="text-muted-foreground/50 italic">—</span>}
+      </div>
+    </div>
+  );
+}
 
 function fmtBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -114,7 +128,11 @@ interface ServerDetailModalProps {
 export function ServerDetailModal({ serverId, onClose }: ServerDetailModalProps) {
   const [showTerminal, setShowTerminal] = useState(false);
   const { data: session } = authClient.useSession();
-  const canSsh = session?.user?.role === "admin" || session?.user?.role === "editor";
+  
+  const { data: me } = useQuery({ queryKey: systemKeys.me, queryFn: fetchMe });
+  const sshEnabled = me?.features?.sshEnabled ?? true;
+  
+  const canSsh = sshEnabled && (session?.user?.role === "admin" || session?.user?.role === "editor");
 
   const { data: server } = useQuery({
     queryKey: serverKeys.detail(serverId ?? 0),
@@ -136,7 +154,7 @@ export function ServerDetailModal({ serverId, onClose }: ServerDetailModalProps)
 
   return (
     <Dialog open={serverId != null} onOpenChange={(open) => { if (!open) { setShowTerminal(false); onClose(); } }}>
-      <DialogContent className="max-w-[96vw] w-full h-[94vh] flex flex-col p-0 gap-0 overflow-hidden [&>button:last-child]:top-3 [&>button:last-child]:right-3">
+      <DialogContent className="max-w-5xl h-[85vh] flex flex-col p-0 gap-0 overflow-hidden [&>button:last-child]:top-3 [&>button:last-child]:right-3">
         {/* Header */}
         <DialogHeader className="shrink-0 px-5 py-3 border-b border-border bg-card/80 backdrop-blur-sm">
           <div className="flex items-center gap-3 flex-wrap pr-8">
@@ -158,8 +176,8 @@ export function ServerDetailModal({ serverId, onClose }: ServerDetailModalProps)
             {server?.location && <Badge variant="outline" className="text-xs">{server.location.name}</Badge>}
             <span className="text-xs text-muted-foreground font-mono ml-1">{server?.ip}:{server?.sshPort}</span>
             <div className="ml-auto flex items-center gap-2">
-              {server && <CopySSHBtn server={server as { ip: string; username: string; sshPort: number }} />}
-              {server && <CopySSHBtn server={server as { ip: string; username: string; sshPort: number }} sudo />}
+              {server && sshEnabled && <CopySSHBtn server={server as { ip: string; username: string; sshPort: number }} />}
+              {server && sshEnabled && <CopySSHBtn server={server as { ip: string; username: string; sshPort: number }} sudo />}
               {canSsh && serverId != null && (
                 <Button size="sm" variant={showTerminal ? "secondary" : "default"} className="gap-1.5"
                   onClick={() => setShowTerminal(!showTerminal)}>
@@ -180,61 +198,103 @@ export function ServerDetailModal({ serverId, onClose }: ServerDetailModalProps)
             </div>
           )}
 
-          {/* Server info grid */}
           {server && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {[
-                ["Hostname", server.hostname],
-                ["IP Address", server.ip],
-                ["Username", server.username],
-                ["SSH Port", String(server.sshPort)],
-                ["Password", <PasswordBox key="pwd" serverId={server.id} />],
-                ["CPU", server.cpu ?? "—"],
-                ["RAM", server.ram ?? "—"],
-                ["GPU Count", server.gpuCount != null ? String(server.gpuCount) : "—"],
-                ["Domain", server.domain ?? "—"],
-                ["Environment", server.environment ?? "—"],
-                ["Cloud Provider", (server.cloudProvider as { name?: string } | null)?.name ?? "—"],
-                ["GPU Type", (server.gpuType as { name?: string } | null)?.name ?? "—"],
-                ["Allocated To", (server.allocatedTo as { name?: string } | null)?.name ?? "—"],
-                ["Location", (server.location as { name?: string } | null)?.name ?? "—"],
-                ["Server Type", (server.serverType as { name?: string } | null)?.name ?? "—"],
-                ["OS Type", server.osType ?? "—"],
-                ["Private IP", server.isPrivateIp ? "Yes" : "No"],
-                ["Purpose", server.purpose ?? "—"],
-                ["Created By", server.createdBy ?? "—"],
-                ["Remark", server.remark ?? "—"],
-              ].map(([label, value]) => (
-                <div key={label as string} className="rounded-lg border border-border/60 bg-card/50 px-3 py-2">
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">{label as string}</p>
-                  {typeof value === "string" ? (
-                    <p className="text-sm font-mono truncate" title={value}>{value}</p>
-                  ) : (
-                    value
-                  )}
-                </div>
-              ))}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Connection & Network */}
+              <Card className="border-border/60 bg-card/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Server className="h-4 w-4 text-primary" /> Connection Details
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <InfoRow label="Hostname" value={server.hostname} />
+                  <InfoRow label="IP Address" value={server.ip} />
+                  <InfoRow label="Private IP" value={server.isPrivateIp ? "Yes" : "No"} />
+                  <InfoRow label="Domain" value={server.domain} icon={Globe} />
+                </CardContent>
+              </Card>
+
+              {/* Identity & Access */}
+              <Card className="border-border/60 bg-card/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Lock className="h-4 w-4 text-primary" /> Authentication
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <InfoRow label="Username" value={server.username} />
+                  <InfoRow label="SSH Port" value={String(server.sshPort)} />
+                  <InfoRow label="Password" value={<PasswordBox key="pwd" serverId={server.id} />} />
+                </CardContent>
+              </Card>
+
+              {/* Specifications */}
+              <Card className="border-border/60 bg-card/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <HardDrive className="h-4 w-4 text-primary" /> Specifications
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <InfoRow label="OS Type" value={server.osType} />
+                  <InfoRow label="CPU" value={server.cpu} icon={Cpu} />
+                  <InfoRow label="RAM" value={server.ram} icon={MemoryStick} />
+                  <InfoRow label="GPU Count" value={server.gpuCount != null ? String(server.gpuCount) : null} icon={Zap} />
+                  <InfoRow label="GPU Type" value={(server.gpuType as { name?: string } | null)?.name} />
+                </CardContent>
+              </Card>
+
+              {/* Environment & Allocation */}
+              <Card className="border-border/60 bg-card/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-primary" /> Assignment & Details
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <InfoRow label="Environment" value={server.environment} />
+                  <InfoRow label="Cloud Provider" value={(server.cloudProvider as { name?: string } | null)?.name} />
+                  <InfoRow label="Location" value={(server.location as { name?: string } | null)?.name} />
+                  <InfoRow label="Allocated To" value={(server.allocatedTo as { name?: string } | null)?.name} />
+                  <InfoRow label="Created By" value={server.createdBy} />
+                </CardContent>
+              </Card>
+
+              {/* Remark */}
+              {server.remark && (
+                <Card className="border-border/60 bg-card/50 md:col-span-2">
+                  <CardContent className="pt-5">
+                    <InfoRow label="Remark" value={<span className="whitespace-pre-wrap">{server.remark}</span>} />
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
 
           {/* Tags */}
           {server && (server.tags as { id: number; name: string; color?: string | null }[]).length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {(server.tags as { id: number; name: string; color?: string | null }[]).map((t) => (
-                <Badge
-                  key={t.id}
-                  variant="outline"
-                  className="text-xs"
-                  style={t.color ? { backgroundColor: t.color + "22", borderColor: t.color + "55", color: t.color } : {}}
-                >
-                  {t.name}
-                </Badge>
-              ))}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold flex items-center gap-2 text-muted-foreground">
+                <Tag className="h-4 w-4" /> Attached Tags
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {(server.tags as { id: number; name: string; color?: string | null }[]).map((t) => (
+                  <Badge
+                    key={t.id}
+                    variant="outline"
+                    className="px-2 py-0.5 text-xs"
+                    style={t.color ? { backgroundColor: t.color + "22", borderColor: t.color + "55", color: t.color } : {}}
+                  >
+                    {t.name}
+                  </Badge>
+                ))}
+              </div>
             </div>
           )}
 
           {/* Metrics */}
-          {metricsQ.isError && (
+          {sshEnabled && metricsQ.isError && (
             <Card className="border-destructive/50">
               <CardContent className="flex items-center gap-2 py-3 text-sm text-destructive">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -242,10 +302,10 @@ export function ServerDetailModal({ serverId, onClose }: ServerDetailModalProps)
               </CardContent>
             </Card>
           )}
-          {metricsQ.isLoading && (
+          {sshEnabled && metricsQ.isLoading && (
             <p className="text-sm text-muted-foreground py-4 text-center">Connecting over SSH to collect metrics…</p>
           )}
-          {m && (
+          {sshEnabled && m && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <Card>
                 <CardHeader className="p-4 pb-2">
