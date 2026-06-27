@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { authClient } from "@/lib/auth-client";
 import { ServerCreateInput, type ServerDto } from "@inv/shared";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -24,21 +25,73 @@ interface ServerFormDialogProps {
 
 interface LookupEntry { id: number; name: string }
 
-function LookupSelect({ label, type, value, onChange }: { label: string; type: string; value: number | undefined; onChange: (v: number | undefined) => void }) {
-  const { data = [] } = useQuery<LookupEntry[]>({
+function LookupSelect({ label, type, value, onChange, filterPredicate }: { label: string; type: string; value: number | undefined; onChange: (v: number | undefined) => void; filterPredicate?: (d: LookupEntry) => boolean }) {
+  const { data = [], refetch } = useQuery<LookupEntry[]>({
     queryKey: ["lookups", type],
     queryFn: () => apiFetch(`/api/v1/lookups/${type}`),
   });
+
+  const filteredData = filterPredicate ? data.filter(filterPredicate) : data;
+
+  const [isAdding, setIsAdding] = useState(false);
+  const [newValue, setNewValue] = useState("");
+  const { data: session } = authClient.useSession();
+  const role = (session?.user as { role?: string })?.role ?? "viewer";
+  const canAdd = role === "admin" || role === "editor";
+
+  const handleAdd = async () => {
+    if (!newValue.trim()) { setIsAdding(false); return; }
+    try {
+      const res = await apiFetch<{ id: number }>(`/api/v1/lookups/${type}`, {
+        method: "POST",
+        body: JSON.stringify({ name: newValue.trim() }),
+      });
+      await refetch();
+      onChange(res.id);
+      setIsAdding(false);
+      setNewValue("");
+      toast.success(`Added new ${label}`);
+    } catch (e: any) {
+      toast.error(e.message || "Failed to add");
+    }
+  };
+
+  if (isAdding) {
+    return (
+      <div className="space-y-1">
+        <Label>{label}</Label>
+        <div className="flex gap-2">
+          <Input
+            autoFocus
+            value={newValue}
+            onChange={e => setNewValue(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(); } if (e.key === 'Escape') setIsAdding(false); }}
+            className="h-9"
+          />
+          <Button type="button" size="sm" onClick={handleAdd}>Add</Button>
+          <Button type="button" size="sm" variant="ghost" onClick={() => setIsAdding(false)}>Cancel</Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-1">
       <Label>{label}</Label>
       <select
         className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
         value={value ?? ""}
-        onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
+        onChange={(e) => {
+          if (e.target.value === "ADD_NEW") {
+            setIsAdding(true);
+          } else {
+            onChange(e.target.value ? Number(e.target.value) : undefined);
+          }
+        }}
       >
         <option value="">— None —</option>
-        {data.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+        {filteredData.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+        {canAdd && <option value="ADD_NEW" className="text-primary font-medium">+ Add new...</option>}
       </select>
     </div>
   );
@@ -79,8 +132,8 @@ export function ServerFormDialog({ server, onSaved }: ServerFormDialogProps) {
   const gpuTypeId = watch("gpuTypeId");
   const allocatedToId = watch("allocatedToId");
   const locationId = watch("locationId");
-  const serverTypeId = watch("serverTypeId");
   const networkTypeId = watch("networkTypeId");
+  const environment = watch("environment");
 
   async function onSubmit(data: Record<string, unknown>) {
     try {
@@ -89,6 +142,20 @@ export function ServerFormDialog({ server, onSaved }: ServerFormDialogProps) {
       const cleaned = Object.fromEntries(
         Object.entries(data).map(([k, v]) => [k, v === "" ? undefined : v])
       );
+
+      // Auto-assign Server Type
+      try {
+        const serverTypes = await apiFetch<LookupEntry[]>('/api/v1/lookups/server-types');
+        const hasGpu = Number(data.gpuCount) > 0 || data.gpuTypeId != null;
+        const typeStr = hasGpu ? "gpu" : "cpu";
+        const matchedType = serverTypes.find(t => t.name.toLowerCase().includes(typeStr));
+        if (matchedType) {
+          cleaned.serverTypeId = matchedType.id;
+        }
+      } catch (e) {
+        console.error("Failed to auto-assign server type", e);
+      }
+
       await apiFetch(url, { method, body: JSON.stringify(cleaned) });
       toast.success(isEdit ? "Server updated" : "Server created");
       setOpen(false);
@@ -182,11 +249,18 @@ export function ServerFormDialog({ server, onSaved }: ServerFormDialogProps) {
             </div>
           </div>
 
-          <LookupSelect label="Cloud Provider" type="cloud-providers" value={cloudProviderId ?? undefined} onChange={(v) => setValue("cloudProviderId", v)} />
+          {environment === "cloud" && (
+            <LookupSelect
+              label="Cloud Provider"
+              type="cloud-providers"
+              value={cloudProviderId ?? undefined}
+              onChange={(v) => setValue("cloudProviderId", v)}
+              filterPredicate={(d) => !d.name.toLowerCase().includes("premise")}
+            />
+          )}
           <LookupSelect label="GPU Type" type="gpu-types" value={gpuTypeId ?? undefined} onChange={(v) => setValue("gpuTypeId", v)} />
           <LookupSelect label="Allocated To" type="allocated-to" value={allocatedToId ?? undefined} onChange={(v) => setValue("allocatedToId", v)} />
           <LookupSelect label="Location" type="locations" value={locationId ?? undefined} onChange={(v) => setValue("locationId", v)} />
-          <LookupSelect label="Server Type" type="server-types" value={serverTypeId ?? undefined} onChange={(v) => setValue("serverTypeId", v)} />
           <LookupSelect label="Network Type" type="network-types" value={networkTypeId ?? undefined} onChange={(v) => setValue("networkTypeId", v)} />
 
           <div className="space-y-1">

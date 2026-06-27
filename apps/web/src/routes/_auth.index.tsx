@@ -104,6 +104,7 @@ function DashboardPage() {
 
   const servers = data?.items ?? [];
   const total = servers.length;
+  const gpuServerCount = servers.filter(s => (s.gpuCount ?? 0) > 0 || s.gpuType != null || (s.serverType && s.serverType.name.toLowerCase().includes('gpu'))).length;
   const online = servers.filter((s) => s.lastStatus === "up").length;
   const offline = servers.filter((s) => s.lastStatus === "down").length;
   const unknown = servers.filter((s) => s.lastStatus === "unknown").length;
@@ -354,6 +355,8 @@ function DashboardPage() {
             </div>
             <div className="space-y-2.5">
               {[
+                { label: "GPU Servers", value: String(gpuServerCount), cls: "" },
+                { label: "CPU Servers", value: String(total - gpuServerCount), cls: "" },
                 { label: "Unknown status", value: String(unknown), cls: "" },
                 { label: "On-premise", value: String(total - cloudCount), cls: "" },
               ].map(({ label, value, cls }) => (

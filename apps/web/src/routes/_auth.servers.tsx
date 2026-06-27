@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback } from "react";
 import { ServerDetailModal } from "@/components/server-detail-modal";
-import { fetchServers, checkServer, checkAllServers, revealPassword, serverKeys } from "@/lib/queries";
+import { fetchServers, checkServer, checkAllServers, revealPassword, serverKeys, systemKeys, fetchMe } from "@/lib/queries";
 import { apiFetch } from "@/lib/api";
 import { StatusDot } from "@/components/status-dot";
 import { Button } from "@/components/ui/button";
@@ -82,6 +82,9 @@ function ServersPage() {
   const qc = useQueryClient();
   const { data: session } = authClient.useSession();
   const role = (session?.user as { role?: string })?.role ?? "viewer";
+
+  const { data: me } = useQuery({ queryKey: systemKeys.me, queryFn: fetchMe });
+  const sshEnabled = me?.features?.sshEnabled ?? true;
 
   const [q, setQ] = useState("");
   const [cursor, setCursor] = useState<number | undefined>();

@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { fetchServer, fetchServerMetrics, serverKeys, fetchServices, serviceKeys } from "@/lib/queries";
+import { fetchServer, fetchServerMetrics, serverKeys, fetchServices, serviceKeys, systemKeys, fetchMe } from "@/lib/queries";
 import { authClient } from "@/lib/auth-client";
 import { StatusDot } from "@/components/status-dot";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -88,7 +88,11 @@ function ServerDetailPage() {
   const id = Number(serverId);
   const [showTerminal, setShowTerminal] = useState(false);
   const { data: session } = authClient.useSession();
-  const canSsh = session?.user?.role === "admin" || session?.user?.role === "editor";
+
+  const { data: me } = useQuery({ queryKey: systemKeys.me, queryFn: fetchMe });
+  const sshEnabled = me?.features?.sshEnabled ?? true;
+
+  const canSsh = sshEnabled && (session?.user?.role === "admin" || session?.user?.role === "editor");
 
   const { data: server } = useQuery({
     queryKey: serverKeys.detail(id),
@@ -133,7 +137,7 @@ function ServerDetailPage() {
         {server?.location && <Badge variant="outline" className="text-xs">{server.location.name}</Badge>}
         {server?.networkType && <Badge variant="secondary" className="text-xs bg-indigo-500/20 text-indigo-300">{server.networkType.name}</Badge>}
         <span className="text-sm text-muted-foreground font-mono ml-auto">{server?.ip}:{server?.sshPort}</span>
-        {server && (
+        {server && sshEnabled && (
           <>
             <CopySSHButton server={server as { ip: string; username: string; sshPort: number }} />
             <CopySSHButton server={server as { ip: string; username: string; sshPort: number }} sudo />

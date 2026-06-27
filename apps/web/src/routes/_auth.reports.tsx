@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FileText, Download, Printer, Filter } from "lucide-react";
+import { useDebounce } from "@/hooks/use-debounce";
+import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
@@ -84,6 +86,8 @@ function formatLogDetails(log: any, networks?: any[], projects?: any[]) {
 function ReportsPage() {
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [dateRange, setDateRange] = useState<string>("30d");
+  const [auditSearch, setAuditSearch] = useState("");
+  const debouncedAuditSearch = useDebounce(auditSearch, 300);
 
   const { data: networksData } = useQuery({
     queryKey: ["lookups", "network-types"],
@@ -99,7 +103,7 @@ function ReportsPage() {
   const projects = projectsData || [];
 
   const { data, isLoading } = useQuery({
-    queryKey: ["reports", actionFilter, dateRange],
+    queryKey: ["reports", actionFilter, dateRange, debouncedAuditSearch],
     queryFn: () => {
       const to = new Date();
       const from = new Date();
@@ -111,6 +115,7 @@ function ReportsPage() {
         limit: "100",
         ...(actionFilter !== "all" ? { action: actionFilter } : {}),
         ...(dateRange !== "all" ? { from: from.toISOString(), to: to.toISOString() } : {}),
+        ...(debouncedAuditSearch ? { search: debouncedAuditSearch } : {}),
       });
 
       return apiFetch<{ items: any[] }>(`/api/v1/audit?${queryParams.toString()}`);
@@ -130,7 +135,7 @@ function ReportsPage() {
     doc.text(`Filters: ${actionFilter === "all" ? "All Actions" : actionFilter} | ${dateRange === "all" ? "All Time" : `Last ${dateRange}`}`, 14, 34);
 
     const tableColumn = ["Date", "Actor", "Entity", "Action", "Details"];
-    const tableRows = data.items.map((log) => [
+    const tableRows = (data?.items || []).map((log) => [
       format(new Date(log.createdAt), "PP p"),
       `${log.actorEmail || "System"}${log.ip ? ` (${log.ip})` : ''}`,
       getHumanReadableEntity(log),
@@ -194,11 +199,18 @@ function ReportsPage() {
         </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-4 flex-wrap mt-2">
           <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
             <Filter className="h-4 w-4" /> Filters:
           </div>
-          
+
+          <Input
+            placeholder="Search IP, Hostname, Domain, Project..."
+            className="w-75 h-9 bg-card border-white/10"
+            value={auditSearch}
+            onChange={(e) => setAuditSearch(e.target.value)}
+          />
+
           <Select value={actionFilter} onValueChange={setActionFilter}>
             <SelectTrigger className="w-[220px] h-9 bg-card border-white/10">
               <SelectValue placeholder="Action Type" />
@@ -208,6 +220,7 @@ function ReportsPage() {
               <SelectItem value="server.update_network">Network Shifts (DMZ/Local)</SelectItem>
               <SelectItem value="server.reassign">Project Reassignments</SelectItem>
               <SelectItem value="server.create">Server Creations</SelectItem>
+              <SelectItem value="server.update">Server Updates</SelectItem>
               <SelectItem value="auth.sign_in">Logins</SelectItem>
             </SelectContent>
           </Select>
