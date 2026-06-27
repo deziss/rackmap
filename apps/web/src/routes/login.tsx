@@ -66,7 +66,7 @@ function LoginPage() {
             <CloudCog className="h-7 w-7" />
           </div>
           <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">Server Inventory</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">RackMap</h1>
             <p className="text-sm text-muted-foreground mt-1">
               {isRegister ? "Create an account to get started" : "Sign in to manage your infrastructure"}
             </p>

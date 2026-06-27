@@ -1,4 +1,4 @@
-# User Guide — Server Inventory
+# User Guide — RackMap
 
 ## Table of Contents
 

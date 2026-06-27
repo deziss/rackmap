@@ -102,7 +102,7 @@ export function Sidebar({ user }: SidebarProps) {
         </div>
         {!collapsed && (
           <span className="text-sm font-semibold tracking-tight bg-linear-to-r from-foreground to-muted-foreground bg-clip-text text-transparent whitespace-nowrap overflow-hidden">
-            Server Inventory
+            RackMap
           </span>
         )}
       </div>

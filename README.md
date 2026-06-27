@@ -1,4 +1,4 @@
-# Server Inventory
+# RackMap
 
 > **Status: Complete** — All planned phases shipped and production-ready.
 >
@@ -74,7 +74,7 @@ Browser WebSocket → API WS upgrade (validates session + RBAC)
 ```bash
 # 1. Clone
 git clone <repo-url>
-cd server-inventory
+cd rackmap
 
 # 2. Create .env (never commit this file)
 cat > .env << 'EOF'
@@ -325,11 +325,11 @@ pnpm build
 pm2 start ecosystem.config.cjs
 
 # Or as a systemd service
-sudo cp server-inventory.service /etc/systemd/system/
-sudo systemctl enable --now server-inventory
+sudo cp rackmap.service /etc/systemd/system/
+sudo systemctl enable --now rackmap
 ```
 
-SQLite database path: set `DATABASE_URL=file:/var/lib/server-inventory/inventory.db` and ensure the directory exists.
+SQLite database path: set `DATABASE_URL=file:/var/lib/rackmap/inventory.db` and ensure the directory exists.
 
 ---
 
