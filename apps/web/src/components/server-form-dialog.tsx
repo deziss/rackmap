@@ -25,7 +25,7 @@ interface ServerFormDialogProps {
 
 interface LookupEntry { id: number; name: string }
 
-function LookupSelect({ label, type, value, onChange, filterPredicate }: { label: string; type: string; value: number | undefined; onChange: (v: number | undefined) => void; filterPredicate?: (d: LookupEntry) => boolean }) {
+function LookupSelect({ label, type, value, onChange, filterPredicate }: { label: string; type: string; value: number | null | undefined; onChange: (v: number | null) => void, filterPredicate?: (d: LookupEntry) => boolean }) {
   const { data = [], refetch } = useQuery<LookupEntry[]>({
     queryKey: ["lookups", type],
     queryFn: () => apiFetch(`/api/v1/lookups/${type}`),
@@ -85,7 +85,7 @@ function LookupSelect({ label, type, value, onChange, filterPredicate }: { label
           if (e.target.value === "ADD_NEW") {
             setIsAdding(true);
           } else {
-            onChange(e.target.value ? Number(e.target.value) : undefined);
+            onChange(e.target.value ? Number(e.target.value) : null);
           }
         }}
       >
@@ -140,7 +140,9 @@ export function ServerFormDialog({ server, onSaved }: ServerFormDialogProps) {
       const url = isEdit ? `/api/v1/servers/${server.id}` : "/api/v1/servers";
       const method = isEdit ? "PATCH" : "POST";
       const cleaned = Object.fromEntries(
-        Object.entries(data).map(([k, v]) => [k, v === "" ? undefined : v])
+        Object.entries(data)
+          .map(([k, v]) => [k, v === "" ? null : v]) // Convert empty strings to null for clearing
+          .filter(([k, v]) => v !== undefined) // Drop undefined to avoid overwriting unchanged fields like password
       );
 
       // Auto-assign Server Type

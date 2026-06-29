@@ -134,6 +134,10 @@ export async function getServer(id: number) {
 export async function createServer(input: ServerCreateInput, ctx: AuditCtx = {}) {
   const { password, tagIds, ...data } = input;
   const server = await prisma.$transaction(async (tx) => {
+    const hasGpu = (data.gpuCount !== null && data.gpuCount !== undefined && data.gpuCount > 0) || (data.gpuTypeId !== null && data.gpuTypeId !== undefined);
+    const typeName = hasGpu ? "GPU Server" : "CPU Server";
+    const serverType = await tx.serverType.findUnique({ where: { name: typeName } });
+    
     const s = await tx.server.create({
       data: {
         ...data,
@@ -175,6 +179,15 @@ export async function updateServer(id: number, input: ServerUpdateInput, ctx: Au
     encryptSecret(password);
 
   const updated = await prisma.$transaction(async (tx) => {
+    const newGpuCount = data.gpuCount !== undefined ? data.gpuCount : existing.gpuCount;
+    const newGpuTypeId = data.gpuTypeId !== undefined ? data.gpuTypeId : existing.gpuTypeId;
+    const hasGpu = (newGpuCount !== null && newGpuCount > 0) || (newGpuTypeId !== null && newGpuTypeId !== undefined);
+    const typeName = hasGpu ? "GPU Server" : "CPU Server";
+    const serverType = await tx.serverType.findUnique({ where: { name: typeName } });
+    if (serverType) {
+      data.serverTypeId = serverType.id;
+    }
+
     // Replace tags if tagIds provided
     if (tagIds !== undefined) {
       await tx.serverTag.deleteMany({ where: { serverId: id } });
