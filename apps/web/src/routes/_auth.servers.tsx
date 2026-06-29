@@ -264,6 +264,7 @@ function ServersPage() {
                 { key: "lastStatus", label: "Status" },
                 { key: "username", label: "User" },
                 { key: "password", label: "Password" },
+                { key: "specs", label: "CPU & RAM" },
                 { key: "gpu", label: "GPU" },
                 { key: "project", label: "Project" },
                 { key: "network", label: "Network" },
@@ -300,7 +301,7 @@ function ServersPage() {
             {isLoading && (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b border-white/5">
-                  {Array.from({ length: 14 }).map((__, j) => (
+                  {Array.from({ length: 15 }).map((__, j) => (
                     <td key={j} className="px-3 py-3">
                       <Skeleton className="h-4 w-full" />
                     </td>
@@ -310,7 +311,7 @@ function ServersPage() {
             )}
             {!isLoading && data?.items.length === 0 && (
               <tr>
-                <td colSpan={14} className="px-3 py-12 text-center text-muted-foreground text-sm">
+                <td colSpan={15} className="px-3 py-12 text-center text-muted-foreground text-sm">
                   No servers found
                 </td>
               </tr>
@@ -385,10 +386,14 @@ function ServersPage() {
                       <span className="text-muted-foreground text-xs">—</span>
                     )}
                   </td>
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                    {(server.cpu || server.ram) ? `${server.cpu ?? "-"} - ${server.ram ?? "-"}` : "-"}
+                  </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                    {server.gpuCount != null && server.gpuType
-                      ? `${server.gpuCount}× ${server.gpuType.name}`
-                      : (server.gpuType?.name ?? "—")}
+                    {(!server.gpuCount || server.gpuCount === 0) && !server.gpuType ? "-" :
+                      (server.gpuCount && server.gpuCount > 0 && server.gpuType
+                        ? `${server.gpuCount}× ${server.gpuType.name}`
+                        : (server.gpuType?.name ?? "-"))}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">
                     {server.allocatedTo?.name ?? "—"}

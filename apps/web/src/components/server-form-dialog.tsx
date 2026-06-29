@@ -145,10 +145,17 @@ export function ServerFormDialog({ server, onSaved }: ServerFormDialogProps) {
           .filter(([k, v]) => v !== undefined) // Drop undefined to avoid overwriting unchanged fields like password
       );
 
+      // Synchronize GPU Fields
+      if (cleaned.gpuTypeId === null) {
+        cleaned.gpuCount = null;
+      } else if (cleaned.gpuTypeId != null && (!cleaned.gpuCount || Number(cleaned.gpuCount) === 0)) {
+        cleaned.gpuCount = 1;
+      }
+
       // Auto-assign Server Type
       try {
         const serverTypes = await apiFetch<LookupEntry[]>('/api/v1/lookups/server-types');
-        const hasGpu = Number(data.gpuCount) > 0 || data.gpuTypeId != null;
+        const hasGpu = Number(cleaned.gpuCount) > 0 || cleaned.gpuTypeId != null;
         const typeStr = hasGpu ? "gpu" : "cpu";
         const matchedType = serverTypes.find(t => t.name.toLowerCase().includes(typeStr));
         if (matchedType) {
