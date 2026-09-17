@@ -24,6 +24,7 @@ import {
   Settings,
   Globe,
   Lock,
+  BarChart3,
 } from "lucide-react";
 
 interface User {
@@ -37,19 +38,64 @@ interface SidebarProps {
   user: User;
 }
 
-const nav = [
-  { to: "/" as const, label: "Dashboard", icon: LayoutDashboard },
-  { to: "/servers" as const, label: "Servers", icon: Server },
-  { to: "/services" as const, label: "Services", icon: Globe },
-  { to: "/ssl" as const, label: "SSL", icon: Lock },
-  { to: "/lookups" as const, label: "Lookups", icon: List, roles: ["admin", "editor"] },
-  { to: "/ssh" as const, label: "SSH Terminal", icon: Terminal, roles: ["admin"] },
-  { to: "/access-requests" as const, label: "Access Requests", icon: KeyRound, roles: ["admin"] },
-  { to: "/users" as const, label: "Users", icon: Users, roles: ["admin"] },
-  { to: "/audit" as const, label: "Audit Log", icon: Clock, roles: ["admin"] },
-  { to: "/reports" as const, label: "Reports", icon: List, roles: ["admin"] },
-  { to: "/security" as const, label: "Security", icon: Shield },
-  { to: "/settings" as const, label: "Settings", icon: Settings },
+type NavPath =
+  | "/"
+  | "/servers"
+  | "/services"
+  | "/ssl"
+  | "/lookups"
+  | "/ssh"
+  | "/access-requests"
+  | "/users"
+  | "/audit"
+  | "/reports"
+  | "/security"
+  | "/settings";
+
+interface NavItem {
+  to: NavPath;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  roles?: string[];
+}
+
+interface NavSection {
+  title?: string;
+  items: NavItem[];
+}
+
+const navSections: NavSection[] = [
+  {
+    items: [
+      { to: "/", label: "Dashboard", icon: LayoutDashboard },
+    ],
+  },
+  {
+    title: "Infrastructure",
+    items: [
+      { to: "/servers", label: "Servers", icon: Server },
+      { to: "/services", label: "Services", icon: Globe },
+      { to: "/ssl", label: "SSL Certs", icon: Lock },
+      { to: "/ssh", label: "SSH Terminal", icon: Terminal, roles: ["admin"] },
+    ],
+  },
+  {
+    title: "Management",
+    items: [
+      { to: "/lookups", label: "Lookups", icon: List, roles: ["admin", "editor"] },
+      { to: "/access-requests", label: "Access Requests", icon: KeyRound, roles: ["admin"] },
+      { to: "/users", label: "Users", icon: Users, roles: ["admin"] },
+    ],
+  },
+  {
+    title: "Observability",
+    items: [
+      { to: "/reports", label: "Reports", icon: BarChart3, roles: ["admin"] },
+      { to: "/audit", label: "Audit Log", icon: Clock, roles: ["admin"] },
+      { to: "/security", label: "Security", icon: Shield },
+      { to: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
 ];
 
 export function Sidebar({ user }: SidebarProps) {
@@ -107,59 +153,88 @@ export function Sidebar({ user }: SidebarProps) {
         )}
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 space-y-0.5 p-2 pt-3">
-        {nav
-          .filter((item) => !item.roles || item.roles.includes(role))
-          .filter((item) => {
-            if (item.to === "/ssh" && me && !me.features.sshEnabled) return false;
-            return true;
-          })
-          .map(({ to, label, icon: Icon }) => {
-            const active = !!matchRoute({ to, fuzzy: true });
-            const badge = to === "/access-requests" && (pendingData?.count ?? 0) > 0
-              ? pendingData!.count
-              : null;
-            const linkEl = (
-              <Link
-                key={to}
-                to={to}
-                className={cn(
-                  "flex items-center gap-2.5 rounded-lg px-2 py-2 text-sm transition-all duration-150",
-                  collapsed ? "justify-center" : "px-3",
-                  active
-                    ? "bg-primary/15 text-primary font-medium glow-blue"
-                    : "text-sidebar-foreground/70 hover:bg-white/6 hover:text-sidebar-foreground",
-                )}
-              >
-                <Icon className={cn("h-4 w-4 shrink-0", active ? "text-primary" : "text-muted-foreground")} />
-                {!collapsed && <span className="flex-1">{label}</span>}
-                {badge != null && (
-                  <span className="ml-auto min-w-4.5 h-4.5 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold px-1 leading-none">
-                    {badge > 99 ? "99+" : badge}
-                  </span>
-                )}
-              </Link>
-            );
-            if (collapsed) {
-              return (
-                <Tooltip key={to}>
-                  <TooltipTrigger asChild>
-                    <div className="relative">
-                      {linkEl}
-                      {badge != null && (
-                        <span className="absolute -top-1 -right-1 min-w-3.5 h-3.5 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold px-0.5 leading-none pointer-events-none">
-                          {badge > 9 ? "9+" : badge}
-                        </span>
+      {/* Divided Navigation */}
+      <nav className="flex-1 space-y-3 p-2 pt-3 overflow-y-auto overflow-x-hidden">
+        {navSections.map((section, sIdx) => {
+          const visibleItems = section.items
+            .filter((item) => !item.roles || item.roles.includes(role))
+            .filter((item) => {
+              if (item.to === "/ssh" && me && !me.features.sshEnabled) return false;
+              return true;
+            });
+
+          if (visibleItems.length === 0) return null;
+
+          return (
+            <div key={section.title ?? `section-${sIdx}`} className="space-y-0.5">
+              {sIdx > 0 && collapsed && (
+                <div className="my-1.5 border-t border-sidebar-border/60 mx-1.5" />
+              )}
+              {section.title && !collapsed && (
+                <div className="px-3 pt-2 pb-1 text-[10px] font-bold tracking-wider text-muted-foreground/60 uppercase select-none">
+                  {section.title}
+                </div>
+              )}
+              {visibleItems.map(({ to, label, icon: Icon }) => {
+                const active = !!matchRoute({ to, fuzzy: true });
+                const badge =
+                  to === "/access-requests" && (pendingData?.count ?? 0) > 0
+                    ? pendingData!.count
+                    : null;
+
+                const linkEl = (
+                  <Link
+                    key={to}
+                    to={to}
+                    className={cn(
+                      "flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition-all duration-150",
+                      collapsed ? "justify-center" : "px-3",
+                      active
+                        ? "bg-primary/15 text-primary font-medium glow-blue"
+                        : "text-sidebar-foreground/70 hover:bg-white/6 hover:text-sidebar-foreground",
+                    )}
+                  >
+                    <Icon
+                      className={cn(
+                        "h-4 w-4 shrink-0",
+                        active ? "text-primary" : "text-muted-foreground",
                       )}
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">{label}{badge ? ` (${badge} pending)` : ""}</TooltipContent>
-                </Tooltip>
-              );
-            }
-            return linkEl;
-          })}
+                    />
+                    {!collapsed && <span className="flex-1 truncate">{label}</span>}
+                    {badge != null && (
+                      <span className="ml-auto min-w-4.5 h-4.5 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold px-1 leading-none">
+                        {badge > 99 ? "99+" : badge}
+                      </span>
+                    )}
+                  </Link>
+                );
+
+                if (collapsed) {
+                  return (
+                    <Tooltip key={to}>
+                      <TooltipTrigger asChild>
+                        <div className="relative">
+                          {linkEl}
+                          {badge != null && (
+                            <span className="absolute -top-1 -right-1 min-w-3.5 h-3.5 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold px-0.5 leading-none pointer-events-none">
+                              {badge > 9 ? "9+" : badge}
+                            </span>
+                          )}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        {label}
+                        {badge ? ` (${badge} pending)` : ""}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                }
+
+                return linkEl;
+              })}
+            </div>
+          );
+        })}
       </nav>
 
       {/* Collapse toggle */}
