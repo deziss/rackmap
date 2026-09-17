@@ -13,7 +13,7 @@ export const PROBE_ERROR_CODES = [
 ] as const;
 export type ProbeErrorCode = (typeof PROBE_ERROR_CODES)[number];
 
-/** URL segment -> display label for the five dropdown lookup tables. */
+/** URL segment -> display label for the dropdown lookup tables. */
 export const LOOKUP_TYPES = {
   "cloud-providers": "Cloud Provider",
   "gpu-types": "GPU Type",
@@ -25,7 +25,7 @@ export const LOOKUP_TYPES = {
 export type LookupType = keyof typeof LOOKUP_TYPES;
 export const LOOKUP_TYPE_KEYS = Object.keys(LOOKUP_TYPES) as LookupType[];
 
-export const AUDIT_CATEGORIES = ["data", "auth", "notification"] as const;
+export const AUDIT_CATEGORIES = ["data", "auth", "notification", "security"] as const;
 export type AuditCategory = (typeof AUDIT_CATEGORIES)[number];
 
 export const AUDIT_ACTIONS = [
@@ -40,6 +40,8 @@ export const AUDIT_ACTIONS = [
   "server.metrics_view",
   "server.ssh_open",
   "server.ssh_close",
+  "server.auto_discover",
+  "server.sudo_permission",
   "service.create",
   "service.update",
   "service.delete",
@@ -52,6 +54,9 @@ export const AUDIT_ACTIONS = [
   "ssl.restore",
   "tag.create",
   "tag.delete",
+  "vault.init",
+  "vault.unlock",
+  "vault.lock",
   "auth.sign_in",
   "auth.sign_in_failed",
   "auth.sign_out",

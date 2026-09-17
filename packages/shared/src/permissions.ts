@@ -7,29 +7,64 @@ import { defaultStatements, adminAc } from "better-auth/plugins/admin/access";
  */
 export const statement = {
   ...defaultStatements,
-  server: ["create", "update", "delete", "restore", "revealPassword", "check", "import", "metrics", "ssh"],
+  server: [
+    "create",
+    "update",
+    "delete",
+    "restore",
+    "revealPassword",
+    "check",
+    "import",
+    "metrics",
+    "ssh",
+    "discover",
+    "osUsers",
+    "sudo",
+    "logs",
+    "atop",
+  ],
   lookup: ["create", "update", "delete"],
   tag: ["create", "delete"],
   audit: ["read"],
+  vault: ["init", "unlock", "status"],
 } as const;
 
 export const ac = createAccessControl(statement);
 
 /** Read-only: every authenticated, non-banned user can read. */
-export const viewer = ac.newRole({});
+export const viewer = ac.newRole({
+  vault: ["status"],
+});
 
 export const editor = ac.newRole({
-  server: ["create", "update", "revealPassword", "check", "metrics"],
+  server: ["create", "update", "revealPassword", "check", "metrics", "discover", "osUsers", "logs", "atop"],
   lookup: ["create", "update"],
   tag: ["create"],
+  vault: ["unlock", "status"],
 });
 
 export const admin = ac.newRole({
   ...adminAc.statements,
-  server: ["create", "update", "delete", "restore", "revealPassword", "check", "import", "metrics", "ssh"],
+  server: [
+    "create",
+    "update",
+    "delete",
+    "restore",
+    "revealPassword",
+    "check",
+    "import",
+    "metrics",
+    "ssh",
+    "discover",
+    "osUsers",
+    "sudo",
+    "logs",
+    "atop",
+  ],
   lookup: ["create", "update", "delete"],
   tag: ["create", "delete"],
   audit: ["read"],
+  vault: ["init", "unlock", "status"],
 });
 
 export const roles = { admin, editor, viewer };

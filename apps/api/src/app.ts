@@ -20,6 +20,8 @@ import { userRoutes } from "./modules/users/user.routes.js";
 import { accessRequestRoutes } from "./modules/access-requests/access-request.routes.js";
 import { serviceRoutes } from "./modules/services/service.routes.js";
 import { sslRoutes } from "./modules/ssl/ssl.routes.js";
+import { vaultRoutes } from "./modules/vault/vault.routes.js";
+import { sshKeyRoutes } from "./modules/ssh-keys/ssh-key.routes.js";
 
 export function createApp() {
   const app = new Hono();
@@ -116,6 +118,8 @@ export function createApp() {
   app.route("/api/v1/users", userRoutes);
   app.route("/api/v1/access-requests", accessRequestRoutes);
   app.route("/api/v1/ssl", sslRoutes);
+  app.route("/api/v1/vault", vaultRoutes);
+  app.route("/api/v1/ssh-keys", sshKeyRoutes);
 
   app.onError(onError);
 

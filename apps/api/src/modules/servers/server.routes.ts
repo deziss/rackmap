@@ -17,6 +17,13 @@ import {
 } from "./server.service.js";
 import { runCheck, runAll } from "../../services/status.service.js";
 import { fetchMetrics } from "../../services/metrics.service.js";
+import { autoDiscoverAndApply } from "../../services/discovery.service.js";
+import { listOsUsers, updateSudoPermission } from "../../services/os-user.service.js";
+import { queryServerLogs } from "../../services/log-viewer.service.js";
+import { getAtopDates, getAtopSnapshots, getAtopIntervalProcesses } from "../../services/atop.service.js";
+import { getAutoUpdateStatus, updateAutoUpdateStatus } from "../../services/auto-update.service.js";
+import { testServerSshKey } from "../../services/ssh-key.service.js";
+import { SudoPermissionInput, LogQueryInput, AtopQueryInput, AutoUpdateActionInput } from "@inv/shared";
 import { sshErrorToHttp } from "../../services/ssh.service.js";
 import { env } from "../../env.js";
 import { prisma } from "../../db.js";
@@ -31,6 +38,13 @@ function shouldAuditMetrics(userId: string, serverId: number): boolean {
   if (last && now - last < METRICS_AUDIT_TTL_MS) return false;
   metricsAuditSeen.set(key, now);
   return true;
+}
+
+function getSessionToken(c: any): string {
+  const cookies = c.req.header("cookie") || "";
+  const match = cookies.match(/better-auth\.session_token=([^;]+)/);
+  if (match) return match[1];
+  return c.get("session")?.token || "anonymous";
 }
 
 const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
@@ -53,7 +67,8 @@ export const serverRoutes = new Hono()
     zValidator("json", ServerCreateInput),
     async (c) => {
       const input = c.req.valid("json");
-      const dto = await createServer(input, getAuditCtx(c));
+      const token = getSessionToken(c);
+      const dto = await createServer(input, getAuditCtx(c), token);
       return c.json(dto, 201);
     },
   )
@@ -73,7 +88,8 @@ export const serverRoutes = new Hono()
     async (c) => {
       const { id } = c.req.valid("param");
       const input = c.req.valid("json");
-      return c.json(await updateServer(id, input, getAuditCtx(c)));
+      const token = getSessionToken(c);
+      return c.json(await updateServer(id, input, getAuditCtx(c), token));
     },
   )
 
@@ -124,8 +140,16 @@ export const serverRoutes = new Hono()
         if (!req) return c.json({ error: { code: "FORBIDDEN", message: "Request access to reveal this password" } }, 403);
       }
 
-      const password = await revealServerPassword(id, getAuditCtx(c));
-      return c.json({ password });
+      const token = getSessionToken(c);
+      try {
+        const password = await revealServerPassword(id, getAuditCtx(c), token);
+        return c.json({ password });
+      } catch (err: any) {
+        if (err.message?.includes("Vault is locked")) {
+          return c.json({ error: { code: "VAULT_LOCKED", message: err.message } }, 423);
+        }
+        throw err;
+      }
     },
   )
 
@@ -191,5 +215,177 @@ export const serverRoutes = new Hono()
         const { status, message } = sshErrorToHttp(err);
         return c.json({ error: { code: "SSH_ERROR", message } }, status);
       }
+    },
+  )
+  // POST /servers/:id/auto-discover — agentless remote hardware discovery
+  .post(
+    "/:id/auto-discover",
+    requirePermission({ server: ["discover"] }),
+    zValidator("param", idParamSchema),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      try {
+        const info = await autoDiscoverAndApply(id, getAuditCtx(c));
+        return c.json(info);
+      } catch (err) {
+        const { status, message } = sshErrorToHttp(err);
+        return c.json({ error: { code: "DISCOVERY_ERROR", message } }, status);
+      }
+    },
+  )
+
+  // GET /servers/:id/os-users — list OS users with home dirs and sudo status
+  .get(
+    "/:id/os-users",
+    requirePermission({ server: ["osUsers"] }),
+    zValidator("param", idParamSchema),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      try {
+        const users = await listOsUsers(id);
+        return c.json({ users });
+      } catch (err) {
+        const { status, message } = sshErrorToHttp(err);
+        return c.json({ error: { code: "OS_USERS_ERROR", message } }, status);
+      }
+    },
+  )
+
+  // POST /servers/:id/os-users/sudo — configure sudoers permission for OS user
+  .post(
+    "/:id/os-users/sudo",
+    requirePermission({ server: ["sudo"] }),
+    zValidator("param", idParamSchema),
+    zValidator("json", SudoPermissionInput),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const input = c.req.valid("json");
+      try {
+        const result = await updateSudoPermission(id, input, getAuditCtx(c));
+        return c.json(result);
+      } catch (err: any) {
+        return c.json({ error: { code: "SUDO_CONFIG_ERROR", message: err.message } }, 400);
+      }
+    },
+  )
+
+  // POST /servers/:id/logs — query system logs with filters
+  .post(
+    "/:id/logs",
+    requirePermission({ server: ["logs"] }),
+    zValidator("param", idParamSchema),
+    zValidator("json", LogQueryInput),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const input = c.req.valid("json");
+      try {
+        const response = await queryServerLogs(id, input);
+        return c.json(response);
+      } catch (err) {
+        const { status, message } = sshErrorToHttp(err);
+        return c.json({ error: { code: "LOG_QUERY_ERROR", message } }, status);
+      }
+    },
+  )
+
+  // GET /servers/:id/atop/dates — list available atop archive dates
+  .get(
+    "/:id/atop/dates",
+    requirePermission({ server: ["atop"] }),
+    zValidator("param", idParamSchema),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      try {
+        const res = await getAtopDates(id);
+        return c.json(res);
+      } catch (err) {
+        const { status, message } = sshErrorToHttp(err);
+        return c.json({ error: { code: "ATOP_ERROR", message } }, status);
+      }
+    },
+  )
+
+  // POST /servers/:id/atop/snapshots — query interval snapshots with metric filters & spike flags
+  .post(
+    "/:id/atop/snapshots",
+    requirePermission({ server: ["atop"] }),
+    zValidator("param", idParamSchema),
+    zValidator("json", AtopQueryInput),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const input = c.req.valid("json");
+      try {
+        const res = await getAtopSnapshots(id, input);
+        return c.json(res);
+      } catch (err) {
+        const { status, message } = sshErrorToHttp(err);
+        return c.json({ error: { code: "ATOP_ERROR", message } }, status);
+      }
+    },
+  )
+
+  // POST /servers/:id/atop/interval-processes — get top processes for specific interval
+  .post(
+    "/:id/atop/interval-processes",
+    requirePermission({ server: ["atop"] }),
+    zValidator("param", idParamSchema),
+    zValidator("json", z.object({ date: z.string(), time: z.string() })),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const { date, time } = c.req.valid("json");
+      try {
+        const procs = await getAtopIntervalProcesses(id, date, time);
+        return c.json({ processes: procs });
+      } catch (err) {
+        const { status, message } = sshErrorToHttp(err);
+        return c.json({ error: { code: "ATOP_ERROR", message } }, status);
+      }
+    },
+  )
+
+  // GET /servers/:id/auto-update — check unattended-upgrades status & log snippet
+  .get(
+    "/:id/auto-update",
+    requirePermission({ server: ["read"] }),
+    zValidator("param", idParamSchema),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      try {
+        const res = await getAutoUpdateStatus(id);
+        return c.json(res);
+      } catch (err) {
+        const { status, message } = sshErrorToHttp(err);
+        return c.json({ error: { code: "AUTO_UPDATE_ERROR", message } }, status);
+      }
+    },
+  )
+
+  // POST /servers/:id/auto-update — enable, disable, or remove unattended-upgrades
+  .post(
+    "/:id/auto-update",
+    requirePermission({ server: ["update"] }),
+    zValidator("param", idParamSchema),
+    zValidator("json", AutoUpdateActionInput),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const input = c.req.valid("json");
+      try {
+        const res = await updateAutoUpdateStatus(id, input);
+        return c.json(res);
+      } catch (err: any) {
+        return c.json({ error: { code: "AUTO_UPDATE_ERROR", message: err.message } }, 400);
+      }
+    },
+  )
+
+  // POST /servers/:id/ssh-keys/test — test SSH key connectivity for this specific server
+  .post(
+    "/:id/ssh-keys/test",
+    requirePermission({ server: ["read"] }),
+    zValidator("param", idParamSchema),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const res = await testServerSshKey(id);
+      return c.json(res);
     },
   );

@@ -1,6 +1,7 @@
 import { runCheck } from "../../services/status.service.js";
 import { prisma } from "../../db.js";
 import { encryptSecret, decryptSecret } from "../../lib/crypto.js";
+import { encryptPasswordWithVault, decryptPasswordWithVault } from "../../services/vault.service.js";
 import { notFound, conflict } from "../../lib/errors.js";
 import { writeAudit, redact, type AuditCtx } from "../../lib/audit.js";
 import type { ServerCreateInput, ServerUpdateInput, ServerListQuery } from "@inv/shared";
@@ -132,7 +133,7 @@ export async function getServer(id: number) {
   return toDto(server);
 }
 
-export async function createServer(input: ServerCreateInput, ctx: AuditCtx = {}) {
+export async function createServer(input: ServerCreateInput, ctx: AuditCtx = {}, sessionToken?: string) {
   const { password, tagIds, ...data } = input;
   const server = await prisma.$transaction(async (tx) => {
     const hasGpu = (data.gpuCount !== null && data.gpuCount !== undefined && data.gpuCount > 0) || (data.gpuTypeId !== null && data.gpuTypeId !== undefined);
@@ -142,7 +143,7 @@ export async function createServer(input: ServerCreateInput, ctx: AuditCtx = {})
     const s = await tx.server.create({
       data: {
         ...data,
-        passwordEnc: password ? encryptSecret(password) : null,
+        passwordEnc: password ? encryptPasswordWithVault(password, sessionToken) : null,
         updatedByEmail: ctx.actorEmail ?? null,
         tags: tagIds?.length
           ? { create: tagIds.map((tagId) => ({ tag: { connect: { id: tagId } } })) }
@@ -169,7 +170,7 @@ export async function createServer(input: ServerCreateInput, ctx: AuditCtx = {})
   return dto;
 }
 
-export async function updateServer(id: number, input: ServerUpdateInput, ctx: AuditCtx = {}) {
+export async function updateServer(id: number, input: ServerUpdateInput, ctx: AuditCtx = {}, sessionToken?: string) {
   const existing = await prisma.server.findUnique({ where: { id } });
   if (!existing || existing.deletedAt) throw notFound("Server");
 
@@ -179,7 +180,7 @@ export async function updateServer(id: number, input: ServerUpdateInput, ctx: Au
   const passwordEnc =
     password === undefined ? undefined :
     password === null ? null :
-    encryptSecret(password);
+    encryptPasswordWithVault(password, sessionToken);
 
   const updated = await prisma.$transaction(async (tx) => {
     const newGpuCount = data.gpuCount !== undefined ? data.gpuCount : existing.gpuCount;
@@ -287,12 +288,12 @@ export async function restoreServer(id: number, ctx: AuditCtx = {}) {
 }
 
 /** Returns plaintext password. Caller must audit this. */
-export async function revealServerPassword(id: number, ctx: AuditCtx = {}): Promise<string | null> {
+export async function revealServerPassword(id: number, ctx: AuditCtx = {}, sessionToken?: string): Promise<string | null> {
   const server = await prisma.server.findUnique({ where: { id }, select: { passwordEnc: true, deletedAt: true } });
   if (!server || server.deletedAt) throw notFound("Server");
   await writeAudit({ ctx, category: "data", action: "server.password_reveal", entity: "server", entityId: String(id) });
   if (!server.passwordEnc) return null;
-  return decryptSecret(server.passwordEnc);
+  return decryptPasswordWithVault(server.passwordEnc, sessionToken);
 }
 
 export async function getStatusHistory(id: number, limit = 50) {
