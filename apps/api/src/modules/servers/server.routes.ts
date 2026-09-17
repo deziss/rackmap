@@ -16,6 +16,7 @@ import {
   getStatusHistory,
 } from "./server.service.js";
 import { runCheck, runAll } from "../../services/status.service.js";
+import { notifyFlip } from "../../services/notify.service.js";
 import { fetchMetrics } from "../../services/metrics.service.js";
 import { autoDiscoverAndApply } from "../../services/discovery.service.js";
 import { listOsUsers, updateSudoPermission } from "../../services/os-user.service.js";
@@ -346,7 +347,6 @@ export const serverRoutes = new Hono()
   // GET /servers/:id/auto-update — check unattended-upgrades status & log snippet
   .get(
     "/:id/auto-update",
-    requirePermission({ server: ["read"] }),
     zValidator("param", idParamSchema),
     async (c) => {
       const { id } = c.req.valid("param");
@@ -381,11 +381,67 @@ export const serverRoutes = new Hono()
   // POST /servers/:id/ssh-keys/test — test SSH key connectivity for this specific server
   .post(
     "/:id/ssh-keys/test",
-    requirePermission({ server: ["read"] }),
+    requirePermission({ server: ["check"] }),
     zValidator("param", idParamSchema),
     async (c) => {
       const { id } = c.req.valid("param");
       const res = await testServerSshKey(id);
       return c.json(res);
+    },
+  )
+
+  // GET /servers/:id/alert-channels — check configured alert notification dispatchers
+  .get(
+    "/:id/alert-channels",
+    zValidator("param", idParamSchema),
+    async (c) => {
+      return c.json({
+        webhook: {
+          configured: !!env.NOTIFY_WEBHOOK_URL,
+          urlMasked: env.NOTIFY_WEBHOOK_URL ? env.NOTIFY_WEBHOOK_URL.replace(/(https?:\/\/[^/]+\/).+/, "$1***") : null,
+        },
+        telegram: {
+          configured: !!(env.NOTIFY_TELEGRAM_BOT_TOKEN && env.NOTIFY_TELEGRAM_CHAT_ID),
+          chatId: env.NOTIFY_TELEGRAM_CHAT_ID || null,
+        },
+        email: {
+          configured: !!env.SMTP_HOST,
+          host: env.SMTP_HOST || null,
+        },
+      });
+    },
+  )
+
+  // POST /servers/:id/test-alert — dispatch a test probe alert to configured channels
+  .post(
+    "/:id/test-alert",
+    requirePermission({ server: ["update"] }),
+    zValidator("param", idParamSchema),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const server = await prisma.server.findUnique({
+        where: { id },
+        select: { id: true, hostname: true, ip: true, sshPort: true },
+      });
+      if (!server) return c.json({ error: { code: "NOT_FOUND", message: "Server not found" } }, 404);
+
+      await notifyFlip({
+        serverId: server.id,
+        hostname: server.hostname,
+        ip: server.ip,
+        port: server.sshPort,
+        from: "test_probe",
+        to: "alert_verification",
+      });
+
+      return c.json({
+        success: true,
+        message: `Test alert dispatched to configured channels for ${server.hostname} (${server.ip})`,
+        channels: {
+          webhook: !!env.NOTIFY_WEBHOOK_URL,
+          telegram: !!(env.NOTIFY_TELEGRAM_BOT_TOKEN && env.NOTIFY_TELEGRAM_CHAT_ID),
+          email: !!env.SMTP_HOST,
+        },
+      });
     },
   );

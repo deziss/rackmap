@@ -18,6 +18,8 @@ import type {
   SshKeyTestResult,
   AutoUpdateStatus,
   AutoUpdateActionInput,
+  AlertChannelsInfo,
+  TestAlertResponse,
 } from "@inv/shared";
 
 export const serverKeys = {
@@ -31,6 +33,10 @@ export const serverKeys = {
 
 export const sshKeyKeys = {
   all: ["ssh-keys"] as const,
+};
+
+export const alertChannelKeys = {
+  detail: (id: number) => ["servers", id, "alert-channels"] as const,
 };
 
 export const autoUpdateKeys = {
@@ -270,3 +276,14 @@ export function updateAutoUpdateStatus(serverId: number, input: AutoUpdateAction
   });
 }
 
+
+// Alert Channels & Test Dispatcher
+export function fetchServerAlertChannels(serverId: number) {
+  return apiFetch<AlertChannelsInfo>(`/api/v1/servers/${serverId}/alert-channels`);
+}
+
+export function sendServerTestAlert(serverId: number) {
+  return apiFetch<TestAlertResponse>(`/api/v1/servers/${serverId}/test-alert`, {
+    method: "POST",
+  });
+}

@@ -18,3 +18,4 @@ export * from "./schemas/atop.js";
 export * from "./schemas/vault.js";
 export * from "./schemas/ssh-key.js";
 export * from "./schemas/auto-update.js";
+export * from "./schemas/alert-channels.js";

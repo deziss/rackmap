@@ -8,6 +8,7 @@ import { defaultStatements, adminAc } from "better-auth/plugins/admin/access";
 export const statement = {
   ...defaultStatements,
   server: [
+    "read",
     "create",
     "update",
     "delete",
@@ -33,11 +34,12 @@ export const ac = createAccessControl(statement);
 
 /** Read-only: every authenticated, non-banned user can read. */
 export const viewer = ac.newRole({
+  server: ["read"],
   vault: ["status"],
 });
 
 export const editor = ac.newRole({
-  server: ["create", "update", "revealPassword", "check", "metrics", "discover", "osUsers", "logs", "atop"],
+  server: ["read", "create", "update", "revealPassword", "check", "metrics", "discover", "osUsers", "logs", "atop"],
   lookup: ["create", "update"],
   tag: ["create"],
   vault: ["unlock", "status"],
@@ -46,6 +48,7 @@ export const editor = ac.newRole({
 export const admin = ac.newRole({
   ...adminAc.statements,
   server: [
+    "read",
     "create",
     "update",
     "delete",

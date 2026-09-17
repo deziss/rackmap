@@ -38,7 +38,7 @@ export const sshKeyRoutes = new Hono()
     async (c) => {
       const id = c.req.param("id");
       try {
-        const result = await removeSshKey(id);
+        const result = await removeSshKey(id as string);
         return c.json(result);
       } catch (err: any) {
         return c.json({ error: { code: "KEY_ERROR", message: err.message } }, 400);

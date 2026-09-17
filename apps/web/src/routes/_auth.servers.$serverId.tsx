@@ -24,7 +24,11 @@ import {
   fetchAutoUpdateStatus,
   updateAutoUpdateStatus,
   autoUpdateKeys,
+  fetchServerAlertChannels,
+  sendServerTestAlert,
+  alertChannelKeys,
 } from "@/lib/queries";
+import { apiFetch } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { StatusDot } from "@/components/status-dot";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,9 +42,12 @@ import { VaultUnlockDialog } from "@/components/vault-unlock-dialog";
 import { SudoPermissionDialog } from "@/components/sudo-permission-dialog";
 import { AtopProcessModal } from "@/components/atop-process-modal";
 import { AddSshKeyDialog } from "@/components/add-ssh-key-dialog";
+import { RequestAccessButton } from "@/components/request-access-button";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
+  Bell,
+  Send,
   Trash2,
   Plus,
   Cpu,
@@ -190,6 +197,28 @@ function ServerDetailPage() {
   const sshEnabled = me?.features?.sshEnabled ?? true;
   const userRole = session?.user?.role;
   const canAdmin = userRole === "admin" || userRole === "editor";
+  const isViewer = userRole === "viewer";
+
+  // Viewer: fetch own access requests to derive per-server approval
+  const { data: myRequests } = useQuery({
+    queryKey: ["access-requests", "mine"],
+    queryFn: () => apiFetch<{ serverId: number; type: string; status: string; expiresAt: string | null }[]>("/api/v1/access-requests"),
+    enabled: isViewer,
+    refetchInterval: 15_000,
+  });
+
+  function viewerApproved(type: "ssh" | "password_reveal"): boolean {
+    if (canAdmin) return true;
+    if (!myRequests) return false;
+    const now = Date.now();
+    return myRequests.some(
+      (r) =>
+        r.serverId === id &&
+        r.type === type &&
+        r.status === "approved" &&
+        (r.expiresAt === null || new Date(r.expiresAt).getTime() > now),
+    );
+  }
 
   // Vault status
   const { data: vaultStatus } = useQuery({
@@ -335,7 +364,7 @@ function ServerDetailPage() {
             </Button>
 
             {/* Reveal Password Action */}
-            {canAdmin && (
+            {canAdmin || viewerApproved("password_reveal") ? (
               <Button
                 size="sm"
                 variant="outline"
@@ -352,7 +381,9 @@ function ServerDetailPage() {
                 )}
                 {revealedPwd ? "Hide Password" : "Reveal Password"}
               </Button>
-            )}
+            ) : server.hasPassword ? (
+              <RequestAccessButton entityId={id} entityType="server" type="password_reveal" label="Password" />
+            ) : null}
 
             {/* Auto-Discover Hardware Button */}
             {canAdmin && (
@@ -370,6 +401,11 @@ function ServerDetailPage() {
                 )}
                 Auto-Discover Hardware
               </Button>
+            )}
+
+            {/* Request SSH Access for viewers if not approved */}
+            {!canAdmin && !viewerApproved("ssh") && (
+              <RequestAccessButton entityId={id} entityType="server" type="ssh" label="SSH Terminal" />
             )}
 
             {/* SSH Commands */}
@@ -466,7 +502,7 @@ function ServerDetailPage() {
           <Users className="h-3.5 w-3.5 text-emerald-500" /> OS Users & Sudoers
         </Button>
 
-        {sshEnabled && (
+        {sshEnabled && (canAdmin || viewerApproved("ssh")) && (
           <Button
             variant={activeTab === "terminal" ? "secondary" : "ghost"}
             size="sm"
@@ -825,6 +861,7 @@ function OverviewTab({
             )}
           </CardContent>
         </Card>
+
       </div>
 
       {/* SSH Key Access & Host Key Discovery */}
@@ -832,6 +869,9 @@ function OverviewTab({
 
       {/* Automated System Updates (Unattended-Upgrades) */}
       <AutoUpdateCard serverId={server.id} />
+
+      {/* Alert Channels & Live Notification Dispatcher (CloudScope Feature) */}
+      <AlertChannelsCard serverId={server.id} />
     </div>
   );
 }
@@ -1146,6 +1186,112 @@ function AutoUpdateCard({ serverId }: { serverId: number }) {
   );
 }
 
+
+// ----------------------------------------------------------------------
+// Sub-Card: Alert Channels & Live Notification Dispatcher (CloudScope Integration)
+// ----------------------------------------------------------------------
+function AlertChannelsCard({ serverId }: { serverId: number }) {
+  const { data: channels, isLoading } = useQuery({
+    queryKey: alertChannelKeys.detail(serverId),
+    queryFn: () => fetchServerAlertChannels(serverId),
+  });
+
+  const [dispatching, setDispatching] = useState(false);
+
+  const handleTestAlert = async () => {
+    setDispatching(true);
+    try {
+      const res = await sendServerTestAlert(serverId);
+      toast.success(res.message);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to dispatch test alert");
+    } finally {
+      setDispatching(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          <Bell className="h-4 w-4 text-amber-500" />
+          Alert Channels & Live Notification Dispatcher (CloudScope Feature)
+        </CardTitle>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs gap-1.5"
+          onClick={handleTestAlert}
+          disabled={dispatching}
+        >
+          {dispatching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 text-amber-500" />}
+          Dispatch Test Alert
+        </Button>
+      </CardHeader>
+      <CardContent className="p-4 pt-2 space-y-3">
+        <div className="text-xs text-muted-foreground">
+          When this server transitions states (UP ➔ DOWN or DOWN ➔ UP), RackMap automatically dispatches notifications across configured external webhooks and chat bots.
+        </div>
+
+        {isLoading ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking notification channels...
+          </div>
+        ) : !channels ? (
+          <p className="text-xs text-muted-foreground">Notification channels status unavailable.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            {/* Webhook */}
+            <div className="p-3 rounded-lg bg-muted/40 border space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold">Discord / Slack Webhook</span>
+                {channels.webhook.configured ? (
+                  <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400">Configured</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px] border-zinc-500/30 text-zinc-400">Inactive</Badge>
+                )}
+              </div>
+              <div className="text-[11px] text-muted-foreground font-mono truncate">
+                {channels.webhook.urlMasked || "NOTIFY_WEBHOOK_URL unset"}
+              </div>
+            </div>
+
+            {/* Telegram */}
+            <div className="p-3 rounded-lg bg-muted/40 border space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold">Telegram Alert Bot</span>
+                {channels.telegram.configured ? (
+                  <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400">Configured</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px] border-zinc-500/30 text-zinc-400">Inactive</Badge>
+                )}
+              </div>
+              <div className="text-[11px] text-muted-foreground font-mono truncate">
+                {channels.telegram.chatId ? `Chat ID: ${channels.telegram.chatId}` : "NOTIFY_TELEGRAM_BOT_TOKEN unset"}
+              </div>
+            </div>
+
+            {/* Email */}
+            <div className="p-3 rounded-lg bg-muted/40 border space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold">Email Alerts (SMTP)</span>
+                {channels.email.configured ? (
+                  <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400">Configured</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px] border-zinc-500/30 text-zinc-400">Inactive</Badge>
+                )}
+              </div>
+              <div className="text-[11px] text-muted-foreground font-mono truncate">
+                {channels.email.host ? `Host: ${channels.email.host}` : "SMTP_HOST unset"}
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ----------------------------------------------------------------------
 // TAB 2: Live Metrics (5s polling)
 // ----------------------------------------------------------------------
@@ -1278,6 +1424,82 @@ function LiveMetricsTab({ serverId }: { serverId: number }) {
                   ))}
                 </tbody>
               </table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Multi-Vendor GPU Telemetry (NVIDIA / AMD / Intel) */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-purple-500" /> Multi-Vendor GPU Telemetry (NVIDIA / AMD / Intel)
+              </span>
+              <Badge variant="secondary" className="text-[10px] font-mono">
+                {m.hasGpu ? `${m.gpus.length} Device(s) Active` : "No GPU Active"}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-0 space-y-4">
+            {!m.hasGpu ? (
+              <p className="text-xs text-muted-foreground py-2">
+                No active GPU accelerators detected (Checked: nvidia-smi, AMD sysfs/amdgpu, AMD ROCm, Intel xpu-smi).
+              </p>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {m.gpus.map((g) => {
+                    const vramPct = g.memTotalMb > 0 ? (g.memUsedMb / g.memTotalMb) * 100 : 0;
+                    return (
+                      <div key={g.index} className="p-3 rounded-lg border bg-muted/20 space-y-2.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-foreground font-mono">
+                            #{g.index} {g.name}
+                          </span>
+                          <span className="text-muted-foreground font-mono text-[11px]">
+                            {g.utilPct}% Util {g.tempC != null ? `· ${g.tempC}°C` : ""}
+                          </span>
+                        </div>
+                        <Bar pct={g.utilPct} color={g.utilPct > 90 ? "bg-red-500" : g.utilPct > 70 ? "bg-yellow-500" : "bg-purple-500"} />
+                        <div className="space-y-1 pt-1">
+                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                            <span>VRAM Utilization</span>
+                            <span className="font-mono">
+                              {(g.memUsedMb / 1024).toFixed(1)} / {(g.memTotalMb / 1024).toFixed(1)} GB ({vramPct.toFixed(0)}%)
+                            </span>
+                          </div>
+                          <Bar pct={vramPct} color="bg-fuchsia-500" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* GPU Compute Processes */}
+                {m.gpuProcs && m.gpuProcs.length > 0 && (
+                  <div className="space-y-1.5 border-t border-border/50 pt-3">
+                    <div className="text-xs font-semibold text-muted-foreground">Active GPU Compute Processes</div>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-muted-foreground text-[10px] border-b">
+                          <th className="text-left font-medium pb-1">PID</th>
+                          <th className="text-left font-medium pb-1">Process Name</th>
+                          <th className="text-right font-medium pb-1">VRAM Used</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40 font-mono text-[11px]">
+                        {m.gpuProcs.map((gp) => (
+                          <tr key={gp.pid}>
+                            <td className="py-1 text-muted-foreground">{gp.pid}</td>
+                            <td className="py-1 font-medium">{gp.name}</td>
+                            <td className="py-1 text-right text-purple-400">{gp.memMb} MB</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>

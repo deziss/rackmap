@@ -11,7 +11,17 @@ cat /proc/meminfo
 echo "===OS==="
 cat /etc/os-release
 echo "===GPU==="
-(nvidia-smi --query-gpu=name,count --format=csv,noheader 2>/dev/null) || (lspci 2>/dev/null | grep -iE 'vga|3d|display') || echo "NONE"
+if command -v nvidia-smi >/dev/null 2>&1; then
+  nvidia-smi --query-gpu=name,count --format=csv,noheader 2>/dev/null
+elif [ -d /sys/class/drm ]; then
+  for _d in /sys/class/drm/card*/device; do
+    [ -f "$_d/gpu_busy_percent" ] && echo "AMD Radeon Graphics (amdgpu), 1" && break
+  done
+elif command -v rocm-smi >/dev/null 2>&1; then
+  rocm-smi --showproductname 2>/dev/null | awk -F: '/Card series/{print $2", 1"}'
+elif command -v xpu-smi >/dev/null 2>&1; then
+  echo "Intel Data Center GPU, 1"
+fi || (lspci 2>/dev/null | grep -iE 'vga|3d|display') || echo "NONE"
 echo "===DISK==="
 lsblk -b -d -o NAME,SIZE,TYPE,MODEL 2>/dev/null || df -h
 echo "===UPTIME==="

@@ -138,7 +138,7 @@ echo "SUCCESS_REMOVE"
         stderr += chunk.toString("utf8");
       });
 
-      stream.on("close", (code) => {
+      stream.on("close", (code: number | null) => {
         client.end();
         if (code === 0 || stdout.includes("SUCCESS_")) {
           const msg =
