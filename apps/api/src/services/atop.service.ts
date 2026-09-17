@@ -5,6 +5,7 @@ import type {
   AtopSnapshotsResponse,
   AtopIntervalSnapshot,
   AtopProcess,
+  AtopTopProcesses,
 } from "@inv/shared";
 
 function formatTodayDate(): string {
@@ -64,6 +65,107 @@ ls -1 /var/log/atop/atop_* 2>/dev/null || ${sudoLs} 2>/dev/null || echo ""
   });
 }
 
+export function parseTopProcesses(raw: string): AtopTopProcesses {
+  function parseSection(tag: "CPU" | "MEM" | "DSK"): AtopProcess[] {
+    const marker = `<<<${tag}>>>`;
+    if (!raw.includes(marker)) return [];
+    const chunk = raw.split(marker)[1]?.split("<<<")[0] || "";
+    const lines = chunk.trim().split("\n");
+    const hdrIdx = lines.findIndex((l) => l.includes("PID") && (l.includes("CMD") || l.includes("COMMAND")));
+    if (hdrIdx === -1) return [];
+
+    const list: AtopProcess[] = [];
+    for (let i = hdrIdx + 1; i < lines.length; i++) {
+      const parts = lines[i]!.trim().split(/\s+/);
+      if (!parts || !/^\d+$/.test(parts[0] || "")) continue;
+      const pid = parseInt(parts[0]!, 10);
+      const name = parts[parts.length - 1] || "unknown";
+
+      let pctVal = 0;
+      for (let j = parts.length - 2; j >= 0; j--) {
+        if (parts[j]!.includes("%")) {
+          pctVal = parseFloat(parts[j]!.replace("%", "")) || 0;
+          break;
+        }
+      }
+
+      const item: AtopProcess = {
+        pid,
+        name,
+        cpuPct: 0,
+        memPct: 0,
+        memSize: "0B",
+        sysCpu: "0s",
+        usrCpu: "0s",
+        readDsk: "0B",
+        writeDsk: "0B",
+        dskPct: 0,
+        netRate: "0 sockets",
+        value: "",
+      };
+
+      if (tag === "CPU") {
+        item.cpuPct = pctVal;
+        item.sysCpu = parts[1] || "0s";
+        item.usrCpu = parts[2] || "0s";
+        item.value = `${pctVal.toFixed(1)}% CPU`;
+      } else if (tag === "MEM") {
+        item.memPct = pctVal;
+        item.memSize = parts[3] || "0B";
+        item.value = `${item.memSize} (${pctVal.toFixed(0)}%)`;
+      } else if (tag === "DSK") {
+        item.dskPct = pctVal;
+        item.readDsk = parts[2] || "0B";
+        item.writeDsk = parts[3] || "0B";
+        item.value = `R:${item.readDsk} · W:${item.writeDsk}`;
+      }
+
+      list.push(item);
+      if (list.length >= 5) break;
+    }
+    return list;
+  }
+
+  const net: AtopProcess[] = [];
+  if (raw.includes("<<<SOCKETS>>>")) {
+    const chunk = raw.split("<<<SOCKETS>>>")[1]?.split("<<<")[0] || "";
+    const seen: Record<number, { pid: number; name: string; count: number }> = {};
+    for (const line of chunk.split("\n")) {
+      const match = line.match(/users:\(\("([^"]+)",pid=(\d+)/);
+      if (match && match[1] && match[2]) {
+        const name = match[1];
+        const pid = parseInt(match[2], 10);
+        if (!seen[pid]) seen[pid] = { pid, name, count: 0 };
+        seen[pid]!.count++;
+      }
+    }
+    const sorted = Object.values(seen).sort((a, b) => b.count - a.count);
+    for (const sn of sorted.slice(0, 5)) {
+      net.push({
+        pid: sn.pid,
+        name: sn.name,
+        cpuPct: 0,
+        memPct: 0,
+        memSize: "0B",
+        sysCpu: "0s",
+        usrCpu: "0s",
+        readDsk: "0B",
+        writeDsk: "0B",
+        dskPct: 0,
+        netRate: `${sn.count} sockets`,
+        value: `${sn.count} Active Sockets`,
+      });
+    }
+  }
+
+  return {
+    cpu: parseSection("CPU"),
+    mem: parseSection("MEM"),
+    dsk: parseSection("DSK"),
+    net,
+  };
+}
+
 export function parseAtopRawOutput(
   raw: string,
   cpuThreshold = 70,
@@ -91,7 +193,6 @@ export function parseAtopRawOutput(
       const type = parts[0];
 
       if (type === "CPU" && parts.length >= 10) {
-        // CPU hostname epoch yyyy/mm/dd hh:mm:ss elapsed ticks_per_sec ncpu sys user irq idle wait ...
         timestamp = parseInt(parts[2] || "0", 10);
         dateTime = `${parts[3] || ""} ${parts[4] || ""}`.trim();
         elapsedSeconds = parseInt(parts[5] || "600", 10);
@@ -111,7 +212,6 @@ export function parseAtopRawOutput(
         }
         cpu.runqueue = ncpu;
       } else if (type === "MEM" && parts.length >= 10) {
-        // MEM hostname epoch date time elapsed pagesize physmem free cache buff slab ...
         const pageSize = parseInt(parts[6] || "4096", 10);
         const totalPages = parseInt(parts[7] || "0", 10);
         const freePages = parseInt(parts[8] || "0", 10);
@@ -127,7 +227,6 @@ export function parseAtopRawOutput(
         const usedMb = mem.totalMb - (mem.freeMb + mem.cacheMb);
         mem.usedPct = mem.totalMb > 0 ? Math.max(0, Math.min(100, Math.round((usedMb / mem.totalMb) * 100))) : 0;
       } else if (type === "DSK" && parts.length >= 10) {
-        // DSK hostname epoch date time elapsed devname reads read_sec writes write_sec ... busy%
         const dev = parts[6] || "disk";
         if (dev !== "loop" && !dev.startsWith("loop")) {
           const busy = parseFloat(parts[parts.length - 1] || "0");
@@ -139,7 +238,6 @@ export function parseAtopRawOutput(
           }
         }
       } else if (type === "NET" && parts.length >= 10) {
-        // NET hostname epoch date time elapsed devname pcki bytesi pcko byteso ...
         const iface = parts[6] || "";
         if (iface && iface !== "lo" && iface !== "upper" && !iface.startsWith("veth")) {
           const bytesIn = parseInt(parts[8] || "0", 10);
@@ -174,7 +272,6 @@ export function parseAtopRawOutput(
     }
   }
 
-  // Sort descending by timestamp
   return snapshots.sort((a, b) => b.timestamp - a.timestamp);
 }
 
@@ -190,14 +287,25 @@ export async function getAtopSnapshots(serverId: number, query: AtopQueryInput):
 
   const atopCmd = `atop -r ${filePath} -P CPU,MEM,DSK,NET ${timeFlags}`;
   const sudoAtop = buildSudoCommand(atopCmd, password);
-  const testFile = buildSudoCommand(`test -f ${filePath}`, password);
 
+  // Script with robust file check, interval snapshots, AND top 5 processes by default for that day
   const command = `
-if [ ! -f ${filePath} ] && ! ${testFile}; then
-  echo "FILE_NOT_FOUND"
-  exit 0
+if [ ! -f "${filePath}" ]; then
+  if ! sudo -n test -f "${filePath}" 2>/dev/null; then
+    echo "FILE_NOT_FOUND"
+    exit 0
+  fi
 fi
 ${atopCmd} 2>/dev/null || ${sudoAtop} 2>/dev/null
+echo '<<<TOP_PROCS>>>'
+echo '<<<CPU>>>'
+atop -r ${filePath} -s 1 1 2>/dev/null | head -n 60 || sudo -n atop -r ${filePath} -s 1 1 2>/dev/null | head -n 60
+echo '<<<MEM>>>'
+atop -r ${filePath} -m 1 1 2>/dev/null | head -n 60 || sudo -n atop -r ${filePath} -m 1 1 2>/dev/null | head -n 60
+echo '<<<DSK>>>'
+atop -r ${filePath} -d 1 1 2>/dev/null | head -n 60 || sudo -n atop -r ${filePath} -d 1 1 2>/dev/null | head -n 60
+echo '<<<SOCKETS>>>'
+ss -tp 2>/dev/null | head -n 60
 `;
 
   return new Promise((resolve, reject) => {
@@ -224,8 +332,9 @@ ${atopCmd} 2>/dev/null || ${sudoAtop} 2>/dev/null
           });
         }
 
+        const [snapshotsPart, topProcsPart] = stdout.split("<<<TOP_PROCS>>>");
         const allSnapshots = parseAtopRawOutput(
-          stdout,
+          snapshotsPart || "",
           query.cpuThreshold || 70,
           query.memThreshold || 80,
           query.dskThreshold || 60
@@ -246,13 +355,66 @@ ${atopCmd} 2>/dev/null || ${sudoAtop} 2>/dev/null
           (s) => s.spikes.isCpuSpike || s.spikes.isMemSpike || s.spikes.isDskSpike || s.spikes.isNetSpike
         ).length;
 
+        const topProcesses = topProcsPart ? parseTopProcesses(topProcsPart) : undefined;
+
         resolve({
           installed: true,
           date: targetDate,
           snapshots: filtered,
           total: filtered.length,
           spikesCount,
+          topProcesses,
         });
+      });
+    });
+  });
+}
+
+export async function getAtopTopProcesses(
+  serverId: number,
+  date: string,
+  time?: string
+): Promise<AtopTopProcesses> {
+  const { client, password } = await connectToServer(serverId);
+  const targetDate = date.replace(/[^0-9]/g, "");
+  const filePath = `/var/log/atop/atop_${targetDate}`;
+  const timeFlag = time ? `-b ${time}` : "";
+
+  const command = `
+if [ ! -f "${filePath}" ]; then
+  if ! sudo -n test -f "${filePath}" 2>/dev/null; then
+    echo "FILE_NOT_FOUND"
+    exit 0
+  fi
+fi
+echo '<<<CPU>>>'
+atop -r ${filePath} ${timeFlag} -s 1 1 2>/dev/null | head -n 60 || sudo -n atop -r ${filePath} ${timeFlag} -s 1 1 2>/dev/null | head -n 60
+echo '<<<MEM>>>'
+atop -r ${filePath} ${timeFlag} -m 1 1 2>/dev/null | head -n 60 || sudo -n atop -r ${filePath} ${timeFlag} -m 1 1 2>/dev/null | head -n 60
+echo '<<<DSK>>>'
+atop -r ${filePath} ${timeFlag} -d 1 1 2>/dev/null | head -n 60 || sudo -n atop -r ${filePath} ${timeFlag} -d 1 1 2>/dev/null | head -n 60
+echo '<<<SOCKETS>>>'
+ss -tp 2>/dev/null | head -n 60
+`;
+
+  return new Promise((resolve, reject) => {
+    let stdout = "";
+    client.exec(command, (err, stream) => {
+      if (err) {
+        client.end();
+        return reject(new SshError("unreachable", `Failed to query top processes: ${err.message}`));
+      }
+
+      stream.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString("utf8");
+      });
+
+      stream.on("close", () => {
+        client.end();
+        if (stdout.includes("FILE_NOT_FOUND")) {
+          return resolve({ cpu: [], mem: [], dsk: [], net: [] });
+        }
+        resolve(parseTopProcesses(stdout));
       });
     });
   });
@@ -289,7 +451,6 @@ export async function getAtopIntervalProcesses(
 
         for (const line of lines) {
           const parts = line.trim().split(/\s+/);
-          // Look for line starting with numeric PID
           if (parts.length >= 9 && /^\d+$/.test(parts[0]!)) {
             const pid = parseInt(parts[0]!, 10);
             const sysCpu = parts[1] || "0s";
@@ -304,10 +465,14 @@ export async function getAtopIntervalProcesses(
               name,
               cpuPct,
               memPct: 0,
+              memSize: "0B",
               sysCpu,
               usrCpu,
               readDsk,
               writeDsk,
+              dskPct: 0,
+              netRate: "0 sockets",
+              value: `${cpuPct}%`,
             });
           }
         }

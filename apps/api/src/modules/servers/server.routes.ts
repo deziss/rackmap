@@ -21,10 +21,10 @@ import { fetchMetrics } from "../../services/metrics.service.js";
 import { autoDiscoverAndApply } from "../../services/discovery.service.js";
 import { listOsUsers, updateSudoPermission } from "../../services/os-user.service.js";
 import { queryServerLogs } from "../../services/log-viewer.service.js";
-import { getAtopDates, getAtopSnapshots, getAtopIntervalProcesses } from "../../services/atop.service.js";
+import { getAtopDates, getAtopSnapshots, getAtopIntervalProcesses, getAtopTopProcesses } from "../../services/atop.service.js";
 import { getAutoUpdateStatus, updateAutoUpdateStatus } from "../../services/auto-update.service.js";
 import { testServerSshKey } from "../../services/ssh-key.service.js";
-import { SudoPermissionInput, LogQueryInput, AtopQueryInput, AutoUpdateActionInput } from "@inv/shared";
+import { SudoPermissionInput, LogQueryInput, AtopQueryInput, AtopTopProcessesInput, AutoUpdateActionInput } from "@inv/shared";
 import { sshErrorToHttp } from "../../services/ssh.service.js";
 import { env } from "../../env.js";
 import { prisma } from "../../db.js";
@@ -337,6 +337,25 @@ export const serverRoutes = new Hono()
       try {
         const procs = await getAtopIntervalProcesses(id, date, time);
         return c.json({ processes: procs });
+      } catch (err) {
+        const { status, message } = sshErrorToHttp(err);
+        return c.json({ error: { code: "ATOP_ERROR", message } }, status);
+      }
+    },
+  )
+
+    // POST /servers/:id/atop/top-processes — get top 5 processes for cpu, mem, dsk, net for date or interval
+  .post(
+    "/:id/atop/top-processes",
+    requirePermission({ server: ["atop"] }),
+    zValidator("param", idParamSchema),
+    zValidator("json", AtopTopProcessesInput),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const { date, time } = c.req.valid("json");
+      try {
+        const topProcesses = await getAtopTopProcesses(id, date, time);
+        return c.json({ date, time: time || null, topProcesses });
       } catch (err) {
         const { status, message } = sshErrorToHttp(err);
         return c.json({ error: { code: "ATOP_ERROR", message } }, status);

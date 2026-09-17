@@ -15,6 +15,7 @@ import {
   queryServerLogs,
   fetchAtopDates,
   fetchAtopSnapshots,
+  fetchAtopTopProcesses,
   fetchVaultStatus,
   vaultKeys,
   fetchSshKeys,
@@ -74,6 +75,11 @@ import {
   Server,
   AlertCircle,
   Loader2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  RotateCcw,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import type {
@@ -84,6 +90,8 @@ import type {
   LogQueryInput,
   AtopIntervalSnapshot,
   AtopQueryInput,
+  AtopProcess,
+  AtopTopProcesses,
 } from "@inv/shared";
 
 export const Route = createFileRoute("/_auth/servers/$serverId")({
@@ -1515,6 +1523,96 @@ function LiveMetricsTab({ serverId }: { serverId: number }) {
 // ----------------------------------------------------------------------
 // TAB 3: ATOP History & Spikes Analysis
 // ----------------------------------------------------------------------
+
+function TopProcessCategoryCard({
+  title,
+  icon: Icon,
+  iconColor,
+  barColor,
+  processes,
+  type,
+  isLoading,
+}: {
+  title: string;
+  icon: any;
+  iconColor: string;
+  barColor: string;
+  processes: AtopProcess[];
+  type: "cpu" | "mem" | "dsk" | "net";
+  isLoading?: boolean;
+}) {
+  return (
+    <Card className="bg-card/70 backdrop-blur border shadow-sm flex flex-col justify-between">
+      <CardHeader className="p-3 pb-2 border-b border-border/40">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className={cn("p-1.5 rounded-md bg-muted/60", iconColor)}>
+              <Icon className="h-4 w-4" />
+            </div>
+            <CardTitle className="text-xs font-semibold">{title}</CardTitle>
+          </div>
+          <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 h-4">
+            Top {processes.length}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="p-3 space-y-2 flex-1 flex flex-col justify-start">
+        {isLoading ? (
+          <div className="py-8 flex items-center justify-center gap-2 text-muted-foreground text-xs">
+            <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
+            <span>Loading processes...</span>
+          </div>
+        ) : processes.length === 0 ? (
+          <div className="py-8 text-center text-xs text-muted-foreground">
+            No processes recorded for this interval.
+          </div>
+        ) : (
+          processes.map((p, idx) => (
+            <div
+              key={`${p.pid}-${idx}`}
+              className="p-2 rounded-lg bg-muted/30 border border-border/30 hover:border-border/70 transition-colors space-y-1"
+            >
+              <div className="flex items-center justify-between gap-1.5 text-xs">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="font-semibold font-mono text-foreground truncate max-w-[120px]" title={p.name}>
+                    {p.name}
+                  </span>
+                  <Badge variant="outline" className="text-[9px] font-mono px-1 py-0 h-4 shrink-0 text-muted-foreground">
+                    #{p.pid}
+                  </Badge>
+                </div>
+                <span className="font-mono text-[11px] font-bold text-foreground shrink-0">
+                  {p.value}
+                </span>
+              </div>
+              <div className="h-1.5 w-full bg-muted/80 rounded-full overflow-hidden">
+                <div
+                  className={cn("h-full rounded-full transition-all duration-300", barColor)}
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      Math.max(
+                        8,
+                        type === "cpu"
+                          ? p.cpuPct
+                          : type === "mem"
+                          ? p.memPct * 3
+                          : type === "dsk"
+                          ? p.dskPct
+                          : (parseInt(p.netRate, 10) || 1) * 15
+                      )
+                    )}%`,
+                  }}
+                />
+              </div>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function AtopTab({
   serverId,
   onSelectSnapshot,
@@ -1531,6 +1629,14 @@ function AtopTab({
   const [selectedDate, setSelectedDate] = useState<string>("");
 
   const activeDate = selectedDate || (availableDates.length > 0 ? availableDates[0] : "");
+
+  // Date Navigation
+  const currentDateIndex = availableDates.indexOf(activeDate);
+  const canGoOlderDate = currentDateIndex >= 0 && currentDateIndex < availableDates.length - 1;
+  const canGoNewerDate = currentDateIndex > 0;
+
+  // Selected interval state (null = whole day)
+  const [selectedInterval, setSelectedInterval] = useState<AtopIntervalSnapshot | null>(null);
 
   const [metricFilter, setMetricFilter] = useState<"all" | "cpu" | "mem" | "dsk" | "net">("all");
   const [cpuThreshold, setCpuThreshold] = useState<number>(70);
@@ -1561,6 +1667,55 @@ function AtopTab({
   const snapshots = snapshotsData?.snapshots ?? [];
   const totalSnapshots = snapshotsData?.total ?? 0;
   const spikeCount = snapshotsData?.spikesCount ?? 0;
+
+  // Time Interval Navigation
+  const activeSnapshotIndex = selectedInterval
+    ? snapshots.findIndex((s) => s.timestamp === selectedInterval.timestamp)
+    : -1;
+
+  const canPrevTime = selectedInterval ? activeSnapshotIndex > 0 : snapshots.length > 0;
+  const canNextTime = selectedInterval ? activeSnapshotIndex >= 0 && activeSnapshotIndex < snapshots.length - 1 : snapshots.length > 0;
+
+  const handlePrevTime = () => {
+    if (snapshots.length === 0) return;
+    if (activeSnapshotIndex > 0) {
+      setSelectedInterval(snapshots[activeSnapshotIndex - 1]);
+    } else if (activeSnapshotIndex === -1) {
+      setSelectedInterval(snapshots[0]);
+    }
+  };
+
+  const handleNextTime = () => {
+    if (snapshots.length === 0) return;
+    if (activeSnapshotIndex >= 0 && activeSnapshotIndex < snapshots.length - 1) {
+      setSelectedInterval(snapshots[activeSnapshotIndex + 1]);
+    } else if (activeSnapshotIndex === -1) {
+      setSelectedInterval(snapshots[0]);
+    }
+  };
+
+  // Interval-specific Top Processes Query
+  const selectedTime = selectedInterval
+    ? (selectedInterval.dateTime.split(" ")[1] || selectedInterval.dateTime)
+    : undefined;
+
+  const { data: intervalTopData, isLoading: intervalTopLoading } = useQuery({
+    queryKey: serverKeys.atopTopProcesses(serverId, activeDate, selectedTime),
+    queryFn: () => fetchAtopTopProcesses(serverId, activeDate, selectedTime),
+    enabled: !!activeDate && !!selectedTime,
+  });
+
+  // Active top processes: Interval-specific if selected, otherwise whole day default from snapshotsData
+  const activeTopProcesses: AtopTopProcesses | undefined = selectedInterval
+    ? (intervalTopData?.topProcesses || (selectedInterval.topProcesses ? {
+        cpu: intervalTopData?.topProcesses?.cpu || [],
+        mem: intervalTopData?.topProcesses?.mem || [],
+        dsk: intervalTopData?.topProcesses?.dsk || [],
+        net: intervalTopData?.topProcesses?.net || [],
+      } : undefined))
+    : snapshotsData?.topProcesses;
+
+  const isProcsLoading = selectedInterval ? intervalTopLoading : snapshotsLoading;
 
   // Compute peak usages from snapshot array
   const peaks = useMemo(() => {
@@ -1655,11 +1810,34 @@ function AtopTab({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Archive Date Selector */}
-            <div className="flex items-center gap-1.5">
-              <Label className="text-xs text-muted-foreground">Date:</Label>
-              <Select value={activeDate} onValueChange={(v) => setSelectedDate(v)}>
-                <SelectTrigger className="h-8 text-xs font-mono w-[140px]">
+            {/* Archive Date Selector with Prev / Next Day Controls */}
+            <div className="flex items-center gap-1">
+              <Label className="text-xs text-muted-foreground mr-0.5">Date:</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                disabled={!canGoOlderDate}
+                onClick={() => {
+                  if (canGoOlderDate) {
+                    setSelectedDate(availableDates[currentDateIndex + 1]);
+                    setSelectedInterval(null);
+                  }
+                }}
+                title="Previous Day (Older)"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+
+              <Select
+                value={activeDate}
+                onValueChange={(v) => {
+                  setSelectedDate(v);
+                  setSelectedInterval(null);
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs font-mono w-[130px]">
                   <SelectValue placeholder="Select Date" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1676,6 +1854,23 @@ function AtopTab({
                   )}
                 </SelectContent>
               </Select>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                disabled={!canGoNewerDate}
+                onClick={() => {
+                  if (canGoNewerDate) {
+                    setSelectedDate(availableDates[currentDateIndex - 1]);
+                    setSelectedInterval(null);
+                  }
+                }}
+                title="Next Day (Newer)"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
 
             {/* Metric Filter */}
@@ -1751,6 +1946,125 @@ function AtopTab({
         </div>
       </div>
 
+      {/* Time Interval Stepper & Navigation Bar */}
+      <div className="flex items-center justify-between flex-wrap gap-2 p-3 rounded-xl border bg-muted/20 backdrop-blur">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 rounded-md bg-amber-500/10 text-amber-500">
+            <Clock className="h-4 w-4" />
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-foreground">Time Interval:</span>
+            {selectedInterval ? (
+              <Badge variant="secondary" className="font-mono text-xs px-2.5 py-0.5 bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                {selectedInterval.dateTime} ({activeSnapshotIndex + 1} of {snapshots.length})
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="font-mono text-xs px-2.5 py-0.5 text-muted-foreground flex items-center gap-1.5">
+                <Sparkles className="h-3 w-3 text-amber-400" />
+                Whole Day Activity (Default)
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1 px-2.5"
+              disabled={!canPrevTime}
+              onClick={handlePrevTime}
+              title="Previous Time Interval"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              <span>Prev Time</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1 px-2.5"
+              disabled={!canNextTime}
+              onClick={handleNextTime}
+              title="Next Time Interval"
+            >
+              <span>Next Time</span>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+
+          {selectedInterval && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs text-muted-foreground hover:text-foreground gap-1 px-2"
+              onClick={() => setSelectedInterval(null)}
+              title="Reset to whole day summary"
+            >
+              <RotateCcw className="h-3 w-3" />
+              <span>Whole Day</span>
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Top 5 Processes Section: Memory, CPU, Disk, Network */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <Activity className="h-3.5 w-3.5 text-amber-500" />
+            Top 5 Resource Consumers {selectedInterval ? `at ${selectedInterval.dateTime}` : `for Day ${activeDate} (Default)`}
+          </h4>
+          <span className="text-[11px] text-muted-foreground">
+            {selectedInterval ? "Interval-specific top consumers" : "Aggregated day-level top consumers"}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+          <TopProcessCategoryCard
+            title="Top 5 CPU"
+            icon={Cpu}
+            iconColor="text-amber-500"
+            barColor="bg-amber-500"
+            processes={activeTopProcesses?.cpu ?? []}
+            type="cpu"
+            isLoading={isProcsLoading}
+          />
+          <TopProcessCategoryCard
+            title="Top 5 Memory"
+            icon={MemoryStick}
+            iconColor="text-emerald-500"
+            barColor="bg-emerald-500"
+            processes={activeTopProcesses?.mem ?? []}
+            type="mem"
+            isLoading={isProcsLoading}
+          />
+          <TopProcessCategoryCard
+            title="Top 5 Disk I/O"
+            icon={HardDrive}
+            iconColor="text-blue-500"
+            barColor="bg-blue-500"
+            processes={activeTopProcesses?.dsk ?? []}
+            type="dsk"
+            isLoading={isProcsLoading}
+          />
+          <TopProcessCategoryCard
+            title="Top 5 Network Sockets"
+            icon={Network}
+            iconColor="text-purple-500"
+            barColor="bg-purple-500"
+            processes={activeTopProcesses?.net ?? []}
+            type="net"
+            isLoading={isProcsLoading}
+          />
+        </div>
+      </div>
+
       {/* Peak Usage Summary KPI Cards */}
       {peaks && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1812,7 +2126,7 @@ function AtopTab({
               Interval Snapshots ({snapshots.length} shown of {totalSnapshots} total · {spikeCount} spikes detected)
             </CardTitle>
             <span className="text-[11px] text-muted-foreground">
-              Click any interval to drill down into active processes
+              Click any interval to update top processes & drill down
             </span>
           </div>
         </CardHeader>
@@ -1846,16 +2160,21 @@ function AtopTab({
                 <tbody className="divide-y divide-border/30 font-mono text-[11px]">
                   {snapshots.map((s, idx) => {
                     const hasSpike = s.spikes.isCpuSpike || s.spikes.isMemSpike || s.spikes.isDskSpike || s.spikes.isNetSpike;
+                    const isSelected = selectedInterval?.timestamp === s.timestamp;
                     return (
                       <tr
                         key={`${s.dateTime}-${idx}`}
                         className={cn(
                           "cursor-pointer transition-colors hover:bg-muted/40",
-                          hasSpike && "bg-amber-500/5 hover:bg-amber-500/10"
+                          isSelected && "bg-amber-500/15 border-l-4 border-l-amber-500 font-semibold",
+                          hasSpike && !isSelected && "bg-amber-500/5 hover:bg-amber-500/10"
                         )}
-                        onClick={() => onSelectSnapshot(s)}
+                        onClick={() => setSelectedInterval(s)}
                       >
-                        <td className="py-2 px-3 font-semibold text-foreground">{s.dateTime}</td>
+                        <td className="py-2 px-3 font-semibold text-foreground flex items-center gap-1.5">
+                          {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 animate-pulse" />}
+                          {s.dateTime}
+                        </td>
                         <td className="py-2 px-3 text-right text-muted-foreground">{s.elapsedSeconds}s</td>
                         <td className={cn("py-2 px-3 text-right font-semibold", s.spikes.isCpuSpike ? "text-red-500" : "text-foreground")}>
                           {s.cpu.totalPct.toFixed(1)}%
@@ -1901,7 +2220,16 @@ function AtopTab({
                           </div>
                         </td>
                         <td className="py-2 px-3 text-center">
-                          <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-2 text-[10px] gap-1"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedInterval(s);
+                              onSelectSnapshot(s);
+                            }}
+                          >
                             Inspect
                           </Button>
                         </td>
@@ -1918,7 +2246,7 @@ function AtopTab({
   );
 }
 
-// ----------------------------------------------------------------------
+
 // TAB 4: Forensic Logs & Evidence Viewer
 // ----------------------------------------------------------------------
 function LogsViewerTab({ serverId }: { serverId: number }) {

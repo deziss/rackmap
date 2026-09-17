@@ -3,14 +3,26 @@ import { z } from "zod";
 export const AtopProcess = z.object({
   pid: z.number(),
   name: z.string(),
-  cpuPct: z.number(),
-  memPct: z.number(),
-  sysCpu: z.string(),
-  usrCpu: z.string(),
-  readDsk: z.string(),
-  writeDsk: z.string(),
+  cpuPct: z.number().default(0),
+  memPct: z.number().default(0),
+  memSize: z.string().default("0B"),
+  sysCpu: z.string().default("0s"),
+  usrCpu: z.string().default("0s"),
+  readDsk: z.string().default("0B"),
+  writeDsk: z.string().default("0B"),
+  dskPct: z.number().default(0),
+  netRate: z.string().default("0 sockets"),
+  value: z.string().default(""),
 });
 export type AtopProcess = z.infer<typeof AtopProcess>;
+
+export const AtopTopProcesses = z.object({
+  cpu: z.array(AtopProcess),
+  mem: z.array(AtopProcess),
+  dsk: z.array(AtopProcess),
+  net: z.array(AtopProcess),
+});
+export type AtopTopProcesses = z.infer<typeof AtopTopProcesses>;
 
 export const AtopIntervalSnapshot = z.object({
   timestamp: z.number(),
@@ -64,6 +76,19 @@ export const AtopQueryInput = z.object({
 });
 export type AtopQueryInput = z.infer<typeof AtopQueryInput>;
 
+export const AtopTopProcessesInput = z.object({
+  date: z.string().trim(),
+  time: z.string().trim().optional(),
+});
+export type AtopTopProcessesInput = z.infer<typeof AtopTopProcessesInput>;
+
+export const AtopTopProcessesResponse = z.object({
+  date: z.string(),
+  time: z.string().nullable().optional(),
+  topProcesses: AtopTopProcesses,
+});
+export type AtopTopProcessesResponse = z.infer<typeof AtopTopProcessesResponse>;
+
 export const AtopDatesResponse = z.object({
   dates: z.array(z.string()),
   installed: z.boolean(),
@@ -77,5 +102,6 @@ export const AtopSnapshotsResponse = z.object({
   snapshots: z.array(AtopIntervalSnapshot),
   total: z.number(),
   spikesCount: z.number(),
+  topProcesses: AtopTopProcesses.optional(),
 });
 export type AtopSnapshotsResponse = z.infer<typeof AtopSnapshotsResponse>;

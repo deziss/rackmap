@@ -12,6 +12,7 @@ import type {
   AtopSnapshotsResponse,
   AtopQueryInput,
   AtopProcess,
+  AtopTopProcessesResponse,
   VaultStatusResponse,
   SshKeyInfo,
   AddSshKeyInput,
@@ -29,6 +30,7 @@ export const serverKeys = {
   metrics: (id: number) => ["servers", id, "metrics"] as const,
   osUsers: (id: number) => ["servers", id, "os-users"] as const,
   atopDates: (id: number) => ["servers", id, "atop-dates"] as const,
+  atopTopProcesses: (id: number, date: string, time?: string) => ["servers", id, "atop-top-processes", date, time] as const,
 };
 
 export const sshKeyKeys = {
@@ -115,6 +117,13 @@ export function fetchAtopSnapshots(id: number, input: AtopQueryInput) {
   return apiFetch<AtopSnapshotsResponse>(`/api/v1/servers/${id}/atop/snapshots`, {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+export function fetchAtopTopProcesses(id: number, date: string, time?: string) {
+  return apiFetch<AtopTopProcessesResponse>(`/api/v1/servers/${id}/atop/top-processes`, {
+    method: "POST",
+    body: JSON.stringify({ date, time }),
   });
 }
 
