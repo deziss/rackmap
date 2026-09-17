@@ -2,6 +2,7 @@ import { Client } from "ssh2";
 import { prisma } from "../db.js";
 import { env } from "../env.js";
 import { decryptSecret } from "../lib/crypto.js";
+import { resolveTargetHost } from "../lib/target-resolver.js";
 
 export type SshErrorKind = "not_found" | "no_credentials" | "unreachable" | "auth_failed";
 
@@ -55,6 +56,8 @@ export async function connectToServer(serverId: number, overridePassword?: strin
     sshPort: server.sshPort,
   };
 
+  const connectHost = resolveTargetHost(server.ip);
+
   return new Promise((resolve, reject) => {
     const client = new Client();
     let settled = false;
@@ -79,7 +82,7 @@ export async function connectToServer(serverId: number, overridePassword?: strin
         settleReject(new SshError(kind, err.message));
       })
       .connect({
-        host: server.ip,
+        host: connectHost,
         port: server.sshPort,
         username: server.username,
         password,

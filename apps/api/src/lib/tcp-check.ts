@@ -1,4 +1,5 @@
 import * as net from "node:net";
+import { resolveTargetHost } from "./target-resolver.js";
 
 export interface ProbeResult {
   status: "up" | "down";
@@ -9,6 +10,8 @@ export interface ProbeResult {
 const WHITELISTED_CODES = new Set(["ETIMEDOUT", "ECONNREFUSED", "EHOSTUNREACH", "ENOTFOUND"]);
 
 export function tcpProbe(host: string, port: number, timeoutMs = 3000): Promise<ProbeResult> {
+  const target = resolveTargetHost(host);
+
   return new Promise((resolve) => {
     const start = Date.now();
     const socket = new net.Socket();
@@ -21,7 +24,7 @@ export function tcpProbe(host: string, port: number, timeoutMs = 3000): Promise<
     socket.setTimeout(timeoutMs);
 
     try {
-      socket.connect(port, host, () => {
+      socket.connect(port, target, () => {
         done({ status: "up", latencyMs: Date.now() - start, errorCode: null });
       });
     } catch (err: unknown) {

@@ -1,3 +1,4 @@
+import { runServiceCheck } from "../../services/service-status.service.js";
 import { prisma } from "../../db.js";
 import { encryptSecret, decryptSecret } from "../../lib/crypto.js";
 import { notFound, conflict } from "../../lib/errors.js";
@@ -127,7 +128,9 @@ export async function createService(input: ServiceCreateInput, ctx: AuditCtx = {
     });
     return s;
   });
-  return toDto(service);
+  const dto = toDto(service);
+  void runServiceCheck(service.id).catch(() => {});
+  return dto;
 }
 
 export async function updateService(id: number, input: ServiceUpdateInput, ctx: AuditCtx = {}) {
@@ -171,7 +174,11 @@ export async function updateService(id: number, input: ServiceUpdateInput, ctx: 
     });
     return s;
   });
-  return toDto(updated);
+  const dto = toDto(updated);
+  if (data.serverIp !== undefined || data.port !== undefined || data.healthUrl !== undefined) {
+    void runServiceCheck(id).catch(() => {});
+  }
+  return dto;
 }
 
 export async function softDeleteService(id: number, ctx: AuditCtx = {}) {

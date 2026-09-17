@@ -1,3 +1,4 @@
+import { runCheck } from "../../services/status.service.js";
 import { prisma } from "../../db.js";
 import { encryptSecret, decryptSecret } from "../../lib/crypto.js";
 import { notFound, conflict } from "../../lib/errors.js";
@@ -163,7 +164,9 @@ export async function createServer(input: ServerCreateInput, ctx: AuditCtx = {})
     });
     return s;
   });
-  return toDto(server);
+  const dto = toDto(server);
+  void runCheck(server.id).catch(() => {});
+  return dto;
 }
 
 export async function updateServer(id: number, input: ServerUpdateInput, ctx: AuditCtx = {}) {
@@ -252,7 +255,11 @@ export async function updateServer(id: number, input: ServerUpdateInput, ctx: Au
     });
     return s;
   });
-  return toDto(updated);
+  const dto = toDto(updated);
+  if (data.ip !== undefined || data.sshPort !== undefined) {
+    void runCheck(id).catch(() => {});
+  }
+  return dto;
 }
 
 export async function softDeleteServer(id: number, ctx: AuditCtx = {}) {

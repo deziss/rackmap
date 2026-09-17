@@ -1,12 +1,15 @@
 import tls from "tls";
 import { prisma } from "../../db.js";
 import { sendMail } from "../../lib/mail.js"; // Assuming a mail.ts exists or we will create one
+import { resolveTargetHost } from "../../lib/target-resolver.js";
 
 export async function fetchSslCert(domain: string): Promise<{ validFrom: Date; validTo: Date; issuer: string; daysRemaining: number } | null> {
+  const targetHost = resolveTargetHost(domain);
+
   return new Promise((resolve, reject) => {
     try {
       const socket = tls.connect({
-        host: domain,
+        host: targetHost,
         port: 443,
         servername: domain,
         rejectUnauthorized: false, // We want to parse expired certs too
