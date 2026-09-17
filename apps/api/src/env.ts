@@ -2,7 +2,7 @@ import { configDotenv } from "dotenv";
 import { z } from "zod";
 
 // Load .env with override so shell's empty exported vars don't shadow file values
-configDotenv({ override: true });
+configDotenv({ override: process.env.NODE_ENV !== "test" });
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -34,7 +34,7 @@ const EnvSchema = z.object({
   SMTP_PORT: z.coerce.number().int().default(587),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
-  SMTP_FROM: z.string().default("cloudscope@example.com"),
+  SMTP_FROM: z.string().default("rackmap@example.com"),
   SERVE_STATIC_DIR: z.string().optional(),
   BACKUP_DIR: z.string().optional(),
   // M12 — live metrics (agentless SSH exec)

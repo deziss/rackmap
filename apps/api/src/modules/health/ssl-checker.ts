@@ -22,8 +22,9 @@ export async function fetchSslCert(domain: string): Promise<{ validFrom: Date; v
         const validTo = new Date(cert.valid_to);
         const daysRemaining = Math.ceil((validTo.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
         
-        // Issuer can be cert.issuer.O or cert.issuer.CN
-        const issuer = cert.issuer?.O || cert.issuer?.CN || "Unknown Issuer";
+        // Issuer can be cert.issuer.O or cert.issuer.CN (may be string or array)
+        const rawIssuer = cert.issuer?.O || cert.issuer?.CN || "Unknown Issuer";
+        const issuer = Array.isArray(rawIssuer) ? rawIssuer.join(", ") : rawIssuer;
 
         socket.destroy();
         resolve({ validFrom, validTo, issuer, daysRemaining });
@@ -47,12 +48,12 @@ export async function fetchSslCert(domain: string): Promise<{ validFrom: Date; v
 export async function scanAllDomains(triggerEmail: boolean = false) {
   // Auto-discover domains from Server and Service tables
   const servers = await prisma.server.findMany({
-    where: { domain: { not: null, not: "" } },
+    where: { domain: { not: null, notIn: [""] } },
     select: { id: true, domain: true }
   });
   
   const services = await prisma.service.findMany({
-    where: { domain: { not: null, not: "" } },
+    where: { domain: { not: null, notIn: [""] } },
     select: { id: true, domain: true }
   });
 
@@ -145,7 +146,7 @@ export async function scanAllDomains(triggerEmail: boolean = false) {
         
         await sendMail({
           to: SEED_ADMIN_EMAIL,
-          subject: "CloudScope - SSL Expiry Alert",
+          subject: "RackMap - SSL Expiry Alert",
           text
         });
       }

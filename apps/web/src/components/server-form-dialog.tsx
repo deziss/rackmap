@@ -142,7 +142,7 @@ export function ServerFormDialog({ server, onSaved }: ServerFormDialogProps) {
       const cleaned = Object.fromEntries(
         Object.entries(data)
           .map(([k, v]) => [k, v === "" ? null : v]) // Convert empty strings to null for clearing
-          .filter(([k, v]) => v !== undefined) // Drop undefined to avoid overwriting unchanged fields like password
+          .filter(([, v]) => v !== undefined) // Drop undefined to avoid overwriting unchanged fields like password
       );
 
       // Synchronize GPU Fields

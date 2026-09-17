@@ -20,7 +20,7 @@ export const viewer = ac.newRole({});
 
 export const editor = ac.newRole({
   server: ["create", "update", "revealPassword", "check", "metrics"],
-  lookup: ["create"],
+  lookup: ["create", "update"],
   tag: ["create"],
 });
 

@@ -107,7 +107,7 @@ export function setupWebSocket(app: Hono): (server: Server) => void {
 
       // Shared shell-open logic used from both onOpen (stored creds) and
       // onMessage (client-supplied password after need_password prompt).
-      function openShell(conn: { client: Client; target: SshTarget }, ws: { send: (data: unknown) => void; close: (code?: number, reason?: string) => void }) {
+      function openShell(conn: { client: Client; target: SshTarget }, ws: { send: (data: any) => void; close: (code?: number, reason?: string) => void }) {
         client = conn.client;
         target = conn.target;
 

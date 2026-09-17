@@ -2,7 +2,7 @@ import { beforeAll, afterAll } from "vitest";
 
 // Test env — must be set before any module imports
 process.env["DATABASE_URL"] = "file:./test.db";
-process.env["APP_ENCRYPTION_KEY"] = "dGVzdGtleXRlc3RrZXl0ZXN0a2V5dGVzdGtleQ=="; // 32B base64
+process.env["APP_ENCRYPTION_KEY"] = "dGVzdGtleXRlc3RrZXl0ZXN0a2V5dGVzdGtleXRlc3Q="; // 32B base64
 process.env["BETTER_AUTH_SECRET"] = "test-secret-for-vitest-only-min16";
 process.env["BETTER_AUTH_URL"] = "http://localhost:5173";
 process.env["WEB_ORIGIN"] = "http://localhost:5173";
@@ -22,14 +22,21 @@ import { generateId } from "better-auth";
 const { prisma } = await import("../db.js");
 
 beforeAll(async () => {
-  await prisma.$queryRawUnsafe("PRAGMA journal_mode=WAL");
-
-  // Migrate test DB
+  // Migrate test DB before opening prisma connections
   const { execSync } = await import("node:child_process");
-  execSync("npx prisma migrate deploy --schema=./prisma/schema.prisma", {
-    env: { ...process.env },
-    stdio: "ignore",
-  });
+  const apiDir = new URL("../..", import.meta.url).pathname;
+  try {
+    execSync("pnpm exec prisma db push --skip-generate --schema=./prisma/schema.prisma", {
+      cwd: apiDir,
+      env: { ...process.env, DATABASE_URL: "file:./test.db" },
+      stdio: "pipe",
+    });
+  } catch (err: any) {
+    console.error("Migration deploy in test setup failed:", err.stdout?.toString(), err.stderr?.toString());
+    throw err;
+  }
+
+  await prisma.$queryRawUnsafe("PRAGMA journal_mode=WAL");
 
   // Seed test users
   const users = [

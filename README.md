@@ -284,7 +284,7 @@ Viewers can submit access requests for SSH terminal and password reveal. Admins 
 
 ## Deployment (Docker Production)
 
-The recommended way to deploy CloudScope in production is using the provided `docker-compose.yml`.
+The recommended way to deploy RackMap in production is using the provided `docker-compose.yml`.
 
 1. **Prepare Environment:**
    Create a `.env` file based on `.env.example`. You must securely generate `BETTER_AUTH_SECRET` and `APP_ENCRYPTION_KEY`.
@@ -305,11 +305,11 @@ The recommended way to deploy CloudScope in production is using the provided `do
    ```
 
 4. **Volumes & Backups:**
-   The SQLite database is stored in a Docker volume named `cloudscope_sqlite_data`. Automatic backups (if configured) are stored in `cloudscope_backups`.
+   The SQLite database is stored in a Docker volume named `sqlite_data`. Automatic backups (if configured) are stored in `backups`.
    To map these to host directories, modify the `volumes` section in `docker-compose.yml`.
 
 5. **Reverse Proxy (Optional but Recommended):**
-   Put CloudScope behind a reverse proxy like Nginx, Caddy, or Traefik with SSL termination. The API and Web UI are combined into a single entry point by the web container's Nginx configuration.
+   Put RackMap behind a reverse proxy like Nginx, Caddy, or Traefik with SSL termination. The API and Web UI are combined into a single entry point by the web container's Nginx configuration.
 
 ---
 
@@ -330,6 +330,26 @@ sudo systemctl enable --now rackmap
 ```
 
 SQLite database path: set `DATABASE_URL=file:/var/lib/rackmap/inventory.db` and ensure the directory exists.
+
+---
+
+### Optional: Using PostgreSQL instead of SQLite
+
+RackMap runs on SQLite by default. To use PostgreSQL:
+
+1. In `apps/api/prisma/schema.prisma`, change `provider = "sqlite"` to `provider = "postgresql"`.
+2. In `.env`, set your PostgreSQL connection string:
+   ```env
+   DATABASE_URL="postgresql://rackmap:rackmap123@localhost:5432/rackmap?schema=public"
+   ```
+3. Run migrations:
+   ```bash
+   pnpm --filter @inv/api prisma migrate dev --name baseline
+   ```
+4. If using Docker Compose, run with the optional PostgreSQL profile:
+   ```bash
+   docker compose --profile postgres up -d --build
+   ```
 
 ---
 

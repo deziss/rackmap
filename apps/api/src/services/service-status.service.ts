@@ -9,7 +9,7 @@ import { notifyFlip } from "./notify.service.js";
 export async function runServiceCheck(serviceId: number) {
   const service = await prisma.service.findUnique({
     where: { id: serviceId, deletedAt: null },
-    select: { id: true, serverIp: true, port: true, healthUrl: true, downStreak: true, notifiedDown: true, lastStatus: true },
+    select: { id: true, serviceName: true, serverIp: true, port: true, healthUrl: true, downStreak: true, notifiedDown: true, lastStatus: true },
   });
   if (!service) return null;
 

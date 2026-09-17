@@ -18,6 +18,7 @@ export type SslStatusUpdateInput = z.infer<typeof SslStatusUpdateInput>;
 export const SslStatusListQuery = CursorQuery.extend({
   q: z.string().trim().max(255).optional(),
   status: z.enum(SSL_STATUSES).optional(),
+  includeDeleted: z.coerce.boolean().optional(),
 });
 export type SslStatusListQuery = z.infer<typeof SslStatusListQuery>;
 

@@ -67,7 +67,7 @@ export function createApp() {
           category: "auth",
           action: "auth.sign_in_failed",
           entity: "User",
-          entityId: null,
+          entityId: undefined,
           after: { email, status: response.status },
         }).catch(() => {/* non-blocking */});
       }

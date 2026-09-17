@@ -8,16 +8,19 @@
 4. [Server Detail Modal](#server-detail-modal)
 5. [Live Metrics](#live-metrics)
 6. [SSH Terminal](#ssh-terminal)
-7. [Export](#export)
-8. [Tags](#tags)
-9. [Lookup Tables](#lookup-tables)
-10. [Audit Log](#audit-log)
-11. [User Management](#user-management)
-12. [Access Requests](#access-requests)
-13. [Notifications](#notifications)
-14. [Security Settings](#security-settings)
-15. [Roles & Permissions](#roles--permissions)
-16. [FAQ / Troubleshooting](#faq--troubleshooting)
+7. [Services Inventory](#services-inventory)
+8. [SSL Certificate Tracking](#ssl-certificate-tracking)
+9. [Export & Reports](#export--reports)
+10. [Tags](#tags)
+11. [Lookup Tables](#lookup-tables)
+12. [Audit Log](#audit-log)
+13. [User Management](#user-management)
+14. [Access Requests](#access-requests)
+15. [Notifications](#notifications)
+16. [Security Settings](#security-settings)
+17. [Database Options (SQLite & PostgreSQL)](#database-options-sqlite--postgresql)
+18. [Roles & Permissions](#roles--permissions)
+19. [FAQ / Troubleshooting](#faq--troubleshooting)
 
 ---
 
@@ -159,6 +162,36 @@ An in-browser SSH terminal powered by xterm.js.
 - Max 5 concurrent sessions (`SSH_MAX_CONCURRENT`)
 
 All SSH open/close events are recorded in the audit log.
+
+---
+
+---
+
+## Services Inventory
+
+The **Services** page (`/services`) tracks applications, databases, cache nodes, and web services running across your infrastructure.
+
+| Field | Description |
+|-------|-------------|
+| Service Name | Friendly identifier for the service |
+| Service Type | Category (e.g. database, web, cache, queue) |
+| Server IP & Port | Host and port where the service is reachable |
+| Health URL | HTTP/HTTPS endpoint for automated health checks |
+| Environment | Deployment tier (production, staging, dev, on-premise) |
+| Credentials | Encrypted at rest; accessible via direct role or access request |
+
+Services are periodically checked by the background scheduler. Alerts are sent via Telegram, Webhook, and Email on status changes.
+
+---
+
+## SSL Certificate Tracking
+
+The **SSL** page (`/ssl`) monitors domain certificates for upcoming expiration.
+
+- **Auto-Discovery**: Automatically extracts domains configured on servers and services.
+- **Manual Domains**: Add standalone external domains to monitor.
+- **Background Scanner**: Probes port 443, reads peer certificates, records issuer, validity window, and calculates days remaining.
+- **Alerts**: Color-coded badges for valid, expiring soon (≤30 days), and expired certificates, with automated email warnings.
 
 ---
 
@@ -329,20 +362,33 @@ Sidebar → **Security** (your own account settings)
 
 ---
 
+---
+
+## Database Options (SQLite & PostgreSQL)
+
+RackMap supports both **SQLite** and **PostgreSQL**:
+- **SQLite (Default)**: Zero external setup. Database file stored at `/data/inventory.db` in Docker or `./dev.db` locally.
+- **PostgreSQL**: Ideal for production deployments with heavy concurrency.
+  1. Set `DATABASE_URL="postgresql://user:pass@host:5432/rackmap"` in `.env`.
+  2. Change `provider = "postgresql"` in `apps/api/prisma/schema.prisma`.
+  3. Start with Docker profile: `docker compose --profile postgres up -d`.
+
+---
+
 ## Roles & Permissions
 
 | Action | Admin | Editor | Viewer |
 |--------|-------|--------|--------|
-| View server list | ✓ | ✓ | ✓ |
-| View server detail | ✓ | ✓ | ✓ |
-| Add / edit server | ✓ | ✓ | — |
-| Delete server | ✓ | ✓ | — |
-| Reveal password | ✓ | ✓ | Request |
-| Live metrics | ✓ | ✓ | — |
+| View server & service list | ✓ | ✓ | ✓ |
+| View server detail & metrics | ✓ | ✓ | — |
+| Add / edit server or service | ✓ | ✓ | — |
+| Delete server or service | ✓ | ✓ | — |
+| Reveal server/service password | ✓ | ✓ | Request |
 | SSH terminal | ✓ | Request | Request |
-| Export data | ✓ | ✓ | ✓ |
+| Export data & reports | ✓ | ✓ | ✓ |
 | Manage tags | ✓ | ✓ | — |
-| Manage lookups | ✓ | — | — |
+| Manage lookups | ✓ | ✓ (Create/Edit) | — |
+| Delete lookups | ✓ | — | — |
 | View audit log | ✓ | — | — |
 | Manage users | ✓ | — | — |
 | Approve access requests | ✓ | — | — |

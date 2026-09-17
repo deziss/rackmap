@@ -25,7 +25,7 @@ export const LOOKUP_TYPES = {
 export type LookupType = keyof typeof LOOKUP_TYPES;
 export const LOOKUP_TYPE_KEYS = Object.keys(LOOKUP_TYPES) as LookupType[];
 
-export const AUDIT_CATEGORIES = ["data", "auth"] as const;
+export const AUDIT_CATEGORIES = ["data", "auth", "notification"] as const;
 export type AuditCategory = (typeof AUDIT_CATEGORIES)[number];
 
 export const AUDIT_ACTIONS = [
@@ -40,6 +40,11 @@ export const AUDIT_ACTIONS = [
   "server.metrics_view",
   "server.ssh_open",
   "server.ssh_close",
+  "service.create",
+  "service.update",
+  "service.delete",
+  "service.restore",
+  "service.password_reveal",
   "lookup.create",
   "lookup.update",
   "lookup.delete",
@@ -60,5 +65,6 @@ export const AUDIT_ACTIONS = [
   "access_request.create",
   "access_request.approved",
   "access_request.rejected",
+  "email_sent",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

@@ -1,7 +1,7 @@
 import { env } from "../env.js";
 import { prisma } from "../db.js";
 import { sendEmail } from "./email.service.js";
-import { NotificationPreference } from "@prisma/client";
+import type { NotificationPreference } from "@prisma/client";
 
 interface FlipEvent {
   serverId?: number;
@@ -17,7 +17,7 @@ interface FlipEvent {
 export interface AccessRequestEvent {
   requestId: number;
   status: "approved" | "rejected";
-  type: "ssh" | "password_reveal";
+  type: "ssh" | "password_reveal" | "service_password_reveal";
   requesterEmail: string;
   hostname: string;
   adminNote?: string | null;
@@ -137,7 +137,7 @@ export async function notifyFlip(event: FlipEvent): Promise<void> {
     const emoji = event.to === "up" ? "✅" : "🔴";
     await sendEmail({
       to: emails,
-      subject: `[CloudScope] Server ${event.hostname} is ${event.to.toUpperCase()}`,
+      subject: `[RackMap] Server ${event.hostname} is ${event.to.toUpperCase()}`,
       html: `<p>${emoji} The server <b>${event.hostname}</b> (${event.ip}:${event.port}) status changed from <b>${event.from}</b> to <b>${event.to}</b>.</p>`,
     });
     await logAuditNotification("email_sent", "Server", String(event.serverId), { type: "serverUpDown", count: emails.length });
@@ -153,8 +153,8 @@ export async function notifyNewServer(server: { id: number; hostname: string; ip
   if (emails.length > 0) {
     await sendEmail({
       to: emails,
-      subject: `[CloudScope] New Server Added: ${server.hostname}`,
-      html: `<p>A new server has been added to CloudScope.</p><p><b>Hostname:</b> ${server.hostname}<br/><b>IP:</b> ${server.ip}</p>`,
+      subject: `[RackMap] New Server Added: ${server.hostname}`,
+      html: `<p>A new server has been added to RackMap.</p><p><b>Hostname:</b> ${server.hostname}<br/><b>IP:</b> ${server.ip}</p>`,
     });
     await logAuditNotification("email_sent", "Server", String(server.id), { type: "newServerAdded", count: emails.length });
   }
@@ -169,7 +169,7 @@ export async function notifyMetricAlert(
   if (emails.length > 0) {
     await sendEmail({
       to: emails,
-      subject: `[CloudScope] Alert for ${server.hostname}: ${type}`,
+      subject: `[RackMap] Alert for ${server.hostname}: ${type}`,
       html: `<p><b>Alert on server ${server.hostname}</b></p><p>${details}</p>`,
     });
     await logAuditNotification("email_sent", "Server", String(server.id), { type, details, count: emails.length });
@@ -182,7 +182,7 @@ export async function notifyUserRegistered(user: { id: string; email: string; na
   if (adminEmails.length > 0) {
     await sendEmail({
       to: adminEmails,
-      subject: `[CloudScope] New User Registered: ${user.name}`,
+      subject: `[RackMap] New User Registered: ${user.name}`,
       html: `<p>A new user just registered.</p><p><b>Name:</b> ${user.name}<br/><b>Email:</b> ${user.email}</p>`,
     });
     await logAuditNotification("email_sent", "User", user.id, { type: "userRegisteredAdminAlert", count: adminEmails.length });
@@ -192,8 +192,8 @@ export async function notifyUserRegistered(user: { id: string; email: string; na
   if (env.SMTP_HOST) {
     await sendEmail({
       to: user.email,
-      subject: `Welcome to CloudScope`,
-      html: `<p>Hi ${user.name},</p><p>Welcome to CloudScope! Your account has been successfully created.</p>`,
+      subject: `Welcome to RackMap`,
+      html: `<p>Hi ${user.name},</p><p>Welcome to RackMap! Your account has been successfully created.</p>`,
     });
     await logAuditNotification("email_sent", "User", user.id, { type: "userWelcome" });
   }

@@ -5,7 +5,7 @@ services:
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
     environment:
-      DATABASE_URL: file:/data/inventory.db
+      DATABASE_URL: ${DATABASE_URL:-file:/data/inventory.db}
       PORT: "3001"
       BETTER_AUTH_URL: http://api:3001
       # Override remaining vars from .env file or env:
@@ -43,6 +43,29 @@ services:
       timeout: 5s
       retries: 3
 
+
+  # Optional PostgreSQL container — run with: docker compose --profile postgres up -d
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    profiles:
+      - postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rackmap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rackmap123}
+      POSTGRES_DB: ${POSTGRES_DB:-rackmap}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rackmap} -d ${POSTGRES_DB:-rackmap}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   web:
     build:
       context: .
@@ -61,6 +84,7 @@ services:
 
 volumes:
   sqlite_data:
+  pgdata:
   backups:
 
 networks:
