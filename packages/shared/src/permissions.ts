@@ -27,7 +27,7 @@ export const statement = {
   lookup: ["create", "update", "delete"],
   tag: ["create", "delete"],
   audit: ["read"],
-  vault: ["init", "unlock", "status"],
+  vault: ["init", "unlock", "status", "reset"],
 } as const;
 
 export const ac = createAccessControl(statement);
@@ -67,7 +67,7 @@ export const admin = ac.newRole({
   lookup: ["create", "update", "delete"],
   tag: ["create", "delete"],
   audit: ["read"],
-  vault: ["init", "unlock", "status"],
+  vault: ["init", "unlock", "status", "reset"],
 });
 
 export const roles = { admin, editor, viewer };

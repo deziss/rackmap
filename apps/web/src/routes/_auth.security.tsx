@@ -6,7 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ShieldCheck, Key, Trash2, Plus, User } from "lucide-react";
+import { ShieldCheck, Key, Trash2, Plus, User, KeyRound, Lock, Unlock, ShieldAlert, RotateCcw } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchVaultStatus, lockVault, vaultKeys } from "@/lib/queries";
+import { VaultUnlockDialog } from "@/components/vault-unlock-dialog";
 
 export const Route = createFileRoute("/_auth/security")({
   component: SecurityPage,
@@ -33,6 +36,7 @@ function SecurityPage() {
       <ProfileSection user={session?.user ?? null} />
       <ChangePasswordSection />
       <TwoFactorSection enabled={!!(session?.user as { twoFactorEnabled?: boolean })?.twoFactorEnabled} />
+      <VaultManagementSection />
       <ApiKeysSection />
     </div>
   );
@@ -362,6 +366,107 @@ function ApiKeysSection() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function VaultManagementSection() {
+  const queryClient = useQueryClient();
+  const { data: session } = authClient.useSession();
+  const isAdmin = session?.user?.role === "admin";
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const { data: status, isLoading } = useQuery({
+    queryKey: vaultKeys.status,
+    queryFn: fetchVaultStatus,
+  });
+
+  const isInitialized = status?.isInitialized ?? false;
+  const isUnlocked = status?.isUnlocked ?? false;
+  const isEnvUnlocked = status?.isEnvUnlocked ?? false;
+
+  async function handleLock() {
+    try {
+      await lockVault();
+      toast.info("Security Vault locked");
+      queryClient.invalidateQueries({ queryKey: vaultKeys.status });
+    } catch (e: unknown) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-card/60 backdrop-blur-md p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <KeyRound className="h-4 w-4" />
+        <span className="font-medium text-sm">Master Credential Vault</span>
+        <div className="ml-auto flex items-center gap-2">
+          {isLoading ? (
+            <Badge variant="outline" className="text-xs">Checking…</Badge>
+          ) : !isInitialized ? (
+            <Badge variant="outline" className="text-xs text-blue-500 border-blue-500/20 bg-blue-500/10">
+              Not Initialized
+            </Badge>
+          ) : isUnlocked ? (
+            <Badge variant="outline" className="text-xs text-emerald-500 border-emerald-500/20 bg-emerald-500/10 gap-1">
+              <ShieldCheck className="h-3 w-3" /> Unlocked
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/20 bg-amber-500/10 gap-1">
+              <ShieldAlert className="h-3 w-3" /> Locked
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Zero-knowledge envelope encryption for target server SSH credentials. The master passphrase derives an AES-256 KEK in-memory and is never stored unencrypted.
+      </p>
+
+      {isUnlocked && (
+        <div className="p-3 rounded-lg bg-muted/40 border text-xs space-y-1 text-muted-foreground">
+          <div className="flex justify-between">
+            <span>Session:</span>
+            <span className="font-medium text-emerald-500">
+              {isEnvUnlocked ? "Automated Server Unlock (.env)" : "Active In-Memory Session"}
+            </span>
+          </div>
+          {status?.expiresAt && (
+            <div className="flex justify-between">
+              <span>Auto-locks at:</span>
+              <span className="font-mono">{new Date(status.expiresAt).toLocaleTimeString()}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 pt-1">
+        {!isUnlocked ? (
+          <Button size="sm" className="gap-1.5" onClick={() => setDialogOpen(true)}>
+            <Unlock className="h-3.5 w-3.5" />
+            {!isInitialized ? "Set Master Passphrase" : "Unlock Vault"}
+          </Button>
+        ) : (
+          <>
+            <Button size="sm" variant="destructive" className="gap-1.5" onClick={handleLock}>
+              <Lock className="h-3.5 w-3.5" />
+              Lock Vault
+            </Button>
+            {isAdmin && (
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setDialogOpen(true)}>
+                <RotateCcw className="h-3.5 w-3.5" />
+                Manage / Reset Passphrase
+              </Button>
+            )}
+          </>
+        )}
+      </div>
+
+      <VaultUnlockDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: vaultKeys.status })}
+      />
     </div>
   );
 }

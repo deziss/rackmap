@@ -108,7 +108,7 @@ Default admin credentials are set by `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`.
 | Variable | Description |
 |----------|-------------|
 | `BETTER_AUTH_SECRET` | Random secret for session signing (≥32 chars). Generate: `openssl rand -base64 32` |
-| `APP_ENCRYPTION_KEY` | 32-byte base64 key for encrypting SSH passwords. Generate: `openssl rand -base64 32` |
+| `APP_ENCRYPTION_KEY` or `APP_ENCRYPTION_PASSPHRASE` | Master key or passphrase for database at-rest encryption (AES-256-GCM). Accepts 32-byte base64 or any human-readable passphrase (min 8 chars). |
 
 ### Optional — Core
 
@@ -119,6 +119,7 @@ Default admin credentials are set by `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`.
 | `WEB_ORIGIN` | `http://localhost:5173` | URL of the web app (used for CORS + auth cookies) |
 | `SEED_ADMIN_EMAIL` | `admin@example.com` | First-run admin account email |
 | `SEED_ADMIN_PASSWORD` | `changeme123` | First-run admin account password |
+| `VAULT_PASSPHRASE` | — | Master Zero-Knowledge Credential Vault passphrase. When set in `.env`, automatically initializes/unlocks the vault at startup for background auto-discovery & SSH jobs. |
 
 ### Optional — Scheduler / Probing
 
@@ -155,6 +156,63 @@ Default admin credentials are set by `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`.
 | `SSH_IDLE_TIMEOUT_MS` | `300000` | Idle session timeout (5 min) |
 | `SSH_MAX_SESSION_MS` | `3600000` | Max session duration (1 hour) |
 | `SSH_MAX_CONCURRENT` | `5` | Max simultaneous SSH terminal sessions |
+---
+
+## 🔐 Encryption & Passphrase Guide
+
+RackMap uses a multi-tier cryptographic architecture to protect infrastructure credentials and server passwords.
+
+### Where and How to Set Encryption Passphrase
+
+You can configure encryption through two primary mechanisms:
+
+#### Tier 1: Application At-Rest Encryption (`APP_ENCRYPTION_KEY` / `APP_ENCRYPTION_PASSPHRASE`)
+- **Where to set**: In your root `.env` file (or environment variables in `docker-compose.yml`).
+- **How it works**: Encrypts sensitive fields in the database (server passwords, secrets) using AES-256-GCM (`v1.<iv>.<tag>.<cipher>`).
+- **Configuration Options**:
+  1. **Random Base64 (Recommended for maximum entropy)**:
+     ```bash
+     APP_ENCRYPTION_KEY=$(openssl rand -base64 32)
+     ```
+  2. **Custom Human-Readable Passphrase**:
+     ```bash
+     APP_ENCRYPTION_PASSPHRASE="YourSecurePassphraseHere123!"
+     # Or directly in APP_ENCRYPTION_KEY:
+     APP_ENCRYPTION_KEY="YourSecurePassphraseHere123!"
+     ```
+     RackMap automatically derives a deterministic 32-byte AES-256 key via SHA-256 when a human-readable passphrase is provided.
+
+#### Tier 2: Zero-Knowledge Credential Vault (`VAULT_PASSPHRASE` / UI)
+- **What it does**: Provides envelope encryption (`v2.<iv>.<tag>.<cipher>`) using PBKDF2 (100,000 iterations, SHA-512) to derive a 256-bit Key Encryption Key (KEK) that wraps an ephemeral 256-bit Data Encryption Key (DEK). The master passphrase is never stored on disk.
+- **Where to set**:
+  - **Option A: Automated Background Unlock (`.env`) — Recommended for Production**
+    Add `VAULT_PASSPHRASE` to your `.env` file:
+    ```bash
+    VAULT_PASSPHRASE="YourMasterVaultPassphraseHere!"
+    ```
+    When set, RackMap auto-initializes or unlocks the vault on API startup, allowing automated background tasks (hardware auto-discovery, scheduled metrics polling, log querying) to decrypt SSH credentials without operator intervention.
+  - **Option B: Interactive Web UI (Ephemeral Session)**
+    Leave `VAULT_PASSPHRASE` unset in `.env`. Operators unlock the vault interactively in the Web UI:
+    1. Navigate to **Security** (`/security`) or any Server Detail page (`/servers/:id`).
+    2. Click the **"Vault: Locked"** badge or **"Unlock Vault"** button.
+    3. Enter the master passphrase. The vault unlocks in-memory for 30 minutes and automatically re-locks thereafter.
+
+### Resetting a Forgotten Vault Passphrase
+
+If the master vault passphrase is lost or needs rotation:
+1. Navigate to **Security** (`http://localhost:8080/security`) or click the **Vault** badge in any server header.
+2. If the vault is locked, click **"Forgot passphrase? Reset vault"** (Admin-only).
+3. If the vault is currently unlocked, click **"Manage / Reset Passphrase"** → **"Reset / Re-key"**.
+4. Enter and confirm a new master passphrase (minimum 8 characters) and confirm reset.
+5. Alternatively, make an authenticated API call:
+   ```bash
+   curl -X POST http://localhost:3001/api/v1/vault/reset \
+     -H "Content-Type: application/json" \
+     -H "Cookie: better-auth.session_token=<admin-session>" \
+     -d '{"passphrase":"NewSecureMasterPassphrase!"}'
+   ```
+> **Note**: Resetting the vault generates a brand-new master DEK. Any server passwords previously encrypted under the old forgotten passphrase will need to be re-entered.
+
 
 ---
 

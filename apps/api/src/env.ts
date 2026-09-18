@@ -8,11 +8,9 @@ const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().default(3000),
   DATABASE_URL: z.string().default("file:./dev.db"),
-  APP_ENCRYPTION_KEY: z
-    .string()
-    .refine((v) => Buffer.from(v, "base64").length === 32, {
-      message: "APP_ENCRYPTION_KEY must be 32 bytes, base64-encoded (openssl rand -base64 32)",
-    }),
+  APP_ENCRYPTION_KEY: z.string().default(""),
+  APP_ENCRYPTION_PASSPHRASE: z.string().optional(),
+  VAULT_PASSPHRASE: z.string().optional(),
   BETTER_AUTH_SECRET: z.string().min(16),
   BETTER_AUTH_URL: z.string().default("http://localhost:5173"),
   WEB_ORIGIN: z.string().default("http://localhost:5173"),
@@ -63,7 +61,16 @@ const EnvSchema = z.object({
   SSH_MAX_SESSION_MS: z.coerce.number().int().min(60_000).default(3_600_000),
   SSH_MAX_CONCURRENT: z.coerce.number().int().min(1).default(5),
   SSH_HOST_POLICY: z.enum(["accept-any", "tofu"]).default("accept-any"),
-});
+}).refine(
+  (data) => {
+    const raw = (data.APP_ENCRYPTION_PASSPHRASE || data.APP_ENCRYPTION_KEY || "").trim();
+    return raw.length >= 8;
+  },
+  {
+    message: "Either APP_ENCRYPTION_KEY or APP_ENCRYPTION_PASSPHRASE must be provided (at least 8 characters or 32-byte base64)",
+    path: ["APP_ENCRYPTION_KEY"],
+  }
+);
 
 const parsed = EnvSchema.safeParse(process.env);
 if (!parsed.success) {

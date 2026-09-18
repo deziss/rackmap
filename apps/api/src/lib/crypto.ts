@@ -1,11 +1,39 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { env } from "../env.js";
 
 const ALGO = "aes-256-gcm";
 const VERSION = "v1";
 
-function key() {
-  return Buffer.from(env.APP_ENCRYPTION_KEY, "base64");
+/**
+ * Returns a 32-byte Buffer key for AES-256-GCM encryption.
+ * Supports:
+ * 1. Base64 32-byte key (standard openssl rand -base64 32, 44 chars ending in =)
+ * 2. Arbitrary human-readable passphrase (derived via SHA-256)
+ */
+export function getAppEncryptionKey(): Buffer {
+  const raw = (env.APP_ENCRYPTION_PASSPHRASE || env.APP_ENCRYPTION_KEY || "").trim();
+  if (!raw) {
+    throw new Error("Neither APP_ENCRYPTION_KEY nor APP_ENCRYPTION_PASSPHRASE is configured");
+  }
+
+  // If provided as a 32-byte base64 string, preserve exact binary key for backwards compatibility
+  if (raw.length === 44 && /^[A-Za-z0-9+/]{43}=$/.test(raw)) {
+    try {
+      const b64 = Buffer.from(raw, "base64");
+      if (b64.length === 32 && b64.toString("base64") === raw) {
+        return b64;
+      }
+    } catch {
+      // fallback to sha256
+    }
+  }
+
+  // Otherwise, derive 32-byte AES key from passphrase
+  return createHash("sha256").update(raw, "utf8").digest();
+}
+
+function key(): Buffer {
+  return getAppEncryptionKey();
 }
 
 /** Encrypt a plaintext password. Returns "v1.<iv_hex>.<tag_hex>.<ct_hex>" */

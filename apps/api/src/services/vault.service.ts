@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { prisma } from "../db.js";
+import { env } from "../env.js";
 import { encryptSecret, decryptSecret } from "../lib/crypto.js";
 
 const PBKDF2_ITERATIONS = 100_000;
@@ -7,6 +8,8 @@ const PBKDF2_KEYLEN = 32; // 256-bit KEK
 const PBKDF2_DIGEST = "sha512";
 const VERIFIER_MESSAGE = "rackmap-vault-verifier-v1";
 const DEFAULT_AUTO_LOCK_MINUTES = 30;
+
+export const SYSTEM_SESSION_TOKEN = "__env_system_vault__";
 
 // Ephemeral in-memory unlocked vault keys indexed by session token
 interface UnlockedSession {
@@ -50,14 +53,26 @@ export async function getVaultStatus(sessionToken?: string) {
 
   let isUnlocked = false;
   let expiresAt: string | null = null;
+  const isEnvUnlocked = activeSessions.has(SYSTEM_SESSION_TOKEN);
 
   if (sessionToken && activeSessions.has(sessionToken)) {
     const session = activeSessions.get(sessionToken)!;
     if (Date.now() < session.expiresAt) {
       isUnlocked = true;
-      expiresAt = new Date(session.expiresAt).toISOString();
+      expiresAt =
+        session.expiresAt >= Number.MAX_SAFE_INTEGER - 10000
+          ? null
+          : new Date(session.expiresAt).toISOString();
     } else {
       activeSessions.delete(sessionToken);
+    }
+  }
+
+  if (!isUnlocked && isEnvUnlocked) {
+    const session = activeSessions.get(SYSTEM_SESSION_TOKEN)!;
+    if (Date.now() < session.expiresAt) {
+      isUnlocked = true;
+      expiresAt = null;
     }
   }
 
@@ -66,6 +81,7 @@ export async function getVaultStatus(sessionToken?: string) {
     isUnlocked,
     autoLockMinutes: DEFAULT_AUTO_LOCK_MINUTES,
     expiresAt,
+    isEnvUnlocked,
   };
 }
 
@@ -135,9 +151,63 @@ export async function unlockVault(passphrase: string, sessionToken: string) {
   };
 }
 
+/**
+ * Reset/re-initialize the master vault with a new passphrase.
+ * Allows recovery if an admin forgot their vault passphrase.
+ */
+export async function resetVault(passphrase: string, sessionToken?: string) {
+  if (!passphrase || passphrase.length < 8) {
+    throw new Error("Vault passphrase must be at least 8 characters long");
+  }
+
+  const salt = crypto.randomBytes(16);
+  const kek = deriveKek(passphrase, salt);
+  const verifier = computeVerifier(kek);
+
+  // Generate a brand new 256-bit DEK
+  const dek = crypto.randomBytes(32);
+  const encryptedDek = aesEncrypt(kek, dek);
+
+  await prisma.systemVault.upsert({
+    where: { id: 1 },
+    update: {
+      salt: salt.toString("hex"),
+      verifier,
+      encryptedDek,
+    },
+    create: {
+      id: 1,
+      salt: salt.toString("hex"),
+      verifier,
+      encryptedDek,
+    },
+  });
+
+  // Clear stale in-memory sessions
+  activeSessions.clear();
+
+  if (sessionToken) {
+    activeSessions.set(sessionToken, {
+      dek,
+      expiresAt: Date.now() + DEFAULT_AUTO_LOCK_MINUTES * 60 * 1000,
+    });
+  }
+
+  // If env.VAULT_PASSPHRASE matches the new passphrase, also unlock system session
+  if (env.VAULT_PASSPHRASE && env.VAULT_PASSPHRASE === passphrase) {
+    activeSessions.set(SYSTEM_SESSION_TOKEN, {
+      dek,
+      expiresAt: Number.MAX_SAFE_INTEGER,
+    });
+  }
+
+  return { ok: true };
+}
+
 /** Lock vault for the current session */
 export function lockVault(sessionToken: string) {
   activeSessions.delete(sessionToken);
+  activeSessions.delete(SYSTEM_SESSION_TOKEN);
   return { ok: true };
 }
 
@@ -149,6 +219,19 @@ export function lockVault(sessionToken: string) {
 export function encryptPasswordWithVault(plaintext: string, sessionToken?: string): string {
   if (sessionToken && activeSessions.has(sessionToken)) {
     const session = activeSessions.get(sessionToken)!;
+    if (Date.now() < session.expiresAt) {
+      const encrypted = aesEncrypt(session.dek, Buffer.from(plaintext, "utf8"));
+      return `v2.${encrypted}`;
+    }
+  }
+  if (activeSessions.has(SYSTEM_SESSION_TOKEN)) {
+    const session = activeSessions.get(SYSTEM_SESSION_TOKEN)!;
+    if (Date.now() < session.expiresAt) {
+      const encrypted = aesEncrypt(session.dek, Buffer.from(plaintext, "utf8"));
+      return `v2.${encrypted}`;
+    }
+  }
+  for (const session of activeSessions.values()) {
     if (Date.now() < session.expiresAt) {
       const encrypted = aesEncrypt(session.dek, Buffer.from(plaintext, "utf8"));
       return `v2.${encrypted}`;
@@ -173,14 +256,22 @@ export async function decryptPasswordWithVault(ciphertext: string, sessionToken?
         if (dec) return dec.toString("utf8");
       }
     }
-    // 2. Fallback: Check if any active user session in memory has an unlocked DEK
+    // 2. Check system session from VAULT_PASSPHRASE environment
+    if (activeSessions.has(SYSTEM_SESSION_TOKEN)) {
+      const session = activeSessions.get(SYSTEM_SESSION_TOKEN)!;
+      if (Date.now() < session.expiresAt) {
+        const dec = aesDecrypt(session.dek, payload);
+        if (dec) return dec.toString("utf8");
+      }
+    }
+    // 3. Fallback: Check if any active user session in memory has an unlocked DEK
     for (const session of activeSessions.values()) {
       if (Date.now() < session.expiresAt) {
         const dec = aesDecrypt(session.dek, payload);
         if (dec) return dec.toString("utf8");
       }
     }
-    // 3. Fallback: check if fallback APP_ENCRYPTION_KEY can decrypt
+    // 4. Fallback: check if fallback APP_ENCRYPTION_KEY can decrypt
     const fallback = decryptSecret(ciphertext);
     if (fallback) return fallback;
     throw new Error("Vault is locked. Enter your vault passphrase to decrypt this password.");
@@ -188,4 +279,38 @@ export async function decryptPasswordWithVault(ciphertext: string, sessionToken?
 
   // v1 legacy format uses APP_ENCRYPTION_KEY
   return decryptSecret(ciphertext);
+}
+
+/**
+ * Automatically initializes or unlocks the vault at boot
+ * if VAULT_PASSPHRASE is specified in .env.
+ */
+export async function autoInitVaultFromEnv() {
+  const passphrase = env.VAULT_PASSPHRASE?.trim();
+  if (!passphrase) {
+    return;
+  }
+
+  try {
+    const vault = await prisma.systemVault.findFirst({ where: { id: 1 } });
+    if (!vault) {
+      console.log("[Vault] Initializing master vault from VAULT_PASSPHRASE environment variable...");
+      await initVault(passphrase, SYSTEM_SESSION_TOKEN);
+      const session = activeSessions.get(SYSTEM_SESSION_TOKEN);
+      if (session) {
+        session.expiresAt = Number.MAX_SAFE_INTEGER;
+      }
+      console.log("[Vault] Master vault initialized and unlocked via environment.");
+    } else {
+      console.log("[Vault] Unlocking master vault from VAULT_PASSPHRASE environment variable...");
+      await unlockVault(passphrase, SYSTEM_SESSION_TOKEN);
+      const session = activeSessions.get(SYSTEM_SESSION_TOKEN);
+      if (session) {
+        session.expiresAt = Number.MAX_SAFE_INTEGER;
+      }
+      console.log("[Vault] Master vault successfully unlocked via environment.");
+    }
+  } catch (err: any) {
+    console.warn(`[Vault] Warning: VAULT_PASSPHRASE could not unlock existing vault: ${err.message}`);
+  }
 }

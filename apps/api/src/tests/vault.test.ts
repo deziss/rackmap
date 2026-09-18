@@ -4,10 +4,12 @@ import {
   initVault,
   unlockVault,
   lockVault,
+  resetVault,
   getVaultStatus,
   encryptPasswordWithVault,
   decryptPasswordWithVault,
 } from "../services/vault.service.js";
+import { getAppEncryptionKey, encryptSecret, decryptSecret } from "../lib/crypto.js";
 
 describe("vault.service", () => {
   beforeEach(async () => {
@@ -58,5 +60,33 @@ describe("vault.service", () => {
 
     const status = await getVaultStatus("sessionA");
     expect(status.isUnlocked).toBe(false);
+  });
+
+  it("resets vault with a new passphrase when requested", async () => {
+    await initVault("OldPassphrase123!", "sessionA");
+    const resetRes = await resetVault("NewPassphrase456!", "sessionReset");
+    expect(resetRes.ok).toBe(true);
+
+    // Old passphrase fails
+    await expect(unlockVault("OldPassphrase123!", "sessionX")).rejects.toThrow("Invalid vault passphrase");
+
+    // New passphrase succeeds
+    const unlockRes = await unlockVault("NewPassphrase456!", "sessionX");
+    expect(unlockRes.ok).toBe(true);
+
+    const status = await getVaultStatus("sessionX");
+    expect(status.isUnlocked).toBe(true);
+  });
+
+  it("supports symmetric encryption and decryption with key derivation", () => {
+    const key = getAppEncryptionKey();
+    expect(key).toBeInstanceOf(Buffer);
+    expect(key.length).toBe(32);
+
+    const ciphertext = encryptSecret("MyTestPassword");
+    expect(ciphertext.startsWith("v1.")).toBe(true);
+
+    const plaintext = decryptSecret(ciphertext);
+    expect(plaintext).toBe("MyTestPassword");
   });
 });

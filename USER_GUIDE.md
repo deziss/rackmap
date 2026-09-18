@@ -419,12 +419,61 @@ Both can be active simultaneously. Notifications fire after `STATUS_FLIP_THRESHO
 
 ---
 
-## Security Settings
+## Security Settings & Credential Vault
 
-Sidebar → **Security** (your own account settings)
+Navigate to **Security** via the bottom sidebar or visit `/security`.
 
-- **Change password** — enter current password and new password
-- **Active sessions** — view and revoke other active sessions
+### 1. Master Credential Vault & Encryption Passphrases
+
+RackMap employs two tiers of military-grade encryption to protect target server credentials and access keys:
+
+#### Where and How to Set Encryption Passphrase
+
+| Encryption Tier | Configuration Location | Purpose | Accepted Formats |
+|---|---|---|---|
+| **Tier 1: At-Rest Encryption** | `.env` (`APP_ENCRYPTION_KEY` or `APP_ENCRYPTION_PASSPHRASE`) | Encrypts server passwords in the database at rest (AES-256-GCM, format `v1.<iv>.<tag>.<cipher>`) | 32-byte base64 string (`openssl rand -base64 32`) **OR** any human-readable passphrase (min 8 chars) |
+| **Tier 2: Zero-Knowledge Vault** | `.env` (`VAULT_PASSPHRASE`) **or** Web UI (`/security` & `/servers/:id`) | Master envelope encryption (PBKDF2/AES-256, format `v2.<iv>.<tag>.<cipher>`). Derives an in-memory KEK and ephemeral 256-bit DEK. | Arbitrary master passphrase string (min 8 chars) |
+
+#### Setting Encryption in `.env`
+In your `.env` file (or `docker-compose.yml`):
+```bash
+# Tier 1: Application At-Rest Key or Passphrase
+APP_ENCRYPTION_KEY=y9ThjEzTQ1UmAM2KrEe3ALbjAijKY2yG4icDuiylcGM=
+# Or use a custom human-readable passphrase:
+# APP_ENCRYPTION_PASSPHRASE="MySecureAppPassword123!"
+
+# Tier 2: Master Credential Vault Passphrase (Optional for headless auto-unlock)
+VAULT_PASSPHRASE="MyMasterVaultPassphrase2026!"
+```
+
+#### Benefits of `VAULT_PASSPHRASE` in `.env`
+- **Headless Auto-Unlock**: The API automatically unlocks the master vault on startup.
+- **Continuous Background Tasks**: Automated hardware auto-discovery, scheduled ATOP metrics collection, and background SSH jobs can decrypt server credentials without requiring an operator to manually unlock the vault in a browser every 30 minutes.
+
+#### Interactive Unlocking via Web UI
+If `VAULT_PASSPHRASE` is left unset in `.env`:
+1. The vault defaults to locked when the server boots.
+2. In the Web UI, click the **"Vault: Locked"** badge on the **Security** page or the header of any **Server Detail** page (`/servers/:id`).
+3. Enter your master passphrase. The session remains authorized for 30 minutes before auto-locking.
+
+#### Resetting or Re-Keying the Vault
+If an administrator forgets the master vault passphrase or needs to rotate keys:
+1. Open the **Credential Vault** modal on `/security` or `/servers/:id`.
+2. Click **"Forgot passphrase? Reset vault"** (if locked) or **"Manage / Reset Passphrase" → "Reset / Re-key"** (if unlocked).
+3. Enter and confirm the new master passphrase (minimum 8 characters).
+4. Click **"Reset Master Vault"**. The system generates a fresh salt, KEK, and DEK.
+*(Note: Any server passwords encrypted under a previous lost passphrase will need to be re-entered).*
+
+---
+
+### 2. Account Security & Two-Factor Authentication (2FA)
+
+- **Change Password**: Update your local account password anytime.
+- **Two-Factor Authentication (2FA / TOTP)**:
+  1. Click **"Enable 2FA"**.
+  2. Scan the generated QR code in Google Authenticator, Authy, or 1Password.
+  3. Enter the 6-digit code to activate two-factor authentication.
+- **API Keys**: Generate scoped programmatic tokens for external automations and scripts.
 
 ---
 

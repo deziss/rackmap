@@ -60,6 +60,7 @@ export const AUDIT_ACTIONS = [
   "vault.init",
   "vault.unlock",
   "vault.lock",
+  "vault.reset",
   "auth.sign_in",
   "auth.sign_in_failed",
   "auth.sign_out",

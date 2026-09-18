@@ -8,6 +8,7 @@ import { startScheduler } from "./services/scheduler.js";
 import { scheduleBackup } from "./services/backup.service.js";
 import { setupWebSocket } from "./ws/ssh.ws.js";
 import { startAlertScheduler } from "./services/alert.service.js";
+import { autoInitVaultFromEnv } from "./services/vault.service.js";
 import type { Server } from "node:http";
 
 async function main() {
@@ -15,6 +16,9 @@ async function main() {
   if (env.DATABASE_URL.startsWith("file:")) {
     await prisma.$queryRawUnsafe("PRAGMA journal_mode=WAL");
   }
+
+  // Auto-initialize or unlock Master Credential Vault if VAULT_PASSPHRASE is configured in .env
+  await autoInitVaultFromEnv();
 
   const app = createApp();
 

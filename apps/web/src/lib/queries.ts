@@ -185,6 +185,13 @@ export function lockVault() {
   });
 }
 
+export function resetVault(passphrase: string) {
+  return apiFetch<{ ok: boolean }>("/api/v1/vault/reset", {
+    method: "POST",
+    body: JSON.stringify({ passphrase }),
+  });
+}
+
 export const serviceKeys = {
   all: ["services"] as const,
   list: (params: Record<string, unknown>) => ["services", "list", params] as const,

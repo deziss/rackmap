@@ -3,8 +3,8 @@ import { zValidator } from "@hono/zod-validator";
 import { requireSession } from "../../middleware/session.js";
 import { requirePermission } from "../../middleware/require-permission.js";
 import { writeAudit } from "../../lib/audit.js";
-import { VaultInitInput, VaultUnlockInput } from "@inv/shared";
-import { getVaultStatus, initVault, unlockVault, lockVault } from "../../services/vault.service.js";
+import { VaultInitInput, VaultUnlockInput, VaultResetInput } from "@inv/shared";
+import { getVaultStatus, initVault, unlockVault, lockVault, resetVault } from "../../services/vault.service.js";
 
 function getSessionToken(c: any): string {
   // Better-auth uses cookie better-auth.session_token
@@ -68,6 +68,30 @@ export const vaultRoutes = new Hono()
         return c.json(result);
       } catch (err: any) {
         return c.json({ error: { code: "INVALID_PASSPHRASE", message: err.message } }, 401);
+      }
+    },
+  )
+
+  // POST /vault/reset (admin only)
+  .post(
+    "/reset",
+    requirePermission({ vault: ["reset"] }),
+    zValidator("json", VaultResetInput),
+    async (c) => {
+      const { passphrase } = c.req.valid("json");
+      const token = getSessionToken(c);
+      const user = c.get("user");
+      try {
+        const result = await resetVault(passphrase, token);
+        await writeAudit({
+          ctx: { actorId: user?.id, actorEmail: user?.email, ip: c.req.header("x-forwarded-for") },
+          category: "security",
+          action: "vault.reset",
+          entity: "vault",
+        });
+        return c.json(result);
+      } catch (err: any) {
+        return c.json({ error: { code: "VAULT_ERROR", message: err.message } }, 400);
       }
     },
   )

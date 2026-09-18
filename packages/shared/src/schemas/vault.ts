@@ -5,6 +5,7 @@ export const VaultStatusResponse = z.object({
   isUnlocked: z.boolean(),
   autoLockMinutes: z.number(),
   expiresAt: z.string().nullable(),
+  isEnvUnlocked: z.boolean().optional(),
 });
 export type VaultStatusResponse = z.infer<typeof VaultStatusResponse>;
 
@@ -17,3 +18,8 @@ export const VaultUnlockInput = z.object({
   passphrase: z.string().min(1, "Passphrase is required").max(128),
 });
 export type VaultUnlockInput = z.infer<typeof VaultUnlockInput>;
+
+export const VaultResetInput = z.object({
+  passphrase: z.string().min(8, "Passphrase must be at least 8 characters").max(128),
+});
+export type VaultResetInput = z.infer<typeof VaultResetInput>;
