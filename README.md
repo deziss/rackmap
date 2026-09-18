@@ -140,6 +140,15 @@ Default admin credentials are set by `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`.
 | `NOTIFY_TELEGRAM_BOT_TOKEN` | — | Telegram bot token |
 | `NOTIFY_TELEGRAM_CHAT_ID` | — | Telegram chat/group ID |
 
+### Optional — Licensing & Subscription (Licencia)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LICENCIA_URL` | — | Base URL of Licencia server (e.g. `http://host.docker.internal:3003` or `https://licencia.example.com`) |
+| `LICENCIA_API_KEY` | — | Tenant API Key for Licencia API (`lic_live_...`) |
+| `LICENCIA_LICENSE_KEY` | — | Master License Key (`LIC-PRO-...`) to auto-activate on container startup |
+| `LICENCIA_PUBLIC_KEY` | — | Ed25519 SPKI Public Key for zero-network air-gapped license token verification |
+
 ### Optional — Live Metrics
 
 | Variable | Default | Description |

@@ -222,7 +222,11 @@ export async function activateLicense(input: {
 
       return getLicenseStatus();
     } catch (e: any) {
-      throw new AppError("VALIDATION_ERROR", `Failed to validate license with Licencia: ${e.message}`, 400);
+      if (e.message?.includes("fetch failed") || e.message?.includes("ECONNREFUSED") || e.message?.includes("ENOTFOUND")) {
+        console.warn(`[Licencia] Server ${env.LICENCIA_URL} unreachable (${e.message}). Falling back to offline key activation.`);
+      } else {
+        throw new AppError("VALIDATION_ERROR", `Failed to validate license with Licencia: ${e.message}`, 400);
+      }
     }
   }
 

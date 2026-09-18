@@ -37,6 +37,11 @@ services:
       # Live metrics via agentless SSH exec
       METRICS_ENABLED: ${METRICS_ENABLED:-true}
       METRICS_SSH_TIMEOUT_MS: ${METRICS_SSH_TIMEOUT_MS:-10000}
+      # Licencia Licensing & Subscription
+      LICENCIA_URL: ${LICENCIA_URL:-http://host.docker.internal:3003}
+      LICENCIA_API_KEY: ${LICENCIA_API_KEY:-}
+      LICENCIA_PUBLIC_KEY: ${LICENCIA_PUBLIC_KEY:-}
+      LICENCIA_LICENSE_KEY: ${LICENCIA_LICENSE_KEY:-}
     volumes:
       - sqlite_data:/data
       - backups:/backups
