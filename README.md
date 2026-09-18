@@ -10,7 +10,11 @@ Full-stack infrastructure inventory and monitoring platform. Track bare-metal an
 
 ## Features
 
-- **Server CRUD** — hostname, IP, SSH port, credentials (AES-256 encrypted at rest), tags, metadata
+- **Server CRUD & Specifications** — hostname, IP, SSH port, credentials (AES-256 encrypted at rest), tags, metadata with dedicated columns for CPU, RAM, Storage, and OS
+- **OS User & Sudoers Management** — create, update, lock/unlock, and delete Linux accounts with full Linux options (-m, -r, custom shells, secondary groups, custom UID/GID, sudoers rules) and root/SSH safeguards
+- **Universal Numbered Pagination** — rows-per-page selector (10, 25, 50, 100), range display, and numbered page buttons across Servers, Services, SSL, Audit, Users, and OS Users tables
+- **Forensic Logs & Auto-Query** — query systemd journalctl and syslog with selectable auto-refresh intervals (5s, 10s, 30s, 60s, manual) and live indicators
+- **Visual Audit Inspection** — before/after JSON diff inspection dialogs for all audit events
 - **Live status monitoring** — TCP ping probe on a configurable interval; up/down history; webhook + Telegram alerts
 - **Live metrics** — CPU load, memory, disk, network I/O, per-process tables — collected via one SSH exec command (no agent install)
 - **Multi-vendor GPU metrics** — NVIDIA (nvidia-smi), AMD sysfs (amdgpu kernel driver), AMD ROCm, Intel (xpu-smi)
@@ -219,14 +223,28 @@ POST   /api/auth/sign-in/email
 POST   /api/auth/sign-out
 
 # Servers
-GET    /api/v1/servers              List + search
+GET    /api/v1/servers              List + search + paginated (page, limit)
 POST   /api/v1/servers              Create (editor+)
 GET    /api/v1/servers/:id          Detail
 PATCH  /api/v1/servers/:id          Update (editor+)
 DELETE /api/v1/servers/:id          Soft-delete (editor+)
 GET    /api/v1/servers/:id/metrics  Live SSH metrics (editor+)
-GET    /api/v1/servers/export.xlsx  Export to Excel
-GET    /api/v1/servers/export.json  Export to JSON
+POST   /api/v1/servers/:id/auto-discover  Auto-detect hardware and persist CPU, RAM, Storage, OS
+GET    /api/v1/servers/export.xlsx  Export to Excel (includes CPU, RAM, Storage, OS)
+GET    /api/v1/servers/export.json  Export to JSON (includes CPU, RAM, Storage, OS)
+
+# OS Users & Sudoers Management (editor+)
+GET    /api/v1/servers/:id/os-users            List local accounts, UIDs, shells, groups, sudo privileges
+POST   /api/v1/servers/:id/os-users            Create Linux user (shell, home, groups, -m, -r, sudo rules)
+PATCH  /api/v1/servers/:id/os-users/:username  Update shell, home, groups, password, lock/unlock, sudo rules
+DELETE /api/v1/servers/:id/os-users/:username  Delete user (-r remove home, -f force, root/SSH safeguards)
+PATCH  /api/v1/servers/:id/sudo-permission     Atomic sudoers rule update (/etc/sudoers.d/rackmap_*)
+
+# Logs & ATOP Forensics
+POST   /api/v1/servers/:id/logs                Query journalctl/syslog with priority, unit, and auto-query
+GET    /api/v1/servers/:id/atop/dates          List historical ATOP activity dates
+GET    /api/v1/servers/:id/atop/snapshots      Query ATOP interval snapshots
+GET    /api/v1/servers/:id/atop/top-processes  Extract top CPU/memory/disk processes per interval
 
 # Lookup tables (admin)
 GET/POST/PATCH/DELETE /api/v1/lookups/{cloud-providers,gpu-types,allocated-to,locations,server-types}

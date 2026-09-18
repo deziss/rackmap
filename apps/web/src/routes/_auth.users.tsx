@@ -1,3 +1,4 @@
+import { PaginationBar } from "@/components/pagination-bar";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -66,6 +67,13 @@ function UsersPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const allUsers = data ?? [];
+  const totalUsers = allUsers.length;
+  const totalPages = Math.ceil(totalUsers / pageSize) || 1;
+  const paginatedUsers = allUsers.slice((page - 1) * pageSize, page * pageSize);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
@@ -96,7 +104,7 @@ function UsersPage() {
             {isLoading && (
               <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">Loading…</td></tr>
             )}
-            {data?.map((user) => (
+            {paginatedUsers.map((user) => (
               <tr key={user.id} className="border-b border-white/5 last:border-0 hover:bg-white/4 transition-colors">
                 <td className="px-4 py-3 font-medium">{user.name}</td>
                 <td className="px-4 py-3 text-muted-foreground">{user.email}</td>
@@ -161,6 +169,21 @@ function UsersPage() {
             ))}
           </tbody>
         </table>
+        {totalUsers > 0 && (
+          <PaginationBar
+            page={page}
+            totalPages={totalPages}
+            totalItems={totalUsers}
+            pageSize={pageSize}
+            onPageChange={(p: number) => setPage(p)}
+            onPageSizeChange={(s: number) => {
+              setPageSize(s);
+              setPage(1);
+            }}
+            pageSizeOptions={[10, 25, 50, 100]}
+            className="p-3 border-t border-white/10"
+          />
+        )}
       </div>
     </div>
   );

@@ -49,5 +49,7 @@ export const SslStatusListResponse = z.object({
   items: z.array(SslStatusDto),
   nextCursor: z.number().int().nullable(),
   total: z.number().int(),
+  page: z.number().int().optional(),
+  totalPages: z.number().int().optional(),
 });
 export type SslStatusListResponse = z.infer<typeof SslStatusListResponse>;

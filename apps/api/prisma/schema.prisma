@@ -231,6 +231,7 @@ model Server {
   updatedAt       DateTime        @updatedAt
   updatedByEmail  String?
   osType          String?
+  disk            String?
   isPrivateIp     Boolean         @default(false)
   purpose         String?
   createdBy       String?

@@ -1,3 +1,4 @@
+import { PaginationBar } from "@/components/pagination-bar";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchSslList, scanAllSsl, scanSslDomain, deleteSslDomain, sslKeys } from "@/lib/queries";
@@ -22,14 +23,14 @@ function SslPage() {
   const isAdmin = role === "admin";
 
   const [includeDeleted, setIncludeDeleted] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
   const [sortBy, setSortBy] = useState<string>("id");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [cursorHistory, setCursorHistory] = useState<number[]>([]);
-  const currentCursor = cursorHistory.length > 0 ? cursorHistory[cursorHistory.length - 1] : undefined;
 
   const { data, isLoading } = useQuery({
-    queryKey: sslKeys.list({ cursor: currentCursor, limit: 50, sortBy, sortDir, includeDeleted }),
-    queryFn: () => fetchSslList({ cursor: currentCursor, limit: 50, sortBy, sortDir, includeDeleted }),
+    queryKey: sslKeys.list({ page, limit, sortBy, sortDir, includeDeleted }),
+    queryFn: () => fetchSslList({ page, limit, sortBy, sortDir, includeDeleted }),
   });
 
   const handleSort = (key: string) => {
@@ -39,7 +40,7 @@ function SslPage() {
       setSortBy(key);
       setSortDir("asc");
     }
-    setCursorHistory([]);
+    setPage(1);
   };
 
   const scanAllMutation = useMutation({
@@ -97,7 +98,7 @@ function SslPage() {
                 checked={includeDeleted}
                 onChange={(e) => {
                   setIncludeDeleted(e.target.checked);
-                  setCursorHistory([]);
+                  setPage(1);
                 }}
                 className="accent-primary"
               />
@@ -222,33 +223,21 @@ function SslPage() {
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-between mt-4">
-          <p className="text-sm text-muted-foreground">
-            {data?.items.length ? `Showing ${data.items.length} domains` : "No domains"}
-          </p>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={cursorHistory.length === 0}
-              onClick={() => setCursorHistory((prev) => prev.slice(0, -1))}
-            >
-              Previous
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!data?.nextCursor}
-              onClick={() => {
-                if (data?.nextCursor) {
-                  setCursorHistory((prev) => [...prev, data.nextCursor!]);
-                }
-              }}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
+        {data && (
+          <PaginationBar
+            page={page}
+            totalPages={data.totalPages ?? Math.ceil(data.total / limit) ?? 1}
+            totalItems={data.total}
+            pageSize={limit}
+            onPageChange={(p: number) => setPage(p)}
+            onPageSizeChange={(s: number) => {
+              setLimit(s);
+              setPage(1);
+            }}
+            pageSizeOptions={[10, 25, 50, 100]}
+            className="mt-4 border-t pt-2"
+          />
+        )}
       </div>
     </div>
   );

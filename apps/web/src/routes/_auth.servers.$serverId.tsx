@@ -41,6 +41,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SshTerminal } from "@/components/ssh-terminal";
 import { VaultUnlockDialog } from "@/components/vault-unlock-dialog";
 import { SudoPermissionDialog } from "@/components/sudo-permission-dialog";
+import { PaginationBar } from "@/components/pagination-bar";
+import { CreateOsUserDialog, EditOsUserDialog, DeleteOsUserDialog } from "@/components/os-user-dialogs";
 import { AtopProcessModal } from "@/components/atop-process-modal";
 import { AddSshKeyDialog } from "@/components/add-ssh-key-dialog";
 import { RequestAccessButton } from "@/components/request-access-button";
@@ -80,6 +82,8 @@ import {
   Clock,
   RotateCcw,
   Sparkles,
+  UserPlus,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import type {
@@ -194,6 +198,9 @@ function ServerDetailPage() {
   const [selectedUserForSudo, setSelectedUserForSudo] = useState<OsUserInfo | null>(null);
   const [selectedAtopSnapshot, setSelectedAtopSnapshot] = useState<AtopIntervalSnapshot | null>(null);
   const [addSshKeyOpen, setAddSshKeyOpen] = useState(false);
+  const [createOsUserOpen, setCreateOsUserOpen] = useState(false);
+  const [selectedUserForEdit, setSelectedUserForEdit] = useState<OsUserInfo | null>(null);
+  const [selectedUserForDelete, setSelectedUserForDelete] = useState<OsUserInfo | null>(null);
 
   // Revealed password state
   const [revealedPwd, setRevealedPwd] = useState<string | null>(null);
@@ -240,14 +247,49 @@ function ServerDetailPage() {
     queryFn: () => fetchServer(id),
   });
 
+  const [discoveredHardware, setDiscoveredHardware] = useState<ServerHardwareInfo | null>(null);
+
+  const hw: ServerHardwareInfo | null = useMemo(() => {
+    if (discoveredHardware) return discoveredHardware;
+    if ((server as any)?.hardwareInfo) return (server as any).hardwareInfo;
+    if (server?.cpu || server?.ram || server?.osType) {
+      const cpuParts = (server.cpu || "").split(" - ");
+      const coresMatch = cpuParts[0]?.match(/(\\d+)\\s*Cores?/i);
+      const cores = coresMatch ? parseInt(coresMatch[1]!, 10) : 1;
+      const model = cpuParts[1] || server.cpu || "Generic CPU";
+      return {
+        cpuModel: model,
+        cpuCores: cores,
+        cpuThreads: cores,
+        ramBytes: 0,
+        ramFormatted: server.ram || "—",
+        osName: server.osType || "Linux",
+        kernel: "Linux",
+        arch: "x86_64",
+        hostname: server.hostname,
+        gpuCount: server.gpuCount ?? 0,
+        gpuModel: null,
+        disks: [],
+        uptime: "Active",
+      };
+    }
+    return null;
+  }, [discoveredHardware, server]);
+
   // Auto-discover mutation
   const discoverMutation = useMutation({
     mutationFn: () => autoDiscoverServer(id),
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
+      const hwInfo: ServerHardwareInfo = data?.hardware || data;
+      setDiscoveredHardware(hwInfo);
+      const cpuDesc = hwInfo?.cpuModel || (hwInfo?.cpuCores ? `${hwInfo.cpuCores} Cores` : "CPU");
+      const ramDesc = hwInfo?.ramFormatted || "RAM";
+      const diskCount = hwInfo?.disks?.length ?? 0;
       toast.success(
-        `Hardware discovery complete: ${data.hardware.cpuModel || data.hardware.cpuCores + " Cores"}, ${data.hardware.ramFormatted}, ${data.hardware.disks.length} Disks detected!`
+        `Hardware discovery complete: ${cpuDesc}, ${ramDesc}, ${diskCount} Disks detected!`
       );
       queryClient.invalidateQueries({ queryKey: serverKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: serverKeys.all });
     },
     onError: (err: any) => {
       if (err.code === "VAULT_LOCKED") {
@@ -313,7 +355,7 @@ function ServerDetailPage() {
     );
   }
 
-  const hw = (server as any).hardwareInfo as ServerHardwareInfo | null;
+  
 
   return (
     <div className="space-y-4 pb-12">
@@ -527,8 +569,6 @@ function ServerDetailPage() {
         <OverviewTab
           server={server}
           hw={hw}
-          onAutoDiscover={() => discoverMutation.mutate()}
-          isDiscovering={discoverMutation.isPending}
           onAddCustomKey={() => setAddSshKeyOpen(true)}
         />
       )}
@@ -551,6 +591,10 @@ function ServerDetailPage() {
       {activeTab === "users" && (
         <OsUsersTab
           serverId={id}
+          currentSshUser={server.username}
+          onAddUser={() => setCreateOsUserOpen(true)}
+          onEditUser={(user) => setSelectedUserForEdit(user)}
+          onDeleteUser={(user) => setSelectedUserForDelete(user)}
           onManageSudo={(user) => setSelectedUserForSudo(user)}
         />
       )}
@@ -589,6 +633,28 @@ function ServerDetailPage() {
         onOpenChange={(open) => !open && setSelectedUserForSudo(null)}
       />
 
+      <CreateOsUserDialog
+        serverId={id}
+        open={createOsUserOpen}
+        onOpenChange={setCreateOsUserOpen}
+      />
+
+      <EditOsUserDialog
+        serverId={id}
+        user={selectedUserForEdit}
+        currentSshUser={server?.username}
+        open={!!selectedUserForEdit}
+        onOpenChange={(open) => !open && setSelectedUserForEdit(null)}
+      />
+
+      <DeleteOsUserDialog
+        serverId={id}
+        user={selectedUserForDelete}
+        currentSshUser={server?.username}
+        open={!!selectedUserForDelete}
+        onOpenChange={(open) => !open && setSelectedUserForDelete(null)}
+      />
+
       <AtopProcessModal
         serverId={id}
         snapshot={selectedAtopSnapshot}
@@ -605,14 +671,10 @@ function ServerDetailPage() {
 function OverviewTab({
   server,
   hw,
-  onAutoDiscover,
-  isDiscovering,
   onAddCustomKey,
 }: {
   server: any;
   hw: ServerHardwareInfo | null;
-  onAutoDiscover: () => void;
-  isDiscovering: boolean;
   onAddCustomKey: () => void;
 }) {
   const { data: servicesData } = useQuery({
@@ -625,32 +687,6 @@ function OverviewTab({
 
   return (
     <div className="space-y-4">
-      {/* Auto-Discover Prompt if no hardware detected yet */}
-      {!hw && (
-        <div className="p-4 rounded-xl border border-blue-500/30 bg-blue-500/10 flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-500/20 text-blue-400">
-              <Wand2 className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">Hardware specifications not yet detected</h3>
-              <p className="text-xs text-muted-foreground">
-                Run agentless auto-discovery over SSH to extract CPU details, physical RAM, NVMe/SATA disks, GPUs, and OS kernel version.
-              </p>
-            </div>
-          </div>
-          <Button
-            size="sm"
-            onClick={onAutoDiscover}
-            disabled={isDiscovering}
-            className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            {isDiscovering ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
-            Discover & Auto-Fill Hardware
-          </Button>
-        </div>
-      )}
-
       {/* Hardware Specifications Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Processor */}
@@ -662,10 +698,10 @@ function OverviewTab({
           </CardHeader>
           <CardContent className="p-4 pt-1 space-y-2">
             <div className="text-lg font-bold font-mono text-foreground">
-              {hw?.cpuCores ? `${hw.cpuCores} Cores` : server.cpuCores ? `${server.cpuCores} Cores` : "—"}
+              {hw?.cpuCores ? `${hw.cpuCores} Cores` : server.cpu ? (server.cpu.includes("Cores") ? server.cpu.split(" - ")[0] : server.cpu) : "—"}
             </div>
             <p className="text-xs text-muted-foreground font-mono line-clamp-2">
-              {hw?.cpuModel || "Model not recorded"}
+              {hw?.cpuModel || server.cpu || "Model not recorded"}
             </p>
             <div className="pt-2 border-t border-border/50 grid grid-cols-2 gap-1 text-[11px] text-muted-foreground">
               <span>Arch: <strong className="text-foreground">{hw?.arch || "x86_64"}</strong></span>
@@ -683,7 +719,7 @@ function OverviewTab({
           </CardHeader>
           <CardContent className="p-4 pt-1 space-y-2">
             <div className="text-lg font-bold font-mono text-foreground">
-              {hw?.ramFormatted ? hw.ramFormatted : server.ramGb ? `${server.ramGb} GB` : "—"}
+              {hw?.ramFormatted ? hw.ramFormatted : server.ram ? server.ram : "—"}
             </div>
             <p className="text-xs text-muted-foreground">
               {hw?.ramBytes ? `${(hw.ramBytes / (1024 * 1024 * 1024)).toFixed(1)} GB detected` : "Physical Memory"}
@@ -703,13 +739,13 @@ function OverviewTab({
           </CardHeader>
           <CardContent className="p-4 pt-1 space-y-2">
             <div className="text-lg font-bold font-mono text-foreground">
-              {hw?.disks?.length ? `${hw.disks.length} Devices` : server.diskGb ? `${server.diskGb} GB` : "—"}
+              {hw?.disks?.[0]?.size || server.disk || (hw?.disks?.length ? `${hw.disks.length} Devices` : "—")}
             </div>
             <p className="text-xs text-muted-foreground truncate">
-              {hw?.disks?.map((d) => `${d.name} (${d.size})`).join(", ") || "Block devices"}
+              {hw?.disks?.map((d) => `${d.name} (${d.size})`).join(", ") || (server.disk ? `Primary: ${server.disk}` : "Block devices")}
             </p>
             <div className="pt-2 border-t border-border/50 text-[11px] text-muted-foreground">
-              <span>Primary: <strong className="font-mono text-foreground">{hw?.disks?.[0]?.name || "/dev/sda"}</strong></span>
+              <span>Primary: <strong className="font-mono text-foreground">{hw?.disks?.[0]?.name || "/dev/nvme0n1"}</strong></span>
             </div>
           </CardContent>
         </Card>
@@ -723,7 +759,7 @@ function OverviewTab({
           </CardHeader>
           <CardContent className="p-4 pt-1 space-y-2">
             <div className="text-base font-bold font-mono truncate text-foreground" title={hw?.osName}>
-              {hw?.osName || server.os || "Linux"}
+              {hw?.osName || server.osType || "Linux"}
             </div>
             <p className="text-xs text-muted-foreground font-mono truncate" title={hw?.kernel}>
               {hw?.kernel || "Kernel version"}
@@ -1177,16 +1213,7 @@ function AutoUpdateCard({ serverId }: { serverId: number }) {
               </div>
             </div>
 
-            {updateData.lastLogSnippet && (
-              <div className="space-y-1">
-                <div className="text-[11px] font-medium text-muted-foreground">
-                  Recent Upgrade Activity (/var/log/unattended-upgrades/unattended-upgrades.log):
-                </div>
-                <pre className="p-2.5 rounded bg-muted/30 border text-[11px] font-mono text-muted-foreground max-h-32 overflow-y-auto whitespace-pre-wrap">
-                  {updateData.lastLogSnippet}
-                </pre>
-              </div>
-            )}
+            
           </>
         )}
       </CardContent>
@@ -2257,21 +2284,35 @@ function LogsViewerTab({ serverId }: { serverId: number }) {
   const [since, setSince] = useState<string>("1 hour ago");
   const [lines, setLines] = useState<number>(100);
 
-  const queryPayload: LogQueryInput = useMemo(
-    () => ({
+  // Auto Query Duration: 0 = manual, 5000 = 5s, 10000 = 10s, 30000 = 30s, 60000 = 60s
+  const [autoQueryDuration, setAutoQueryDuration] = useState<number>(0);
+
+  // Active query parameters (applied on clicking Query Logs or when auto-querying)
+  const [appliedFilters, setAppliedFilters] = useState<LogQueryInput>({
+    source: "journalctl",
+    priority: undefined,
+    unit: undefined,
+    filterText: undefined,
+    since: "1 hour ago",
+    lines: 100,
+  });
+
+  const handleApplyQuery = () => {
+    setAppliedFilters({
       source,
       priority: priority === "all" ? undefined : (priority as LogPriority),
       unit: unit.trim() || undefined,
       filterText: search.trim() || undefined,
       since: since.trim() || undefined,
       lines,
-    }),
-    [source, priority, unit, search, since, lines]
-  );
+    });
+    refetch();
+  };
 
   const { data, isLoading, isFetching, refetch } = useQuery({
-    queryKey: ["servers", serverId, "logs", queryPayload],
-    queryFn: () => queryServerLogs(serverId, queryPayload),
+    queryKey: ["servers", serverId, "logs", appliedFilters],
+    queryFn: () => queryServerLogs(serverId, appliedFilters),
+    refetchInterval: autoQueryDuration > 0 ? autoQueryDuration : false,
   });
 
   const entries = data?.entries ?? [];
@@ -2313,14 +2354,47 @@ function LogsViewerTab({ serverId }: { serverId: number }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Auto Query Duration Selector */}
+            <div className="flex items-center gap-1.5">
+              <Label className="text-xs text-muted-foreground">Auto Query:</Label>
+              <Select
+                value={String(autoQueryDuration)}
+                onValueChange={(val) => setAutoQueryDuration(Number(val))}
+              >
+                <SelectTrigger className="h-8 text-xs w-[135px] font-mono">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0" className="text-xs">Manual (Click)</SelectItem>
+                  <SelectItem value="5000" className="text-xs font-mono">Auto: 5s</SelectItem>
+                  <SelectItem value="10000" className="text-xs font-mono">Auto: 10s</SelectItem>
+                  <SelectItem value="30000" className="text-xs font-mono">Auto: 30s</SelectItem>
+                  <SelectItem value="60000" className="text-xs font-mono">Auto: 60s</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {autoQueryDuration > 0 && (
+              <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400 font-mono flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Live ({autoQueryDuration / 1000}s)
+              </Badge>
+            )}
+
             <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={copyAllLogs} disabled={entries.length === 0}>
               <Copy className="h-3.5 w-3.5" /> Copy
             </Button>
             <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={downloadLogs} disabled={entries.length === 0}>
               <Download className="h-3.5 w-3.5" /> Export .log
             </Button>
-            <Button size="sm" variant="default" className="h-8 text-xs gap-1.5" onClick={() => refetch()} disabled={isFetching}>
+            <Button
+              size="sm"
+              variant="default"
+              className="h-8 text-xs gap-1.5"
+              onClick={handleApplyQuery}
+              disabled={isFetching}
+            >
               {isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
               Query Logs
             </Button>
@@ -2371,6 +2445,7 @@ function LogsViewerTab({ serverId }: { serverId: number }) {
               onChange={(e) => setUnit(e.target.value)}
               placeholder="e.g. ssh, nginx, cron"
               className="h-8 text-xs font-mono"
+              onKeyDown={(e) => { if (e.key === "Enter") handleApplyQuery(); }}
             />
           </div>
 
@@ -2480,26 +2555,52 @@ function LogsViewerTab({ serverId }: { serverId: number }) {
 // ----------------------------------------------------------------------
 function OsUsersTab({
   serverId,
+  currentSshUser,
+  onAddUser,
+  onEditUser,
+  onDeleteUser,
   onManageSudo,
 }: {
   serverId: number;
+  currentSshUser?: string;
+  onAddUser: () => void;
+  onEditUser: (user: OsUserInfo) => void;
+  onDeleteUser: (user: OsUserInfo) => void;
   onManageSudo: (user: OsUserInfo) => void;
 }) {
   const [filter, setFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: serverKeys.osUsers(serverId),
     queryFn: () => fetchServerOsUsers(serverId),
   });
 
-  const users = (data?.users ?? []).filter((u) => {
-    if (!filter) return true;
-    const f = filter.toLowerCase();
-    return u.username.toLowerCase().includes(f) || u.homeDir.toLowerCase().includes(f) || u.shell.toLowerCase().includes(f);
-  });
+  const users = useMemo(() => {
+    return (data?.users ?? []).filter((u) => {
+      if (!filter) return true;
+      const f = filter.toLowerCase();
+      return (
+        u.username.toLowerCase().includes(f) ||
+        u.homeDir.toLowerCase().includes(f) ||
+        u.shell.toLowerCase().includes(f) ||
+        (u.groups && u.groups.some((g) => g.toLowerCase().includes(f)))
+      );
+    });
+  }, [data?.users, filter]);
 
   const totalUsers = data?.users?.length ?? 0;
   const sudoUsers = data?.users?.filter((u) => u.hasSudo)?.length ?? 0;
   const humanUsers = data?.users?.filter((u) => u.uid >= 1000)?.length ?? 0;
+
+  // Pagination calculation
+  const totalItems = users.length;
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
+  const paginatedUsers = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return users.slice(start, start + pageSize);
+  }, [users, page, pageSize]);
 
   return (
     <div className="space-y-4">
@@ -2513,14 +2614,24 @@ function OsUsersTab({
             <div>
               <h3 className="text-sm font-semibold">OS Users & Sudoers Permission Control</h3>
               <p className="text-xs text-muted-foreground">
-                Inspect local Linux accounts, home directories, and safely configure granular sudoers permissions.
+                Inspect and manage local Linux accounts, shells, home directories, and granular sudoers rules.
               </p>
             </div>
           </div>
 
-          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => refetch()}>
-            <RefreshCw className="h-3.5 w-3.5" /> Refresh Users
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="default"
+              className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={onAddUser}
+            >
+              <UserPlus className="h-3.5 w-3.5" /> + Add User
+            </Button>
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => refetch()}>
+              <RefreshCw className="h-3.5 w-3.5" /> Refresh Users
+            </Button>
+          </div>
         </div>
 
         {/* Stats summary */}
@@ -2545,14 +2656,17 @@ function OsUsersTab({
         <CardHeader className="p-4 pb-2">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Local Accounts on Server ({users.length} shown)
+              Local Accounts on Server ({totalItems} matching)
             </CardTitle>
             <div className="relative w-64">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
               <Input
-                placeholder="Filter by username or home dir..."
+                placeholder="Filter by username, shell, group..."
                 value={filter}
-                onChange={(e) => setFilter(e.target.value)}
+                onChange={(e) => {
+                  setFilter(e.target.value);
+                  setPage(1);
+                }}
                 className="pl-8 h-8 text-xs font-mono"
               />
             </div>
@@ -2570,7 +2684,7 @@ function OsUsersTab({
                 <AlertCircle className="h-5 w-5 mx-auto mb-1.5" />
                 <span>{(error as any)?.message || "Failed to load OS users"}</span>
               </div>
-            ) : users.length === 0 ? (
+            ) : paginatedUsers.length === 0 ? (
               <div className="py-12 text-center text-muted-foreground text-xs">
                 No accounts match filter criteria.
               </div>
@@ -2582,18 +2696,25 @@ function OsUsersTab({
                     <th className="py-2.5 px-3 text-left font-medium">UID : GID</th>
                     <th className="py-2.5 px-3 text-left font-medium">Home Directory</th>
                     <th className="py-2.5 px-3 text-left font-medium">Shell</th>
+                    <th className="py-2.5 px-3 text-left font-medium">Groups</th>
                     <th className="py-2.5 px-3 text-left font-medium">Sudo Privileges</th>
                     <th className="py-2.5 px-3 text-right font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/30 font-mono text-[11px]">
-                  {users.map((u) => {
+                  {paginatedUsers.map((u) => {
                     const isHuman = u.uid >= 1000;
+                    const isSshUser = u.username === currentSshUser;
                     return (
                       <tr key={u.username} className="hover:bg-muted/30">
                         <td className="py-2.5 px-3">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-semibold text-foreground">{u.username}</span>
+                            {isSshUser && (
+                              <Badge variant="outline" className="text-[9px] py-0 px-1 font-normal border-primary/40 text-primary">
+                                SSH Admin
+                              </Badge>
+                            )}
                             {isHuman && (
                               <Badge variant="secondary" className="text-[9px] py-0 px-1 font-normal bg-emerald-500/10 text-emerald-500">
                                 User
@@ -2609,11 +2730,18 @@ function OsUsersTab({
                         <td className="py-2.5 px-3 text-muted-foreground">
                           {u.uid} : {u.gid}
                         </td>
-                        <td className="py-2.5 px-3 font-semibold text-foreground truncate max-w-[200px]" title={u.homeDir}>
+                        <td className="py-2.5 px-3 font-semibold text-foreground truncate max-w-[180px]" title={u.homeDir}>
                           {u.homeDir}
                         </td>
-                        <td className="py-2.5 px-3 text-muted-foreground truncate max-w-[150px]">
+                        <td className="py-2.5 px-3 text-muted-foreground truncate max-w-[140px]" title={u.shell}>
                           {u.shell}
+                        </td>
+                        <td className="py-2.5 px-3 text-muted-foreground truncate max-w-[140px]" title={u.groups?.join(", ")}>
+                          {u.groups?.length ? (
+                            <span className="text-[10px]">{u.groups.slice(0, 3).join(", ")}{u.groups.length > 3 ? ` +${u.groups.length - 3}` : ""}</span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground/60">—</span>
+                          )}
                         </td>
                         <td className="py-2.5 px-3">
                           {u.hasSudo ? (
@@ -2626,7 +2754,7 @@ function OsUsersTab({
                                 Sudo Granted
                               </Badge>
                               {u.sudoRules.length > 0 && (
-                                <span className="text-[10px] text-muted-foreground truncate max-w-[160px]" title={u.sudoRules.join(" | ")}>
+                                <span className="text-[10px] text-muted-foreground truncate max-w-[150px]" title={u.sudoRules.join(" | ")}>
                                   {u.sudoRules[0]}
                                 </span>
                               )}
@@ -2636,14 +2764,36 @@ function OsUsersTab({
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-right">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-[11px] gap-1"
-                            onClick={() => onManageSudo(u)}
-                          >
-                            <ShieldCheck className="h-3 w-3 text-amber-500" /> Manage Sudo
-                          </Button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-[11px] gap-1 px-2"
+                              onClick={() => onManageSudo(u)}
+                              title="Configure Sudo Permissions"
+                            >
+                              <ShieldCheck className="h-3 w-3 text-amber-500" /> Sudo
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-[11px] gap-1 px-2"
+                              onClick={() => onEditUser(u)}
+                              title="Edit User Configuration"
+                            >
+                              <Pencil className="h-3 w-3 text-primary" /> Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-[11px] gap-1 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => onDeleteUser(u)}
+                              disabled={u.username === "root"}
+                              title={u.username === "root" ? "Root account cannot be deleted" : "Delete User Account"}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -2652,6 +2802,23 @@ function OsUsersTab({
               </table>
             )}
           </div>
+
+          {/* Pagination */}
+          {!isLoading && !isError && totalItems > 0 && (
+            <PaginationBar
+              page={page}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              pageSize={pageSize}
+              onPageChange={(p) => setPage(p)}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
+              pageSizeOptions={[10, 25, 50, 100]}
+              className="px-4 py-2 border-t"
+            />
+          )}
         </CardContent>
       </Card>
     </div>

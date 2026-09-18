@@ -193,6 +193,8 @@ export async function exportServers(filters: Record<string, string | undefined>)
       username: true,
       cpu: true,
       ram: true,
+      disk: true,
+      osType: true,
       gpuCount: true,
       remark: true,
       lastStatus: true,
@@ -268,7 +270,7 @@ export async function exportServersJson(filters: Record<string, string | undefin
     orderBy: { id: "asc" },
     select: {
       id: true, hostname: true, ip: true, sshPort: true, username: true,
-      cpu: true, ram: true, gpuCount: true, remark: true,
+      cpu: true, ram: true, disk: true, osType: true, gpuCount: true, remark: true,
       lastStatus: true, lastCheckedAt: true, lastLatencyMs: true,
       domain: true, environment: true,
       cloudProvider: { select: { name: true } },

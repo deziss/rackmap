@@ -19,12 +19,12 @@ import { runCheck, runAll } from "../../services/status.service.js";
 import { notifyFlip } from "../../services/notify.service.js";
 import { fetchMetrics } from "../../services/metrics.service.js";
 import { autoDiscoverAndApply } from "../../services/discovery.service.js";
-import { listOsUsers, updateSudoPermission } from "../../services/os-user.service.js";
+import { listOsUsers, updateSudoPermission, createOsUser, updateOsUser, deleteOsUser } from "../../services/os-user.service.js";
 import { queryServerLogs } from "../../services/log-viewer.service.js";
 import { getAtopDates, getAtopSnapshots, getAtopIntervalProcesses, getAtopTopProcesses } from "../../services/atop.service.js";
 import { getAutoUpdateStatus, updateAutoUpdateStatus } from "../../services/auto-update.service.js";
 import { testServerSshKey } from "../../services/ssh-key.service.js";
-import { SudoPermissionInput, LogQueryInput, AtopQueryInput, AtopTopProcessesInput, AutoUpdateActionInput } from "@inv/shared";
+import { SudoPermissionInput, CreateOsUserInput, UpdateOsUserInput, DeleteOsUserInput, LogQueryInput, AtopQueryInput, AtopTopProcessesInput, AutoUpdateActionInput } from "@inv/shared";
 import { sshErrorToHttp } from "../../services/ssh.service.js";
 import { env } from "../../env.js";
 import { prisma } from "../../db.js";
@@ -227,7 +227,8 @@ export const serverRoutes = new Hono()
       const { id } = c.req.valid("param");
       try {
         const info = await autoDiscoverAndApply(id, getAuditCtx(c));
-        return c.json(info);
+        const server = await getServer(id);
+        return c.json({ server, hardware: info, ...info });
       } catch (err) {
         const { status, message } = sshErrorToHttp(err);
         return c.json({ error: { code: "DISCOVERY_ERROR", message } }, status);
@@ -248,6 +249,60 @@ export const serverRoutes = new Hono()
       } catch (err) {
         const { status, message } = sshErrorToHttp(err);
         return c.json({ error: { code: "OS_USERS_ERROR", message } }, status);
+      }
+    },
+  )
+
+  // POST /servers/:id/os-users — create new OS user
+  .post(
+    "/:id/os-users",
+    requirePermission({ server: ["osUsers"] }),
+    zValidator("param", idParamSchema),
+    zValidator("json", CreateOsUserInput),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const input = c.req.valid("json");
+      try {
+        const result = await createOsUser(id, input, getAuditCtx(c));
+        return c.json(result, 201);
+      } catch (err: any) {
+        return c.json({ error: { code: "OS_USER_CREATE_ERROR", message: err.message } }, 400);
+      }
+    },
+  )
+
+  // PATCH /servers/:id/os-users/:username — update OS user
+  .patch(
+    "/:id/os-users/:username",
+    requirePermission({ server: ["osUsers"] }),
+    zValidator("param", z.object({ id: z.coerce.number().int().positive(), username: z.string().min(1) })),
+    zValidator("json", UpdateOsUserInput),
+    async (c) => {
+      const { id, username } = c.req.valid("param");
+      const input = c.req.valid("json");
+      try {
+        const result = await updateOsUser(id, username, input, getAuditCtx(c));
+        return c.json(result);
+      } catch (err: any) {
+        return c.json({ error: { code: "OS_USER_UPDATE_ERROR", message: err.message } }, 400);
+      }
+    },
+  )
+
+  // DELETE /servers/:id/os-users/:username — delete OS user
+  .delete(
+    "/:id/os-users/:username",
+    requirePermission({ server: ["osUsers"] }),
+    zValidator("param", z.object({ id: z.coerce.number().int().positive(), username: z.string().min(1) })),
+    zValidator("query", DeleteOsUserInput),
+    async (c) => {
+      const { id, username } = c.req.valid("param");
+      const input = c.req.valid("query");
+      try {
+        const result = await deleteOsUser(id, username, input, getAuditCtx(c));
+        return c.json(result);
+      } catch (err: any) {
+        return c.json({ error: { code: "OS_USER_DELETE_ERROR", message: err.message } }, 400);
       }
     },
   )

@@ -71,5 +71,7 @@ export const ServiceListResponse = z.object({
   items: z.array(ServiceDto),
   nextCursor: z.number().int().nullable(),
   total: z.number().int(),
+  page: z.number().int().optional(),
+  totalPages: z.number().int().optional(),
 });
 export type ServiceListResponse = z.infer<typeof ServiceListResponse>;

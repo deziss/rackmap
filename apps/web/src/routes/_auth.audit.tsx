@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { PaginationBar } from "@/components/pagination-bar";
 import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
@@ -126,15 +127,14 @@ function groupByDay(items: AuditEntry[]) {
 }
 
 function AuditPage() {
-  const [cursor, setCursor] = useState<number | null>(null);
-  const [cursorHistory, setCursorHistory] = useState<number[]>([]);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
   const [category, setCategory] = useState("");
   const [action, setAction] = useState("");
   const [search, setSearch] = useState("");
 
-  const buildParams = (cur: number | null) => {
-    const p = new URLSearchParams({ limit: "50" });
-    if (cur) p.set("cursor", String(cur));
+  const buildParams = (pageNum: number) => {
+    const p = new URLSearchParams({ limit: String(limit), page: String(pageNum) });
     if (category) p.set("category", category);
     if (action) p.set("action", action);
     if (search) p.set("search", search);
@@ -142,16 +142,15 @@ function AuditPage() {
   };
 
   const { data, isLoading, refetch } = useQuery<AuditResponse>({
-    queryKey: ["audit", cursor, category, action, search],
-    queryFn: () => apiFetch<AuditResponse>(`/api/v1/audit?${buildParams(cursor)}`),
+    queryKey: ["audit", page, limit, category, action, search],
+    queryFn: () => apiFetch<AuditResponse>(`/api/v1/audit?${buildParams(page)}`),
   });
 
   const allItems = data?.items ?? [];
   const grouped = groupByDay(allItems);
 
   function reset() {
-    setCursor(null);
-    setCursorHistory([]);
+    setPage(1);
   }
 
   return (
@@ -209,34 +208,21 @@ function AuditPage() {
         ))}
       </div>
 
-      <div className="flex items-center justify-between text-sm text-muted-foreground mt-4">
-        <span>{data?.total ?? 0} entries</span>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              const prev = cursorHistory[cursorHistory.length - 1];
-              setCursorHistory((h) => h.slice(0, -1));
-              setCursor(prev === 0 ? null : prev);
-            }}
-            disabled={cursorHistory.length === 0 || isLoading}
-          >
-            Previous
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              setCursorHistory((h) => [...h, cursor ?? 0]);
-              setCursor(data!.nextCursor!);
-            }}
-            disabled={!data?.nextCursor || isLoading}
-          >
-            Next
-          </Button>
-        </div>
-      </div>
+      {data && (
+        <PaginationBar
+          page={page}
+          totalPages={(data as any).totalPages ?? Math.ceil(data.total / limit) ?? 1}
+          totalItems={data.total}
+          pageSize={limit}
+          onPageChange={(p) => setPage(p)}
+          onPageSizeChange={(s) => {
+            setLimit(s);
+            setPage(1);
+          }}
+          pageSizeOptions={[10, 25, 50, 100]}
+          className="mt-4 border-t pt-2"
+        />
+      )}
     </div>
   );
 }

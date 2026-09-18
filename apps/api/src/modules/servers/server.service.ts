@@ -35,6 +35,7 @@ export const serverSelect = {
   updatedAt: true,
   updatedByEmail: true,
   osType: true,
+  disk: true,
   isPrivateIp: true,
   purpose: true,
   createdBy: true,
@@ -43,10 +44,34 @@ export const serverSelect = {
 /** Strip passwordEnc and add hasPassword. */
 function toDto(raw: { passwordEnc: string | null; tags: { tag: { id: number; name: string; color: string | null } }[]; [key: string]: unknown }) {
   const { passwordEnc, tags, ...rest } = raw;
+  let hardwareInfo: any = null;
+  if (raw.cpu || raw.ram || raw.osType || (raw as any).disk) {
+    const cpuParts = String(raw.cpu || "").split(" - ");
+    const coresMatch = cpuParts[0]?.match(/(\d+)\s*Cores?/i);
+    const cores = coresMatch ? parseInt(coresMatch[1]!, 10) : 1;
+    const diskStr = (raw as any).disk ? String((raw as any).disk) : null;
+    const disks = diskStr ? [{ name: diskStr.toLowerCase().includes("nvme") ? "nvme0n1" : "/dev/sda", size: diskStr, type: "disk", model: "Storage" }] : [];
+    hardwareInfo = {
+      cpuModel: cpuParts[1] || String(raw.cpu || "Generic CPU"),
+      cpuCores: cores,
+      cpuThreads: cores,
+      ramBytes: 0,
+      ramFormatted: String(raw.ram || "—"),
+      osName: String(raw.osType || "Linux"),
+      kernel: "Linux",
+      arch: "x86_64",
+      hostname: String(raw.hostname || ""),
+      gpuCount: Number(raw.gpuCount) || 0,
+      gpuModel: null,
+      disks,
+      uptime: "Active",
+    };
+  }
   return {
     ...rest,
     hasPassword: passwordEnc !== null,
     tags: tags.map((t) => t.tag),
+    hardwareInfo,
   };
 }
 
@@ -108,7 +133,8 @@ export async function listServers(query: ServerListQuery, isAdmin: boolean) {
   }
 
   const orderBy = finalOrderBy;
-  const skip = sortBy ? (cursor || 0) : undefined;
+  const pageNum = query.page && query.page > 0 ? query.page : 1;
+  const skip = query.page ? (pageNum - 1) * limit : (sortBy ? (cursor || 0) : undefined);
 
   const [items, total] = await Promise.all([
     prisma.server.findMany({
@@ -118,13 +144,19 @@ export async function listServers(query: ServerListQuery, isAdmin: boolean) {
       take: limit,
       skip,
     }),
-    prisma.server.count({ where: { ...(showDeleted ? {} : { deletedAt: null }) } }),
+    prisma.server.count({ where }),
   ]);
 
   const dtos = items.map(toDto);
   const nextCursor = items.length === limit ? (sortBy ? (cursor || 0) + limit : (items[items.length - 1]?.id ?? null)) : null;
 
-  return { items: dtos, nextCursor, total };
+  return {
+    items: dtos,
+    nextCursor,
+    total,
+    page: pageNum,
+    totalPages: Math.ceil(total / limit) || 1,
+  };
 }
 
 export async function getServer(id: number) {

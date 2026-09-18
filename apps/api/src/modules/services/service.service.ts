@@ -42,7 +42,8 @@ function toDto(raw: { passwordEnc: string | null; tags: { tag: { id: number; nam
 }
 
 export async function listServices(query: ServiceListQuery, isAdmin: boolean) {
-  const { cursor, limit = 50, sortBy, sortDir, q, tagId, lastStatus, includeDeleted } = query;
+  const { cursor, limit = 50, sortBy, sortDir, q, tagId, lastStatus, includeDeleted, page } = query;
+  const pageNum = page ? Math.max(1, page) : undefined;
   const showDeleted = isAdmin && includeDeleted;
 
   const where = {
@@ -76,7 +77,7 @@ export async function listServices(query: ServiceListQuery, isAdmin: boolean) {
   }
 
   const orderBy = finalOrderBy;
-  const skip = sortBy ? (cursor || 0) : undefined;
+  const skip = pageNum ? (pageNum - 1) * limit : sortBy ? (cursor || 0) : undefined;
 
   const [items, total] = await Promise.all([
     prisma.service.findMany({
@@ -92,7 +93,13 @@ export async function listServices(query: ServiceListQuery, isAdmin: boolean) {
   const dtos = items.map(toDto);
   const nextCursor = items.length === limit ? (sortBy ? (cursor || 0) + limit : (items[items.length - 1]?.id ?? null)) : null;
 
-  return { items: dtos, nextCursor, total };
+  return {
+    items: dtos,
+    nextCursor,
+    total,
+    page: pageNum,
+    totalPages: Math.ceil(total / limit) || 1,
+  };
 }
 
 export async function getService(id: number) {

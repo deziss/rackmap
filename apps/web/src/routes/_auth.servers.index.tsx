@@ -1,3 +1,4 @@
+import { PaginationBar } from "@/components/pagination-bar";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback } from "react";
@@ -87,16 +88,23 @@ function ServersPage() {
   // sshEnabled unused
 
   const [q, setQ] = useState("");
-  const [cursor, setCursor] = useState<number | undefined>();
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
   const [sortBy, setSortBy] = useState<string>("id");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [cursorHistory, setCursorHistory] = useState<number[]>([]);
   const [includeDeleted, setIncludeDeleted] = useState(false);
   const [detailServerId, setDetailServerId] = useState<number | null>(null);
   const [revealedPasswords, setRevealedPasswords] = useState<Record<number, string | null>>({});
   const debouncedQ = useDebounce(q, 300);
 
-  const params = { q: debouncedQ || undefined, limit: 50, cursor, sortBy, sortDir, includeDeleted: includeDeleted || undefined };
+  const params = {
+    q: debouncedQ || undefined,
+    page,
+    limit: pageSize,
+    sortBy,
+    sortDir,
+    includeDeleted: includeDeleted || undefined,
+  };
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: serverKeys.list(params),
@@ -199,7 +207,7 @@ function ServersPage() {
         <Input
           placeholder="Search hostname, IP, user…"
           value={q}
-          onChange={(e) => { setQ(e.target.value); setCursor(undefined); setCursorHistory([]); }}
+          onChange={(e) => { setQ(e.target.value); setPage(1); }}
           className="w-52 h-8 text-sm"
         />
         {role === "admin" && (
@@ -215,7 +223,7 @@ function ServersPage() {
         )}
         <SavedViews
           currentParams={{ q: debouncedQ, includeDeleted: String(includeDeleted) }}
-          onLoad={(p) => { setQ(p.q ?? ""); setIncludeDeleted(p.includeDeleted === "true"); setCursor(undefined); setCursorHistory([]); }}
+          onLoad={(p) => { setQ(p.q ?? ""); setIncludeDeleted(p.includeDeleted === "true"); setPage(1); }}
         />
         <Tooltip>
           <TooltipTrigger asChild>
@@ -264,7 +272,10 @@ function ServersPage() {
                 { key: "lastStatus", label: "Status" },
                 { key: "username", label: "User" },
                 { key: "password", label: "Password" },
-                { key: "specs", label: "CPU & RAM" },
+                { key: "cpu", label: "CPU" },
+                { key: "ram", label: "RAM" },
+                { key: "disk", label: "Storage" },
+                { key: "osType", label: "OS" },
                 { key: "gpu", label: "GPU" },
                 { key: "project", label: "Project" },
                 { key: "network", label: "Network" },
@@ -282,8 +293,7 @@ function ServersPage() {
                       setSortBy(col.key);
                       setSortDir("asc");
                     }
-                    setCursor(undefined);
-                    setCursorHistory([]);
+                    setPage(1);
                   }}
                 >
                   <div className="flex items-center gap-1">
@@ -301,7 +311,7 @@ function ServersPage() {
             {isLoading && (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b border-white/5">
-                  {Array.from({ length: 15 }).map((__, j) => (
+                  {Array.from({ length: 18 }).map((__, j) => (
                     <td key={j} className="px-3 py-3">
                       <Skeleton className="h-4 w-full" />
                     </td>
@@ -311,7 +321,7 @@ function ServersPage() {
             )}
             {!isLoading && data?.items.length === 0 && (
               <tr>
-                <td colSpan={15} className="px-3 py-12 text-center text-muted-foreground text-sm">
+                <td colSpan={18} className="px-3 py-12 text-center text-muted-foreground text-sm">
                   No servers found
                 </td>
               </tr>
@@ -386,8 +396,17 @@ function ServersPage() {
                       <span className="text-muted-foreground text-xs">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
-                    {(server.cpu || server.ram) ? `${server.cpu ?? "-"} - ${server.ram ?? "-"}` : "-"}
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap font-mono">
+                    {server.cpu || "—"}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap font-mono">
+                    {server.ram || "—"}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap font-mono">
+                    {server.disk || "—"}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap truncate max-w-[130px]" title={server.osType || undefined}>
+                    {server.osType || "—"}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground">
                     {(!server.gpuCount || server.gpuCount === 0) && !server.gpuType ? "-" :
@@ -578,34 +597,18 @@ function ServersPage() {
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between text-sm text-muted-foreground mt-4">
-        <span>{data?.total ?? 0} servers total</span>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              const prev = cursorHistory[cursorHistory.length - 1];
-              setCursorHistory((h) => h.slice(0, -1));
-              setCursor(prev === 0 ? undefined : prev);
-            }}
-            disabled={cursorHistory.length === 0 || isLoading}
-          >
-            Previous
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              setCursorHistory((h) => [...h, cursor ?? 0]);
-              setCursor(data!.nextCursor!);
-            }}
-            disabled={!data?.nextCursor || isLoading}
-          >
-            Next
-          </Button>
-        </div>
-      </div>
+      <PaginationBar
+        page={data?.page ?? page}
+        totalPages={data?.totalPages ?? 1}
+        totalItems={data?.total ?? 0}
+        pageSize={pageSize}
+        onPageChange={(p) => setPage(p)}
+        onPageSizeChange={(s) => {
+          setPageSize(s);
+          setPage(1);
+        }}
+        disabled={isLoading}
+      />
 
       <ServerDetailModal serverId={detailServerId} onClose={() => setDetailServerId(null)} />
     </div>

@@ -5,9 +5,11 @@
 1. [Getting Started](#getting-started)
 2. [Dashboard & Server List](#dashboard--server-list)
 3. [Adding a Server](#adding-a-server)
-4. [Server Detail Modal](#server-detail-modal)
-5. [Live Metrics](#live-metrics)
-6. [SSH Terminal](#ssh-terminal)
+4. [Server Detail Page & Specs](#server-detail-page--specs)
+5. [OS Users & Sudoers Management](#os-users--sudoers-management)
+6. [Forensic Logs & Auto-Query](#forensic-logs--auto-query)
+7. [Live Metrics & ATOP History](#live-metrics--atop-history)
+8. [SSH Terminal](#ssh-terminal)
 7. [Services Inventory](#services-inventory)
 8. [SSL Certificate Tracking](#ssl-certificate-tracking)
 9. [Export & Reports](#export--reports)
@@ -38,14 +40,27 @@ The servers table shows all servers you have access to.
 
 | Column | Description |
 |--------|-------------|
-| Status dot | Green = up, Red = down, Gray = unknown (never probed) |
-| Hostname | Click to open the server detail modal |
-| IP | IP address |
-| SSH Port | Default 22 |
-| Tags | Colored label badges |
-| Last seen | Time of last successful probe |
-| Latency | Round-trip time of last probe (ms) |
-| Actions | Edit, delete, reveal password |
+| # | Server ID and sort order |
+| Hostname | Hostname with environment badge (Cloud / On-Premise) |
+| IP | IPv4 address |
+| Port | SSH port (default 22) |
+| Status | Live status dot (Up / Down / Unknown) |
+| User | Configured SSH username |
+| Password | Password reveal button (masked with one-click copy) |
+| CPU | Dedicated processor column (e.g. `12 Cores`) |
+| RAM | Dedicated physical memory column (e.g. `15GB`) |
+| Storage | Dedicated storage capacity column (e.g. `477GB`) |
+| OS | Operating system and distribution (e.g. `Ubuntu 24.04.5 LTS`) |
+| GPU | Detected GPU count and model |
+| Project / Location | Assigned project and datacenter / rack location |
+| Tags | Colored categorical badges |
+| Actions | Quick actions: live metrics, terminal, edit, delete |
+
+### Universal Pagination
+Every table in RackMap features an interactive pagination bar:
+- **Rows Selector**: Choose `10`, `25`, `50`, or `100` rows displayed at a time.
+- **Range Summary**: Real-time counter showing `Showing X–Y of Z items`.
+- **Numbered Navigation**: Direct jump to any numbered page `[1] [2] [3] ... [N]`, with `Previous` and `Next` buttons, and `First` / `Last` page shortcuts.
 
 **Search** — Type in the search box to filter by hostname, IP, domain, remark, or username. Filters apply instantly.
 
@@ -102,6 +117,57 @@ The modal shows:
 Close with the × button or press Escape.
 
 ---
+
+
+---
+
+## OS Users & Sudoers Management
+
+RackMap provides enterprise-grade Linux user account management directly from the server detail page under the **OS Users & Sudoers** tab.
+
+### Inspecting Local Accounts
+- Lists all local user accounts parsed directly from `/etc/passwd` and `/etc/group` via agentless SSH.
+- Displays **Username**, **UID : GID**, **Home Directory**, **Shell**, **Secondary Groups**, and **Sudo Privileges**.
+- Summary badges identify **Human Accounts** (UID >= 1000), **Superuser** (`root`), and **SSH Admin** (active management user).
+- Filter input allows searching by username, shell, home directory, or group name.
+
+### Adding a User (+ Add User)
+Click **+ Add User** to open the creation dialog with comprehensive Linux options:
+- **Username**: Validated Linux username (`^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[$]?$`).
+- **Password**: Password input with visibility toggle and a **"Generate Strong Password"** button (16-character secure random string).
+- **Login Shell**: Select from standard shells (`/bin/bash`, `/bin/sh`, `/bin/zsh`, `/usr/sbin/nologin`, `/bin/false`) or enter a custom path.
+- **Home Directory**: Auto-fills `/home/<username>` as you type with an option to manually customize.
+- **Account Flags**:
+  - `Create home directory (-m)`: Ensures user skeleton files and directory are created.
+  - `System account (-r)`: Creates system user without password aging.
+- **Secondary Groups**: Comma-separated input with quick-add chips for `sudo`, `docker`, `adm`, `www-data`, and `staff`.
+- **UID / GID**: Optional custom numeric identifiers.
+- **Sudoers Rules**: Choose between `None`, `Full Sudo without Password (NOPASSWD: ALL)`, `Full Sudo with Password Required (ALL=(ALL:ALL) ALL)`, or `Custom Restricted Commands`.
+
+### Editing a User (Edit)
+Click **Edit** on any user row to modify:
+- Login shell and home directory.
+- Secondary group memberships.
+- Reset user password with the secure password generator.
+- Toggle account lock status (`usermod -L` / `usermod -U`) to temporarily block logins without deleting data.
+- Update sudoers privileges.
+
+### Deleting a User (Delete)
+Click the trash icon to safely remove an account:
+- **Root Protection**: Deletion of the `root` account is permanently blocked.
+- **Active SSH Protection**: If deleting the active SSH user, a critical warning is displayed, and you must type the exact username to confirm.
+- **Options**:
+  - `Remove user home directory (-r)`: Deletes home directory and mail spool.
+  - `Force deletion (-f)`: Forces removal even if active processes are owned by the user.
+
+---
+
+## Forensic Logs & Auto-Query
+
+The **Forensic Logs & Evidence** tab allows querying systemd `journalctl` and syslog events over SSH:
+- **Filter Parameters**: Filter by log priority (Emergency to Debug), systemd unit (e.g. `ssh`, `nginx`, `cron`), time range (`1 hour ago`, `24 hours ago`), and search text.
+- **Auto-Query Duration**: Choose between `Manual (Click)`, `Auto: 5s`, `Auto: 10s`, `Auto: 30s`, or `Auto: 60s`. When active, a pulsing **Live** badge shows the refresh interval.
+- **Export & Copy**: Export raw logs to a `.log` file or copy all entries to clipboard in one click.
 
 ## Live Metrics
 

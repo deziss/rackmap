@@ -1,3 +1,4 @@
+import { PaginationBar } from "@/components/pagination-bar";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -6,12 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileText, Download, Printer, Filter } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { FileText, Download, Printer, Filter, Copy } from "lucide-react";
 import { useDebounce } from "@/hooks/use-debounce";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_auth/reports")({
   component: ReportsPage,
@@ -87,6 +90,9 @@ function ReportsPage() {
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [dateRange, setDateRange] = useState<string>("30d");
   const [auditSearch, setAuditSearch] = useState("");
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [selectedLog, setSelectedLog] = useState<any | null>(null);
   const debouncedAuditSearch = useDebounce(auditSearch, 300);
 
   const { data: networksData } = useQuery({
@@ -103,7 +109,7 @@ function ReportsPage() {
   const projects = projectsData || [];
 
   const { data, isLoading } = useQuery({
-    queryKey: ["reports", actionFilter, dateRange, debouncedAuditSearch],
+    queryKey: ["reports", actionFilter, dateRange, debouncedAuditSearch, page, pageSize],
     queryFn: () => {
       const to = new Date();
       const from = new Date();
@@ -112,13 +118,14 @@ function ReportsPage() {
       else if (dateRange === "90d") from.setDate(from.getDate() - 90);
 
       const queryParams = new URLSearchParams({
-        limit: "100",
+        page: String(page),
+        limit: String(pageSize),
         ...(actionFilter !== "all" ? { action: actionFilter } : {}),
         ...(dateRange !== "all" ? { from: from.toISOString(), to: to.toISOString() } : {}),
         ...(debouncedAuditSearch ? { search: debouncedAuditSearch } : {}),
       });
 
-      return apiFetch<{ items: any[] }>(`/api/v1/audit?${queryParams.toString()}`);
+      return apiFetch<{ items: any[]; total: number; totalPages: number; page: number }>(`/api/v1/audit?${queryParams.toString()}`);
     },
   });
 
@@ -208,10 +215,10 @@ function ReportsPage() {
             placeholder="Search IP, Hostname, Domain, Project..."
             className="w-75 h-9 bg-card border-white/10"
             value={auditSearch}
-            onChange={(e) => setAuditSearch(e.target.value)}
+            onChange={(e) => { setAuditSearch(e.target.value); setPage(1); }}
           />
 
-          <Select value={actionFilter} onValueChange={setActionFilter}>
+          <Select value={actionFilter} onValueChange={(val) => { setActionFilter(val); setPage(1); }}>
             <SelectTrigger className="w-[220px] h-9 bg-card border-white/10">
               <SelectValue placeholder="Action Type" />
             </SelectTrigger>
@@ -225,7 +232,7 @@ function ReportsPage() {
             </SelectContent>
           </Select>
 
-          <Select value={dateRange} onValueChange={setDateRange}>
+          <Select value={dateRange} onValueChange={(val) => { setDateRange(val); setPage(1); }}>
             <SelectTrigger className="w-[180px] h-9 bg-card border-white/10">
               <SelectValue placeholder="Date Range" />
             </SelectTrigger>
@@ -290,7 +297,7 @@ function ReportsPage() {
                 </tr>
               )}
               {data?.items?.map((log) => (
-                <tr key={log.id} className="border-b border-white/5 print:border-gray-200 last:border-0 hover:bg-white/4 print:hover:bg-transparent print:break-inside-avoid">
+                <tr key={log.id} className="border-b border-white/5 print:border-gray-200 last:border-0 hover:bg-white/4 print:hover:bg-transparent print:break-inside-avoid cursor-pointer" onClick={() => setSelectedLog(log)}>
                   <td className="px-4 py-3 whitespace-nowrap text-xs text-muted-foreground print:text-gray-600">
                     {format(new Date(log.createdAt), "PP p")}
                   </td>
@@ -306,8 +313,21 @@ function ReportsPage() {
                   <td className="px-4 py-3 text-xs font-mono text-primary print:text-blue-600">
                     {log.action}
                   </td>
-                  <td className="px-4 py-3 text-xs max-w-xs truncate print:max-w-none print:whitespace-normal print:overflow-visible print:break-words">
-                    {formatLogDetails(log, networks, projects)}
+                  <td className="px-4 py-3 text-xs max-w-xs print:max-w-none print:whitespace-normal print:overflow-visible print:break-words">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate">{formatLogDetails(log, networks, projects)}</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-1.5 text-[10px] text-muted-foreground hover:text-foreground shrink-0 print:hidden"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedLog(log);
+                        }}
+                      >
+                        View
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -315,6 +335,141 @@ function ReportsPage() {
           </table>
         </div>
       </div>
+
+      <PaginationBar
+        page={data?.page ?? page}
+        totalPages={data?.totalPages ?? 1}
+        totalItems={data?.total ?? (data?.items?.length || 0)}
+        pageSize={pageSize}
+        onPageChange={(p) => setPage(p)}
+        onPageSizeChange={(s) => {
+          setPageSize(s);
+          setPage(1);
+        }}
+        disabled={isLoading}
+      />
+
+      {/* Audit Log Details Dialog Popup */}
+      <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <FileText className="h-4 w-4 text-primary" />
+              Audit Log Details
+              {selectedLog?.action && (
+                <Badge variant="outline" className="text-[11px] font-mono">
+                  {selectedLog.action}
+                </Badge>
+              )}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Complete audit event record, applied changes, and entity attribution.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedLog && (
+            <div className="space-y-3 overflow-y-auto flex-1 pr-1 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 rounded-lg bg-muted/40 border">
+                <div>
+                  <span className="text-[10px] text-muted-foreground uppercase">Timestamp</span>
+                  <div className="font-mono text-foreground font-semibold mt-0.5">
+                    {format(new Date(selectedLog.createdAt), "PPpp")}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[10px] text-muted-foreground uppercase">Actor</span>
+                  <div className="font-mono text-foreground font-semibold mt-0.5 truncate" title={selectedLog.actorEmail}>
+                    {selectedLog.actorEmail || "System"}
+                  </div>
+                  {selectedLog.ip && (
+                    <div className="text-[10px] text-muted-foreground">IP: {selectedLog.ip}</div>
+                  )}
+                </div>
+                <div>
+                  <span className="text-[10px] text-muted-foreground uppercase">Entity</span>
+                  <div className="font-semibold text-foreground mt-0.5 truncate">
+                    {getHumanReadableEntity(selectedLog)}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono">
+                    ID: {selectedLog.entityId}
+                  </div>
+                </div>
+              </div>
+
+              {(selectedLog.afterJson || selectedLog.after) && (
+                <div className="space-y-1">
+                  <div className="text-[11px] font-semibold text-foreground">
+                    Applied Changes / State (After):
+                  </div>
+                  <pre className="p-3 rounded-lg bg-black/60 border font-mono text-[11px] text-emerald-400 overflow-x-auto whitespace-pre-wrap max-h-56">
+                    {(() => {
+                      try {
+                        const val = selectedLog.afterJson ? JSON.parse(selectedLog.afterJson) : selectedLog.after;
+                        return JSON.stringify(val, null, 2);
+                      } catch {
+                        return selectedLog.afterJson || String(selectedLog.after);
+                      }
+                    })()}
+                  </pre>
+                </div>
+              )}
+
+              {(selectedLog.beforeJson || selectedLog.before) && (
+                <div className="space-y-1">
+                  <div className="text-[11px] font-semibold text-foreground">
+                    Previous State (Before):
+                  </div>
+                  <pre className="p-3 rounded-lg bg-black/60 border font-mono text-[11px] text-zinc-400 overflow-x-auto whitespace-pre-wrap max-h-44">
+                    {(() => {
+                      try {
+                        const val = selectedLog.beforeJson ? JSON.parse(selectedLog.beforeJson) : selectedLog.before;
+                        return JSON.stringify(val, null, 2);
+                      } catch {
+                        return selectedLog.beforeJson || String(selectedLog.before);
+                      }
+                    })()}
+                  </pre>
+                </div>
+              )}
+
+              {(selectedLog.diffJson || selectedLog.diff) && (
+                <div className="space-y-1">
+                  <div className="text-[11px] font-semibold text-foreground">
+                    Modifications / Diff:
+                  </div>
+                  <pre className="p-3 rounded-lg bg-black/60 border font-mono text-[11px] text-amber-400 overflow-x-auto whitespace-pre-wrap max-h-44">
+                    {(() => {
+                      try {
+                        const val = selectedLog.diffJson ? JSON.parse(selectedLog.diffJson) : selectedLog.diff;
+                        return JSON.stringify(val, null, 2);
+                      } catch {
+                        return selectedLog.diffJson || String(selectedLog.diff);
+                      }
+                    })()}
+                  </pre>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1 text-xs"
+                  onClick={() => {
+                    navigator.clipboard.writeText(JSON.stringify(selectedLog, null, 2));
+                    toast.success("Full audit record JSON copied to clipboard");
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" /> Copy JSON
+                </Button>
+                <Button size="sm" onClick={() => setSelectedLog(null)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

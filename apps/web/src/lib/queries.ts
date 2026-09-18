@@ -6,6 +6,9 @@ import type {
   ServerHardwareInfo,
   OsUserInfo,
   SudoPermissionInput,
+  CreateOsUserInput,
+  UpdateOsUserInput,
+  DeleteOsUserInput,
   LogQueryInput,
   LogResponse,
   AtopDatesResponse,
@@ -93,6 +96,29 @@ export function autoDiscoverServer(id: number) {
 
 export function fetchServerOsUsers(id: number) {
   return apiFetch<{ users: OsUserInfo[] }>(`/api/v1/servers/${id}/os-users`);
+}
+
+export function createServerOsUser(id: number, input: CreateOsUserInput) {
+  return apiFetch<{ ok: boolean; message: string }>(`/api/v1/servers/${id}/os-users`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateServerOsUser(id: number, username: string, input: UpdateOsUserInput) {
+  return apiFetch<{ ok: boolean; message: string }>(`/api/v1/servers/${id}/os-users/${encodeURIComponent(username)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteServerOsUser(id: number, username: string, input: DeleteOsUserInput) {
+  const query = new URLSearchParams();
+  if (input.removeHome !== undefined) query.set("removeHome", String(input.removeHome));
+  if (input.force !== undefined) query.set("force", String(input.force));
+  return apiFetch<{ ok: boolean; message: string }>(`/api/v1/servers/${id}/os-users/${encodeURIComponent(username)}?${query.toString()}`, {
+    method: "DELETE",
+  });
 }
 
 export function updateServerSudoPermission(id: number, input: SudoPermissionInput) {

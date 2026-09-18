@@ -7,6 +7,7 @@ import { prisma } from "../../db.js";
 
 const auditQuerySchema = z.object({
   cursor: z.coerce.number().int().positive().optional(),
+  page: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   category: z.string().optional(),
   entity: z.string().optional(),
@@ -23,7 +24,7 @@ export const auditRoutes = new Hono()
   .use(requirePermission({ audit: ["read"] }))
 
   .get("/", zValidator("query", auditQuerySchema), async (c) => {
-    const { cursor, limit, category, entity, entityId, action, actorId, search, from, to } = c.req.valid("query");
+    const { cursor, page, limit, category, entity, entityId, action, actorId, search, from, to } = c.req.valid("query");
 
     const baseWhere = {
       ...(category ? { category } : {}),
@@ -51,9 +52,11 @@ export const auditRoutes = new Hono()
       } : {}),
     };
 
+    const pageNum = page && page > 0 ? page : 1;
+    const skip = page ? (pageNum - 1) * limit : undefined;
     const where = {
       ...baseWhere,
-      ...(cursor ? { id: { lt: cursor } } : {}),
+      ...(cursor && !page ? { id: { lt: cursor } } : {}),
     };
 
     const [items, total] = await Promise.all([
@@ -61,6 +64,7 @@ export const auditRoutes = new Hono()
         where,
         orderBy: { id: "desc" },
         take: limit,
+        skip,
       }),
       prisma.auditLog.count({ where: baseWhere }),
     ]);
@@ -88,5 +92,5 @@ export const auditRoutes = new Hono()
     });
 
     const nextCursor = items.length === limit ? (items[items.length - 1]?.id ?? null) : null;
-    return c.json({ items: enrichedItems, nextCursor, total });
+    return c.json({ items: enrichedItems, nextCursor, total, page: pageNum, totalPages: Math.ceil(total / limit) || 1 });
   });

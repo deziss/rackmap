@@ -26,6 +26,7 @@ export const ServerCreateInput = z.object({
   networkTypeId: nullableId,
   tagIds: z.array(z.number().int().positive()).max(50).optional(),
   osType: z.string().trim().max(50).nullable().optional(),
+  disk: z.string().trim().max(255).nullable().optional(),
   isPrivateIp: z.boolean().default(false).optional(),
   purpose: z.string().trim().max(255).nullable().optional(),
   createdBy: z.string().trim().max(100).nullable().optional(),
@@ -81,6 +82,7 @@ export const ServerDto = z.object({
   updatedAt: z.string(),
   updatedByEmail: z.string().nullable(),
   osType: z.string().nullable(),
+  disk: z.string().nullable(),
   isPrivateIp: z.boolean(),
   purpose: z.string().nullable(),
   createdBy: z.string().nullable(),
@@ -91,6 +93,8 @@ export const ServerListResponse = z.object({
   items: z.array(ServerDto),
   nextCursor: z.number().int().nullable(),
   total: z.number().int(),
+  page: z.number().int().optional(),
+  totalPages: z.number().int().optional(),
 });
 export type ServerListResponse = z.infer<typeof ServerListResponse>;
 

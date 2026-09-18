@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { fetchServices, checkService, checkAllServices, revealServicePassword, deleteService, serviceKeys } from "@/lib/queries";
 import { StatusDot } from "@/components/status-dot";
+import { PaginationBar } from "@/components/pagination-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -168,35 +169,16 @@ function ServicesPage() {
   // Search & Pagination State
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
-  const [limit] = useState(50);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
   const [sortBy, setSortBy] = useState<string>("id");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  
-  const [cursorHistory, setCursorHistory] = useState<number[]>([]);
-  const currentCursor = cursorHistory.length > 0 ? cursorHistory[cursorHistory.length - 1] : undefined;
 
   const { data, isLoading, isError, error, isFetching } = useQuery({
-    queryKey: serviceKeys.list({ q: debouncedSearch, cursor: currentCursor, limit, sortBy, sortDir }),
-    queryFn: () => fetchServices({ q: debouncedSearch, cursor: currentCursor, limit, sortBy, sortDir }),
+    queryKey: serviceKeys.list({ q: debouncedSearch, page, limit, sortBy, sortDir }),
+    queryFn: () => fetchServices({ q: debouncedSearch, page, limit, sortBy, sortDir }),
     placeholderData: (prev) => prev,
   });
-
-  const goNext = useCallback(() => {
-    if (data?.nextCursor) {
-      setCursorHistory((prev) => [...prev, data.nextCursor!]);
-    }
-  }, [data?.nextCursor]);
-
-  const goPrev = useCallback(() => {
-    setCursorHistory((prev) => prev.slice(0, -1));
-  }, []);
-
-  const resetPagination = useCallback(() => {
-    setCursorHistory([]);
-  }, []);
-
-  // Reset pagination on search change
-  useState(() => { resetPagination(); });
 
   const handleSort = (key: string) => {
     if (sortBy === key) {
@@ -205,7 +187,7 @@ function ServicesPage() {
       setSortBy(key);
       setSortDir("asc");
     }
-    resetPagination();
+    setPage(1);
   };
 
   async function triggerDownload(format: "xlsx" | "json", searchQ: string) {
@@ -496,29 +478,20 @@ function ServicesPage() {
 
       {/* Pagination Controls */}
       {data && (
-        <div className="flex items-center justify-between text-sm p-1">
-          <div className="text-muted-foreground">
-            {cursorHistory.length === 0 ? "Page 1" : `Page ${cursorHistory.length + 1}`}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={goPrev}
-              disabled={cursorHistory.length === 0 || isFetching}
-            >
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={goNext}
-              disabled={!data.nextCursor || isFetching}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
+        <PaginationBar
+          page={page}
+          totalPages={data.totalPages ?? Math.ceil(data.total / limit) ?? 1}
+          totalItems={data.total}
+          pageSize={limit}
+          onPageChange={(p) => setPage(p)}
+          onPageSizeChange={(s) => {
+            setLimit(s);
+            setPage(1);
+          }}
+          pageSizeOptions={[10, 25, 50, 100]}
+          disabled={isFetching}
+          className="p-1 border-t"
+        />
       )}
 
       <ServiceDetailModal serviceId={detailServiceId} onClose={() => setDetailServiceId(null)} />

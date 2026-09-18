@@ -11,7 +11,8 @@ const sslRoutes = new Hono().use(requireSession);
 // List SSL Statuses
 sslRoutes.get("/", zValidator("query", SslStatusListQuery), async (c) => {
   const query = c.req.valid("query");
-  const { cursor, limit = 50, sortBy, sortDir, q, status, includeDeleted } = query;
+  const { cursor, limit = 50, sortBy, sortDir, q, status, includeDeleted, page } = query;
+  const pageNum = page ? Math.max(1, page) : undefined;
 
   const showDeleted = includeDeleted;
 
@@ -23,7 +24,7 @@ sslRoutes.get("/", zValidator("query", SslStatusListQuery), async (c) => {
   };
 
   const orderBy = sortBy ? { [sortBy]: sortDir || "asc" } : { id: "desc" };
-  const skip = sortBy ? (cursor || 0) : undefined;
+  const skip = pageNum ? (pageNum - 1) * limit : sortBy ? (cursor || 0) : undefined;
 
   const [items, total] = await Promise.all([
     prisma.sslStatus.findMany({
@@ -60,7 +61,13 @@ sslRoutes.get("/", zValidator("query", SslStatusListQuery), async (c) => {
   }));
 
   const nextCursor = items.length === limit ? (sortBy ? (cursor || 0) + limit : (items[items.length - 1]?.id ?? null)) : null;
-  return c.json({ items: dtos, nextCursor, total });
+  return c.json({
+    items: dtos,
+    nextCursor,
+    total,
+    page: pageNum,
+    totalPages: Math.ceil(total / limit) || 1,
+  });
 });
 
 // Trigger Scan

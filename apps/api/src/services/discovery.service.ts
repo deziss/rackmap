@@ -203,13 +203,33 @@ export async function discoverServerHardware(serverId: number): Promise<ServerHa
 export async function autoDiscoverAndApply(serverId: number, ctx: AuditCtx = {}): Promise<ServerHardwareInfo> {
   const info = await discoverServerHardware(serverId);
 
-  // Automatically update server details in database
+  // Match GPU type if GPU was detected
+  let matchedGpuTypeId: number | undefined = undefined;
+  if (info.gpuModel) {
+    const gpuTypes = await prisma.gpuType.findMany();
+    const cleanModel = info.gpuModel.toLowerCase();
+    const found = gpuTypes.find((g) => cleanModel.includes(g.name.toLowerCase()) || g.name.toLowerCase().includes(cleanModel));
+    if (found) {
+      matchedGpuTypeId = found.id;
+    }
+  }
+
+  const hasGpu = info.gpuCount > 0 || matchedGpuTypeId !== undefined;
+  const typeName = hasGpu ? "GPU Server" : "CPU Server";
+  const serverType = await prisma.serverType.findUnique({ where: { name: typeName } });
+
+  const diskCapacity = info.disks && info.disks.length > 0 ? (info.disks[0]?.size || "512GB") : null;
+
+  // Automatically update server details in database with clean field-wise values
   await prisma.server.update({
     where: { id: serverId },
     data: {
-      cpu: `${info.cpuCores} Cores - ${info.cpuModel}`.slice(0, 255),
+      cpu: `${info.cpuCores} Cores`,
       ram: info.ramFormatted,
+      disk: diskCapacity,
       gpuCount: info.gpuCount,
+      ...(matchedGpuTypeId !== undefined ? { gpuTypeId: matchedGpuTypeId } : {}),
+      ...(serverType ? { serverTypeId: serverType.id } : {}),
       osType: info.osName.slice(0, 50),
     },
   });
@@ -221,9 +241,12 @@ export async function autoDiscoverAndApply(serverId: number, ctx: AuditCtx = {})
     entity: "server",
     entityId: String(serverId),
     after: {
-      cpu: `${info.cpuCores} Cores - ${info.cpuModel}`,
+      cpu: `${info.cpuCores} Cores`,
       ram: info.ramFormatted,
+      disk: diskCapacity,
       gpuCount: info.gpuCount,
+      gpuModel: info.gpuModel,
+      serverType: serverType?.name ?? null,
       osType: info.osName,
     },
   });
