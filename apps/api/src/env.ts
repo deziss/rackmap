@@ -61,6 +61,11 @@ const EnvSchema = z.object({
   SSH_MAX_SESSION_MS: z.coerce.number().int().min(60_000).default(3_600_000),
   SSH_MAX_CONCURRENT: z.coerce.number().int().min(1).default(5),
   SSH_HOST_POLICY: z.enum(["accept-any", "tofu"]).default("accept-any"),
+  // Licencia Licensing & Subscription
+  LICENCIA_URL: z.string().optional(),
+  LICENCIA_API_KEY: z.string().optional(),
+  LICENCIA_PUBLIC_KEY: z.string().optional(),
+  LICENCIA_LICENSE_KEY: z.string().optional(),
 }).refine(
   (data) => {
     const raw = (data.APP_ENCRYPTION_PASSPHRASE || data.APP_ENCRYPTION_KEY || "").trim();

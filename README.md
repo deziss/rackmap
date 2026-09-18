@@ -229,6 +229,39 @@ If the master vault passphrase is lost or needs rotation:
 
 ---
 
+## Licensing & Subscription Tiers (Powered by Licencia)
+
+RackMap includes integrated subscription entitlement management backed by [Licencia](file:///home/anshukushwaha/Desktop/learn/licencia).
+
+### Tiers Matrix
+
+| Feature / Limit | Free Community Edition | Pro Tier | Enterprise Tier |
+|---|---|---|---|
+| **Max Managed Servers** | Up to **10 servers** | Up to **100 servers** | **Unlimited** |
+| **Server & Service Inventory** | Full CRUD, tagging, search | Included | Included |
+| **SSH Terminal** | Included | Included | Included |
+| **Hardware Auto-Discovery via SSH** | Gated (`PRO`) | Included | Included |
+| **ATOP Historical Spikes & Replay** | Gated (`PRO`) | Included | Included |
+| **Remote OS User & Sudoers Fleet** | Gated (`PRO`) | Included | Included |
+| **Automated System Updates** | Gated (`PRO`) | Included | Included |
+| **Multi-Channel Alert Dispatchers** | Gated (`PRO`) | Included | Included |
+
+### Configuration (`.env`)
+
+```bash
+# Licencia Server Integration (Optional)
+LICENCIA_URL=https://licencia.example.com
+LICENCIA_API_KEY=lic_live_your_api_key
+LICENCIA_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
+LICENCIA_LICENSE_KEY=LIC-PRO-XXXX-XXXX-XXXX-XXXX
+```
+
+### Managing Licenses in UI
+Admins can navigate to **Settings** (`/settings`) → **Subscription & Licensing**:
+- View real-time node quota utilization (`X / 10 servers used`).
+- Activate online license keys (`LIC-...`) or paste offline signed Ed25519 lease tokens.
+- Instant fallback to Free Community Edition upon deactivation.
+
 ## Development Setup
 
 **Prerequisites**: Node.js 20+, pnpm 9+

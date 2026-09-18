@@ -515,6 +515,23 @@ RackMap supports both **SQLite** and **PostgreSQL**:
 
 ---
 
+## Licensing, Subscriptions & Quotas (Licencia)
+
+RackMap includes native integration with **Licencia** for subscription tiering and node quota management:
+
+### 1. Subscription Tiers
+- **Free Community Edition**: Enabled by default with zero configuration. Allows managing up to **10 servers** with full inventory CRUD, manual specs, and SSH terminal access.
+- **RackMap Pro**: Unlocks up to **100 servers**, agentless Hardware Auto-Discovery over SSH, ATOP historical spikes timeline, remote OS user & sudoers fleet management, automated OS updates, and multi-channel alerts (Slack, Discord, Telegram).
+- **RackMap Enterprise**: Unlocks **unlimited servers**, customized retention periods, and priority enterprise capabilities.
+
+### 2. Managing Your Subscription
+1. Navigate to **Admin Settings** (`/settings`) → **Subscription & Licensing**.
+2. View your active tier badge and node capacity bar (`X / 10 servers used`).
+3. To activate a key, enter your Licencia key (`LIC-XXXX-XXXX-XXXX-XXXX`) and click **Activate**.
+4. For **air-gapped / offline deployments**, click *"Air-gapped deployment? Paste offline lease token"* and paste your signed Ed25519 token.
+5. To downgrade or remove a license, click **Deactivate License**.
+
+
 ## Roles & Permissions
 
 | Action | Admin | Editor | Viewer |

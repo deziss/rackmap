@@ -24,6 +24,8 @@ import type {
   AutoUpdateActionInput,
   AlertChannelsInfo,
   TestAlertResponse,
+  LicenseStatusResponse,
+  ActivateLicenseRequest,
 } from "@inv/shared";
 
 export const serverKeys = {
@@ -350,6 +352,29 @@ export function fetchServerAlertChannels(serverId: number) {
 
 export function sendServerTestAlert(serverId: number) {
   return apiFetch<TestAlertResponse>(`/api/v1/servers/${serverId}/test-alert`, {
+    method: "POST",
+  });
+}
+
+// ─── Licencia Subscription & Entitlements ──────────────────────────────────
+export const licenseKeys = {
+  all: ["license"] as const,
+  status: () => [...licenseKeys.all, "status"] as const,
+};
+
+export function fetchLicenseStatus() {
+  return apiFetch<LicenseStatusResponse>("/api/v1/license");
+}
+
+export function activateLicense(data: ActivateLicenseRequest) {
+  return apiFetch<LicenseStatusResponse>("/api/v1/license/activate", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deactivateLicense() {
+  return apiFetch<LicenseStatusResponse>("/api/v1/license/deactivate", {
     method: "POST",
   });
 }

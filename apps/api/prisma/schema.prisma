@@ -439,3 +439,18 @@ model SystemVault {
 
   @@map("system_vault")
 }
+
+// ─── Licencia Subscription & Feature Gates ──────────────────────────────────
+model SystemLicense {
+  id           Int       @id @default(1)
+  key          String?
+  leaseToken   String?
+  tier         String    @default("free") // "free" | "pro" | "enterprise"
+  featuresJson String    @default("{}")
+  maxServers   Int       @default(10)     // -1 for unlimited
+  expiresAt    DateTime?
+  cachedAt     DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("system_license")
+}

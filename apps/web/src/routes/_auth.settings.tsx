@@ -10,9 +10,13 @@ import {
   lockVaultGlobal,
   resetVault,
   vaultKeys,
+  fetchLicenseStatus,
+  activateLicense,
+  deactivateLicense,
+  licenseKeys,
 } from "@/lib/queries";
 import { toast } from "sonner";
-import { Bell, ShieldCheck, ShieldAlert, KeyRound, Lock, Unlock, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Bell, ShieldCheck, ShieldAlert, KeyRound, Lock, Unlock, Eye, EyeOff, Loader2, Sparkles, CheckCircle2, Server, Globe } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -32,6 +36,8 @@ function SettingsPage() {
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground text-sm mt-0.5">Manage notifications, credential security, and global vault settings</p>
       </div>
+
+      {isAdmin && <LicensingConfigurationSection />}
 
       {isAdmin && <VaultConfigurationSection />}
 
@@ -345,6 +351,229 @@ function PrefToggle({ label, prefKey, val, onChange, disabled }: { label: string
         disabled={disabled}
         className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer disabled:opacity-50"
       />
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------
+// Section: Subscription & Licensing (Licencia)
+// ----------------------------------------------------------------------
+function LicensingConfigurationSection() {
+  const qc = useQueryClient();
+  const { data: license, isLoading } = useQuery({
+    queryKey: licenseKeys.status(),
+    queryFn: fetchLicenseStatus,
+  });
+
+  const [licenseKey, setLicenseKey] = useState("");
+  const [offlineToken, setOfflineToken] = useState("");
+  const [showOffline, setShowOffline] = useState(false);
+  const [activating, setActivating] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
+
+  async function handleActivate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!licenseKey.trim() && !offlineToken.trim()) return;
+    setActivating(true);
+    try {
+      const res = await activateLicense({
+        key: licenseKey.trim(),
+        offlineToken: offlineToken.trim() || undefined,
+      });
+      toast.success(`Activated ${res.planName}!`);
+      setLicenseKey("");
+      setOfflineToken("");
+      qc.invalidateQueries({ queryKey: licenseKeys.all });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to activate license");
+    } finally {
+      setActivating(false);
+    }
+  }
+
+  async function handleDeactivate() {
+    if (!confirm("Are you sure you want to deactivate this license and return to the Free Community Edition?")) return;
+    setDeactivating(true);
+    try {
+      await deactivateLicense();
+      toast.success("License deactivated. Returned to Free Community Edition.");
+      qc.invalidateQueries({ queryKey: licenseKeys.all });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to deactivate license");
+    } finally {
+      setDeactivating(false);
+    }
+  }
+
+  const isFree = !license || license.tier === "free";
+  const percentUsed = license && license.maxServers > 0
+    ? Math.min(100, Math.round((license.serverCount / license.maxServers) * 100))
+    : 0;
+
+  return (
+    <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-6 space-y-5">
+      {/* Header */}
+      <div className="flex items-start justify-between border-b pb-4">
+        <div>
+          <h2 className="text-base font-semibold flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-amber-500" />
+            Subscription & Licensing
+          </h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Enterprise licensing, node limits, and feature entitlements powered by Licencia
+          </p>
+        </div>
+        {isLoading ? (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        ) : (
+          <Badge
+            className={
+              license?.tier === "enterprise"
+                ? "bg-amber-500/20 text-amber-400 border-amber-500/30 uppercase text-[10px]"
+                : license?.tier === "pro"
+                ? "bg-purple-500/20 text-purple-400 border-purple-500/30 uppercase text-[10px]"
+                : "bg-muted text-muted-foreground border-border uppercase text-[10px]"
+            }
+          >
+            {license?.planName || "Free Community"}
+          </Badge>
+        )}
+      </div>
+
+      {/* Node Capacity & Utilization */}
+      <div className="rounded-lg border bg-muted/20 p-3.5 space-y-2 text-xs">
+        <div className="flex items-center justify-between">
+          <span className="font-medium flex items-center gap-1.5 text-foreground">
+            <Server className="h-3.5 w-3.5 text-primary" /> Managed Nodes Capacity:
+          </span>
+          <span className="font-semibold text-foreground">
+            {license?.serverCount ?? 0} / {license?.maxServers === -1 ? "Unlimited" : (license?.maxServers ?? 10)} Servers
+          </span>
+        </div>
+        {license?.maxServers !== -1 && (
+          <div className="w-full bg-muted rounded-full h-2 overflow-hidden border">
+            <div
+              className={`h-full transition-all ${percentUsed >= 90 ? "bg-rose-500" : percentUsed >= 70 ? "bg-amber-500" : "bg-primary"}`}
+              style={{ width: `${percentUsed}%` }}
+            />
+          </div>
+        )}
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+          <span>{isFree ? "Free Community allows up to 10 servers." : "Active subscription allowance."}</span>
+          <span>{percentUsed}% Quota Utilized</span>
+        </div>
+      </div>
+
+      {/* Feature Entitlements Chips */}
+      <div className="space-y-1.5">
+        <span className="text-xs font-medium text-foreground block">Active Feature Entitlements:</span>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          {[
+            { key: "hardware_discovery", label: "Hardware Auto-Discovery" },
+            { key: "atop_history", label: "ATOP Spikes Timeline & Replay" },
+            { key: "remote_os_users", label: "Remote OS Users & Sudoers" },
+            { key: "auto_update", label: "Automated OS Patching" },
+            { key: "multi_channel_alerts", label: "Multi-Channel Alerting" },
+          ].map((feat) => {
+            const isEnabled = !isFree && !!license?.features?.[feat.key];
+            return (
+              <div
+                key={feat.key}
+                className={`p-2 rounded-md border text-[11px] flex items-center justify-between ${
+                  isEnabled ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300" : "bg-muted/30 text-muted-foreground opacity-75"
+                }`}
+              >
+                <span>{feat.label}</span>
+                {isEnabled ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                ) : (
+                  <Badge variant="outline" className="text-[9px] px-1 py-0 border-muted-foreground/30 text-muted-foreground">PRO</Badge>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Hardware Fingerprint */}
+      {license?.hardwareId && (
+        <div className="text-[11px] text-muted-foreground flex items-center justify-between border-t pt-2 font-mono">
+          <span>Hardware Fingerprint:</span>
+          <span className="bg-muted px-1.5 py-0.5 rounded border">{license.hardwareId}</span>
+        </div>
+      )}
+
+      {/* Activation Form */}
+      <form onSubmit={handleActivate} className="space-y-3 border-t pt-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs">
+            {isFree ? "Activate Licencia License Key" : "Change / Upgrade License Key"}
+          </Label>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <KeyRound className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                type="text"
+                value={licenseKey}
+                onChange={(e) => setLicenseKey(e.target.value)}
+                placeholder="LIC-XXXX-XXXX-XXXX-XXXX"
+                className="pl-8 text-xs font-mono"
+                disabled={activating || deactivating}
+              />
+            </div>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={(!licenseKey.trim() && !offlineToken.trim()) || activating}
+              className="gap-1.5 text-xs shrink-0"
+            >
+              {activating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              Activate
+            </Button>
+          </div>
+        </div>
+
+        {/* Optional Offline Token Input */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowOffline(!showOffline)}
+            className="text-[11px] text-primary hover:underline flex items-center gap-1"
+          >
+            <Globe className="h-3 w-3" />
+            {showOffline ? "Hide Offline Token Field" : "Air-gapped deployment? Paste offline lease token"}
+          </button>
+          {showOffline && (
+            <div className="mt-2 space-y-1">
+              <Input
+                type="text"
+                value={offlineToken}
+                onChange={(e) => setOfflineToken(e.target.value)}
+                placeholder="Paste signed offline license token (ey...)"
+                className="text-xs font-mono"
+                disabled={activating || deactivating}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Deactivate button if currently active */}
+        {!isFree && (
+          <div className="pt-2 flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDeactivate}
+              disabled={deactivating || activating}
+              className="text-xs border-rose-500/30 text-rose-400 hover:bg-rose-500/10"
+            >
+              {deactivating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+              Deactivate License (Return to Free)
+            </Button>
+          </div>
+        )}
+      </form>
     </div>
   );
 }

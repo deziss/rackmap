@@ -28,6 +28,7 @@ import { SudoPermissionInput, CreateOsUserInput, UpdateOsUserInput, DeleteOsUser
 import { sshErrorToHttp } from "../../services/ssh.service.js";
 import { env } from "../../env.js";
 import { prisma } from "../../db.js";
+import { assertCanAddServer, assertFeatureEnabled } from "../../services/license.service.js";
 
 // Throttle metrics-view audit: one row per user·server per 5 min (the page polls every 5s).
 const METRICS_AUDIT_TTL_MS = 5 * 60 * 1000;
@@ -67,6 +68,7 @@ export const serverRoutes = new Hono()
     requirePermission({ server: ["create"] }),
     zValidator("json", ServerCreateInput),
     async (c) => {
+      await assertCanAddServer();
       const input = c.req.valid("json");
       const token = getSessionToken(c);
       const dto = await createServer(input, getAuditCtx(c), token);
@@ -225,6 +227,7 @@ export const serverRoutes = new Hono()
     requirePermission({ server: ["discover"] }),
     zValidator("param", idParamSchema),
     async (c) => {
+      await assertFeatureEnabled("hardware_discovery");
       const { id } = c.req.valid("param");
       try {
         const sshPass = c.req.header("x-ssh-password") || undefined;
@@ -263,6 +266,7 @@ export const serverRoutes = new Hono()
     zValidator("param", idParamSchema),
     zValidator("json", CreateOsUserInput),
     async (c) => {
+      await assertFeatureEnabled("remote_os_users");
       const { id } = c.req.valid("param");
       const input = c.req.valid("json");
       try {
@@ -358,6 +362,7 @@ export const serverRoutes = new Hono()
     requirePermission({ server: ["atop"] }),
     zValidator("param", idParamSchema),
     async (c) => {
+      await assertFeatureEnabled("atop_history");
       const { id } = c.req.valid("param");
       try {
         const sshPass = c.req.header("x-ssh-password") || undefined;
@@ -454,6 +459,7 @@ export const serverRoutes = new Hono()
     zValidator("param", idParamSchema),
     zValidator("json", AutoUpdateActionInput),
     async (c) => {
+      await assertFeatureEnabled("auto_update");
       const { id } = c.req.valid("param");
       const input = c.req.valid("json");
       try {

@@ -42,6 +42,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { SshTerminal } from "@/components/ssh-terminal";
 import { VaultUnlockDialog } from "@/components/vault-unlock-dialog";
+import { UpgradeDialog } from "@/components/upgrade-dialog";
+import { fetchLicenseStatus, licenseKeys } from "@/lib/queries";
 import { SudoPermissionDialog } from "@/components/sudo-permission-dialog";
 import { PaginationBar } from "@/components/pagination-bar";
 import { CreateOsUserDialog, EditOsUserDialog, DeleteOsUserDialog } from "@/components/os-user-dialogs";
@@ -252,6 +254,16 @@ function ServerDetailPage() {
 
   const [discoveredHardware, setDiscoveredHardware] = useState<ServerHardwareInfo | null>(null);
   const [serverPasswordDialogOpen, setServerPasswordDialogOpen] = useState(false);
+  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
+  const [upgradeFeatureInfo, setUpgradeFeatureInfo] = useState({
+    name: "Hardware Auto-Discovery via SSH",
+    description: "Remotely inspect CPU models, RAM DIMMs, block partitions (lsblk), and GPU accelerators over SSH in seconds. Requires a RackMap Pro subscription.",
+  });
+
+  const { data: license } = useQuery({
+    queryKey: licenseKeys.status(),
+    queryFn: fetchLicenseStatus,
+  });
 
   const hw: ServerHardwareInfo | null = useMemo(() => {
     if (discoveredHardware) return discoveredHardware;
@@ -296,6 +308,14 @@ function ServerDetailPage() {
       queryClient.invalidateQueries({ queryKey: serverKeys.all });
     },
     onError: (err: any) => {
+      if (err.message?.includes("subscription") || err.message?.includes("Pro or Enterprise") || err.code === "FEATURE_LOCKED") {
+        setUpgradeFeatureInfo({
+          name: "Hardware Auto-Discovery via SSH",
+          description: "Remotely inspect CPU models, RAM DIMMs, block partitions (lsblk), and GPU accelerators over SSH in seconds. Requires a RackMap Pro subscription.",
+        });
+        setUpgradeDialogOpen(true);
+        return;
+      }
       if (err.code === "VAULT_LOCKED" || err.message?.includes("Vault is locked")) {
         setVaultModalOpen(true);
         toast.error("Unlock the Credential Vault first to decrypt SSH credentials.");
@@ -448,7 +468,17 @@ function ServerDetailPage() {
                 size="sm"
                 variant="default"
                 className="gap-1.5 h-8 text-xs bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-sm"
-                onClick={() => discoverMutation.mutate()}
+                onClick={() => {
+                  if (license && (!license.features?.hardware_discovery || license.tier === "free")) {
+                    setUpgradeFeatureInfo({
+                      name: "Hardware Auto-Discovery via SSH",
+                      description: "Remotely inspect CPU models, RAM DIMMs, block partitions (lsblk), and GPU accelerators over SSH in seconds. Requires a RackMap Pro subscription.",
+                    });
+                    setUpgradeDialogOpen(true);
+                    return;
+                  }
+                  discoverMutation.mutate();
+                }}
                 disabled={discoverMutation.isPending}
               >
                 {discoverMutation.isPending ? (
@@ -457,6 +487,9 @@ function ServerDetailPage() {
                   <Wand2 className="h-3.5 w-3.5" />
                 )}
                 Auto-Discover Hardware
+                {license?.tier === "free" && (
+                  <Badge variant="outline" className="text-[9px] px-1 py-0 ml-1 border-white/40 text-white/90">PRO</Badge>
+                )}
               </Button>
             )}
 
@@ -624,6 +657,13 @@ function ServerDetailPage() {
 
       {/* Dialogs */}
       <AddSshKeyDialog open={addSshKeyOpen} onOpenChange={setAddSshKeyOpen} />
+
+      <UpgradeDialog
+        open={upgradeDialogOpen}
+        onOpenChange={setUpgradeDialogOpen}
+        featureName={upgradeFeatureInfo.name}
+        featureDescription={upgradeFeatureInfo.description}
+      />
 
       {server && (
         <ServerPasswordDialog

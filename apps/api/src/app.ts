@@ -22,6 +22,7 @@ import { serviceRoutes } from "./modules/services/service.routes.js";
 import { sslRoutes } from "./modules/ssl/ssl.routes.js";
 import { vaultRoutes } from "./modules/vault/vault.routes.js";
 import { sshKeyRoutes } from "./modules/ssh-keys/ssh-key.routes.js";
+import { licenseRoutes } from "./modules/license/license.routes.js";
 
 export function createApp() {
   const app = new Hono();
@@ -120,6 +121,7 @@ export function createApp() {
   app.route("/api/v1/ssl", sslRoutes);
   app.route("/api/v1/vault", vaultRoutes);
   app.route("/api/v1/ssh-keys", sshKeyRoutes);
+  app.route("/api/v1/license", licenseRoutes);
 
   app.onError(onError);
 

@@ -9,6 +9,7 @@ import { scheduleBackup } from "./services/backup.service.js";
 import { setupWebSocket } from "./ws/ssh.ws.js";
 import { startAlertScheduler } from "./services/alert.service.js";
 import { autoInitVaultFromEnv } from "./services/vault.service.js";
+import { autoInitLicenseFromEnv } from "./services/license.service.js";
 import type { Server } from "node:http";
 
 async function main() {
@@ -19,6 +20,9 @@ async function main() {
 
   // Auto-initialize or unlock Master Credential Vault if VAULT_PASSPHRASE is configured in .env
   await autoInitVaultFromEnv();
+
+  // Auto-initialize Licencia license if LICENCIA_LICENSE_KEY is configured in .env
+  await autoInitLicenseFromEnv();
 
   const app = createApp();
 

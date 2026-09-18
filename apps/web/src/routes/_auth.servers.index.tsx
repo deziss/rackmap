@@ -5,6 +5,8 @@ import { useState, useCallback } from "react";
 import { ServerDetailModal } from "@/components/server-detail-modal";
 import { fetchServers, checkServer, checkAllServers, revealPassword, serverKeys, fetchVaultStatus, vaultKeys } from "@/lib/queries";
 import { VaultUnlockDialog } from "@/components/vault-unlock-dialog";
+import { UpgradeDialog } from "@/components/upgrade-dialog";
+import { fetchLicenseStatus, licenseKeys } from "@/lib/queries";
 import { apiFetch } from "@/lib/api";
 import { StatusDot } from "@/components/status-dot";
 import { Button } from "@/components/ui/button";
@@ -19,7 +21,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import {
-  ExternalLink, RefreshCw, Eye, EyeOff, Trash2, RotateCcw, Zap,
+  ExternalLink, RefreshCw, Sparkles, Eye, EyeOff, Trash2, RotateCcw, Zap,
   Download, AlertTriangle, Terminal, Copy, ShieldCheck, ShieldAlert,
 } from "lucide-react";
 import type { ServerDto } from "@inv/shared";
@@ -97,6 +99,12 @@ function ServersPage() {
   const [detailServerId, setDetailServerId] = useState<number | null>(null);
   const [revealedPasswords, setRevealedPasswords] = useState<Record<number, string | null>>({});
   const [vaultModalOpen, setVaultModalOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+
+  const { data: license } = useQuery({
+    queryKey: licenseKeys.status(),
+    queryFn: fetchLicenseStatus,
+  });
   const [pendingRevealServer, setPendingRevealServer] = useState<ServerDto | null>(null);
 
   const { data: vaultStatus } = useQuery({
@@ -290,7 +298,21 @@ function ServersPage() {
           <Download className="h-3.5 w-3.5" /> JSON
         </Button>
         {canEdit && <ImportWizard onImported={() => qc.invalidateQueries({ queryKey: serverKeys.all })} />}
-        {canEdit && <ServerFormDialog onSaved={() => qc.invalidateQueries({ queryKey: serverKeys.all })} />}
+        {canEdit && (
+          license && !license.canAddServer ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 border-amber-500/40 text-amber-400 hover:bg-amber-500/10 text-xs"
+              onClick={() => setUpgradeOpen(true)}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Limit Reached ({license.serverCount}/{license.maxServers})
+            </Button>
+          ) : (
+            <ServerFormDialog onSaved={() => qc.invalidateQueries({ queryKey: serverKeys.all })} />
+          )
+        )}
       </div>
 
       {/* Table */}
@@ -645,6 +667,13 @@ function ServersPage() {
       />
 
       <ServerDetailModal serverId={detailServerId} onClose={() => setDetailServerId(null)} />
+
+      <UpgradeDialog
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        featureName="Server Node Limit"
+        featureDescription="You have reached the maximum server capacity of the Free Community Edition (10 servers). Upgrade to RackMap Pro for 100+ servers."
+      />
 
       <VaultUnlockDialog
         open={vaultModalOpen}
