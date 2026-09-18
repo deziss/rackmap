@@ -165,8 +165,8 @@ export function parseDiscoveryOutput(output: string, hostname: string): ServerHa
 }
 
 /** Execute remote SSH discovery on a server */
-export async function discoverServerHardware(serverId: number): Promise<ServerHardwareInfo> {
-  const { client, target } = await connectToServer(serverId);
+export async function discoverServerHardware(serverId: number, overridePassword?: string): Promise<ServerHardwareInfo> {
+  const { client, target } = await connectToServer(serverId, overridePassword);
 
   return new Promise((resolve, reject) => {
     let stdout = "";
@@ -200,8 +200,8 @@ export async function discoverServerHardware(serverId: number): Promise<ServerHa
 }
 
 /** Auto-discover and automatically update the Server database record */
-export async function autoDiscoverAndApply(serverId: number, ctx: AuditCtx = {}): Promise<ServerHardwareInfo> {
-  const info = await discoverServerHardware(serverId);
+export async function autoDiscoverAndApply(serverId: number, ctx: AuditCtx = {}, overridePassword?: string): Promise<ServerHardwareInfo> {
+  const info = await discoverServerHardware(serverId, overridePassword);
 
   // Match GPU type if GPU was detected
   let matchedGpuTypeId: number | undefined = undefined;

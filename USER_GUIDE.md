@@ -218,9 +218,11 @@ An in-browser SSH terminal powered by xterm.js.
 3. Editors and viewers must submit an access request (see [Access Requests](#access-requests))
 
 **Open a terminal:**
-1. Click a server hostname to open the detail modal
-2. Click **SSH Terminal** in the header
-3. The terminal connects using stored credentials — no password prompt
+1. Click **SSH Terminal** in the main sidebar (`/ssh`) or click **SSH Terminal** from any Server Detail page.
+2. In the sidebar host list, use the **"Filter hosts by name or IP..."** search bar to quickly locate any server by hostname or IP address.
+3. Online hosts display a green status dot with current latency, and offline hosts display a red dot.
+4. Click any host (or press **Enter**) to instantly open a dedicated terminal session tab.
+5. The terminal connects using configured SSH keys or saved passwords, with automatic PAM keyboard-interactive fallback.
 
 **Limits:**
 - Idle sessions close after 5 minutes (configurable via `SSH_IDLE_TIMEOUT_MS`)
@@ -251,6 +253,10 @@ Services are periodically checked by the background scheduler. Alerts are sent v
 ---
 
 ## SSL Certificate Tracking
+
+RackMap provides proactive SSL/TLS certificate tracking and expiration monitoring.
+- **Search & Filtering**: Use the top search bar to filter certificates by domain name, team, project, issuer authority (e.g., Let's Encrypt, Sectigo), or linked server hostname.
+- **Status Indicators**: Badges indicate Valid, Expiring Soon (<30 days), Expired, or Error.
 
 The **SSL** page (`/ssl`) monitors domain certificates for upcoming expiration.
 
@@ -422,6 +428,25 @@ Both can be active simultaneously. Notifications fire after `STATUS_FLIP_THRESHO
 ## Security Settings & Credential Vault
 
 Navigate to **Security** via the bottom sidebar or visit `/security`.
+
+### Are Server Passwords Actually Encrypted or Just Gated?
+
+**Server passwords are truly AES-256-GCM encrypted, not just gated or masked:**
+1. **At-Rest Database Encryption**: In SQLite / PostgreSQL (`inventory.db`), the `passwordEnc` column never contains plaintext passwords. It stores encrypted payloads in the format:
+   - `v2.<iv_hex>.<auth_tag_hex>.<cipher_hex>` (when using the Master Credential Vault DEK)
+   - `v1.<iv_hex>.<auth_tag_hex>.<cipher_hex>` (when using the At-Rest Application Key)
+2. **Authenticated Encryption with Associated Data (AEAD)**: Every encrypted password generates a cryptographically random 12-byte initialization vector (IV) and a 16-byte authentication tag ensuring integrity and preventing tampering.
+3. **API Stripping**: All standard server listing, query, and detail endpoints explicitly strip `passwordEnc` at the service layer (`toDto`). The REST API only outputs `hasPassword: true/false` to frontend clients.
+4. **On-Demand In-Memory Decryption**: Decryption only occurs in-memory when:
+   - An authorized operator with vault access clicks "Reveal Password" (which logs an audit event).
+   - The backend SSH service establishes an SSH tunnel or executes automated background discovery.
+
+### Global Admin Vault Configuration (`/settings`)
+
+Administrators can configure the vault once globally to eliminate repetitive unlock prompts:
+1. Navigate to **Admin Settings** (`/settings`) → **Credential Vault & Passphrase Configuration**.
+2. Enter the master passphrase to unlock the vault globally in server memory.
+3. Check **"Persist to .env file"** to automatically save `VAULT_PASSPHRASE` into the environment configuration. This ensures the master vault automatically initializes and unlocks whenever API containers reboot.
 
 ### 1. Master Credential Vault & Encryption Passphrases
 

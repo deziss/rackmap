@@ -31,5 +31,6 @@ export const SshKeyTestResult = z.object({
   success: z.boolean(),
   latencyMs: z.number().optional(),
   message: z.string(),
+  authMethodUsed: z.enum(["key", "password"]).optional(),
 });
 export type SshKeyTestResult = z.infer<typeof SshKeyTestResult>;

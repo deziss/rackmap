@@ -30,6 +30,7 @@ import { ServiceDetailModal } from "@/components/service-detail-modal";
 import { ServiceFormDialog } from "@/components/service-form-dialog";
 import { ServiceImportWizard } from "@/components/service-import-wizard";
 import { RequestAccessButton } from "@/components/request-access-button";
+import { VaultUnlockDialog } from "@/components/vault-unlock-dialog";
 import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/_auth/services")({
@@ -75,6 +76,7 @@ function DeleteConfirm({ service, onConfirm, isPending }: { service: ServiceDto;
 function PasswordCell({ serviceId, hasPassword, canReveal, isViewer, isApproved }: { serviceId: number; hasPassword: boolean; canReveal: boolean; isViewer: boolean; isApproved: boolean }) {
   const [revealed, setRevealed] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [vaultModalOpen, setVaultModalOpen] = useState(false);
 
   if (!hasPassword) return <span className="text-muted-foreground/50 text-xs italic">—</span>;
 
@@ -87,8 +89,13 @@ function PasswordCell({ serviceId, hasPassword, canReveal, isViewer, isApproved 
     try {
       const res = await revealServicePassword(serviceId);
       setRevealed(res.password);
-    } catch (err: unknown) {
-      toast.error((err as Error).message);
+    } catch (err: any) {
+      if (err.code === "VAULT_LOCKED" || err.message?.includes("Vault is locked") || err.message?.includes("different vault key")) {
+        setVaultModalOpen(true);
+        toast.error("Unlock the Credential Vault to decrypt this service password.");
+      } else {
+        toast.error(err.message ?? "Failed to reveal password");
+      }
     } finally {
       setLoading(false);
     }
@@ -129,6 +136,13 @@ function PasswordCell({ serviceId, hasPassword, canReveal, isViewer, isApproved 
           <TooltipContent>Copy password</TooltipContent>
         </Tooltip>
       )}
+      <VaultUnlockDialog
+        open={vaultModalOpen}
+        onOpenChange={setVaultModalOpen}
+        onSuccess={() => {
+          toggle();
+        }}
+      />
     </div>
   );
 }

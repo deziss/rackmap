@@ -76,13 +76,68 @@ export async function getVaultStatus(sessionToken?: string) {
     }
   }
 
+  const isGlobalUnlocked = isEnvUnlocked && (Date.now() < activeSessions.get(SYSTEM_SESSION_TOKEN)!.expiresAt);
+
   return {
     isInitialized,
     isUnlocked,
+    isGlobalUnlocked,
     autoLockMinutes: DEFAULT_AUTO_LOCK_MINUTES,
     expiresAt,
     isEnvUnlocked,
   };
+}
+
+/** Unlock vault globally for all sessions and background tasks */
+export async function unlockVaultGlobal(passphrase: string, persistToEnv: boolean = false) {
+  const vault = await prisma.systemVault.findFirst({ where: { id: 1 } });
+  if (!vault) {
+    throw new Error("Vault is not initialized. Please set up a master vault passphrase.");
+  }
+
+  const salt = Buffer.from(vault.salt, "hex");
+  const kek = deriveKek(passphrase, salt);
+  const expectedVerifier = computeVerifier(kek);
+
+  if (!crypto.timingSafeEqual(Buffer.from(expectedVerifier, "hex"), Buffer.from(vault.verifier, "hex"))) {
+    throw new Error("Invalid vault passphrase");
+  }
+
+  const dek = aesDecrypt(kek, vault.encryptedDek);
+  if (!dek) {
+    throw new Error("Failed to decrypt vault key");
+  }
+
+  activeSessions.set(SYSTEM_SESSION_TOKEN, {
+    dek,
+    expiresAt: Number.MAX_SAFE_INTEGER,
+  });
+
+  if (persistToEnv) {
+    try {
+      const envPath = path.resolve(process.cwd(), ".env");
+      if (fs.existsSync(envPath)) {
+        let envContent = fs.readFileSync(envPath, "utf8");
+        if (envContent.includes("VAULT_PASSPHRASE=")) {
+          envContent = envContent.replace(/VAULT_PASSPHRASE=.*/g, `VAULT_PASSPHRASE=${passphrase}`);
+        } else {
+          envContent += `\nVAULT_PASSPHRASE=${passphrase}\n`;
+        }
+        fs.writeFileSync(envPath, envContent, "utf8");
+      }
+      process.env.VAULT_PASSPHRASE = passphrase;
+    } catch {
+      // ignore write error
+    }
+  }
+
+  return { ok: true, isGlobalUnlocked: true };
+}
+
+/** Lock vault globally */
+export function lockVaultGlobal() {
+  activeSessions.delete(SYSTEM_SESSION_TOKEN);
+  return { ok: true };
 }
 
 /** Initialize master vault with user passphrase */
@@ -274,6 +329,22 @@ export async function decryptPasswordWithVault(ciphertext: string, sessionToken?
     // 4. Fallback: check if fallback APP_ENCRYPTION_KEY can decrypt
     const fallback = decryptSecret(ciphertext);
     if (fallback) return fallback;
+
+    let anyUnlocked = false;
+    if (activeSessions.has(SYSTEM_SESSION_TOKEN) && Date.now() < activeSessions.get(SYSTEM_SESSION_TOKEN)!.expiresAt) {
+      anyUnlocked = true;
+    }
+    for (const session of activeSessions.values()) {
+      if (Date.now() < session.expiresAt) {
+        anyUnlocked = true;
+        break;
+      }
+    }
+
+    if (anyUnlocked) {
+      throw new Error("Unable to decrypt password: The credential was encrypted with a different vault key or passphrase.");
+    }
+
     throw new Error("Vault is locked. Enter your vault passphrase to decrypt this password.");
   }
 

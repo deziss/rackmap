@@ -28,6 +28,7 @@ import {
   fetchServerAlertChannels,
   sendServerTestAlert,
   alertChannelKeys,
+  updateServer,
 } from "@/lib/queries";
 import { apiFetch } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
@@ -38,6 +39,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { SshTerminal } from "@/components/ssh-terminal";
 import { VaultUnlockDialog } from "@/components/vault-unlock-dialog";
 import { SudoPermissionDialog } from "@/components/sudo-permission-dialog";
@@ -64,6 +66,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   KeyRound,
+  Lock,
   FileText,
   Users,
   Activity,
@@ -248,6 +251,7 @@ function ServerDetailPage() {
   });
 
   const [discoveredHardware, setDiscoveredHardware] = useState<ServerHardwareInfo | null>(null);
+  const [serverPasswordDialogOpen, setServerPasswordDialogOpen] = useState(false);
 
   const hw: ServerHardwareInfo | null = useMemo(() => {
     if (discoveredHardware) return discoveredHardware;
@@ -292,9 +296,12 @@ function ServerDetailPage() {
       queryClient.invalidateQueries({ queryKey: serverKeys.all });
     },
     onError: (err: any) => {
-      if (err.code === "VAULT_LOCKED") {
+      if (err.code === "VAULT_LOCKED" || err.message?.includes("Vault is locked")) {
         setVaultModalOpen(true);
         toast.error("Unlock the Credential Vault first to decrypt SSH credentials.");
+      } else if (err.message?.includes("SSH authentication failed") || err.message?.includes("usable SSH credentials")) {
+        toast.error(err.message || "SSH authentication failed with host key");
+        setServerPasswordDialogOpen(true);
       } else {
         toast.error(err.message || "Failed to auto-discover hardware over SSH");
       }
@@ -570,6 +577,7 @@ function ServerDetailPage() {
           server={server}
           hw={hw}
           onAddCustomKey={() => setAddSshKeyOpen(true)}
+          onOpenPasswordModal={() => setServerPasswordDialogOpen(true)}
         />
       )}
 
@@ -616,6 +624,22 @@ function ServerDetailPage() {
 
       {/* Dialogs */}
       <AddSshKeyDialog open={addSshKeyOpen} onOpenChange={setAddSshKeyOpen} />
+
+      {server && (
+        <ServerPasswordDialog
+          serverId={server.id}
+          hostname={server.hostname}
+          ip={server.ip}
+          username={server.username}
+          sshPort={server.sshPort}
+          open={serverPasswordDialogOpen}
+          onOpenChange={setServerPasswordDialogOpen}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: serverKeys.detail(id) });
+            discoverMutation.mutate();
+          }}
+        />
+      )}
 
       <VaultUnlockDialog
         open={vaultModalOpen}
@@ -672,10 +696,12 @@ function OverviewTab({
   server,
   hw,
   onAddCustomKey,
+  onOpenPasswordModal,
 }: {
   server: any;
   hw: ServerHardwareInfo | null;
   onAddCustomKey: () => void;
+  onOpenPasswordModal: () => void;
 }) {
   const { data: servicesData } = useQuery({
     queryKey: serviceKeys.list({ q: server?.ip ?? "" }),
@@ -909,7 +935,7 @@ function OverviewTab({
       </div>
 
       {/* SSH Key Access & Host Key Discovery */}
-      <SshKeyAccessCard server={server} onAddCustomKey={onAddCustomKey} />
+      <SshKeyAccessCard server={server} onAddCustomKey={onAddCustomKey} onOpenPasswordModal={onOpenPasswordModal} />
 
       {/* Automated System Updates (Unattended-Upgrades) */}
       <AutoUpdateCard serverId={server.id} />
@@ -922,37 +948,71 @@ function OverviewTab({
 
 
 // ----------------------------------------------------------------------
-// Sub-Card: SSH Key Access & Host Key Binding
+// Sub-Card: SSH Authentication & Credentials (Keys & Passwords)
 // ----------------------------------------------------------------------
-function SshKeyAccessCard({ server, onAddCustomKey }: { server: any; onAddCustomKey: () => void }) {
+function SshKeyAccessCard({
+  server,
+  onAddCustomKey,
+  onOpenPasswordModal,
+}: {
+  server: any;
+  onAddCustomKey: () => void;
+  onOpenPasswordModal: () => void;
+}) {
   const queryClient = useQueryClient();
   const { data: keysData, isLoading: keysLoading } = useQuery({
     queryKey: sshKeyKeys.all,
     queryFn: fetchSshKeys,
   });
 
-  const [testing, setTesting] = useState(false);
+  const [testingKey, setTestingKey] = useState(false);
+  const [testingPassword, setTestingPassword] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
 
   const keys = keysData?.keys ?? [];
 
   const handleTestKey = async () => {
-    setTesting(true);
+    setTestingKey(true);
     setTestResult(null);
     try {
-      const res = await testServerSshKey(server.id);
+      const res = await testServerSshKey(server.id, { authMethod: "key" });
       if (res.success) {
-        setTestResult(`✓ ${res.message}`);
+        setTestResult(`✓ Key Auth: ${res.message}`);
         toast.success(res.message);
       } else {
-        setTestResult(`✕ ${res.message}`);
+        setTestResult(`✕ Key Auth: ${res.message}`);
         toast.error(res.message);
       }
     } catch (err: any) {
-      setTestResult(`✕ ${err.message || "Failed to test key"}`);
+      setTestResult(`✕ Key Auth: ${err.message || "Failed to test key"}`);
       toast.error(err.message || "Failed to test key");
     } finally {
-      setTesting(false);
+      setTestingKey(false);
+    }
+  };
+
+  const handleTestPassword = async () => {
+    if (!server.hasPassword) {
+      toast.info("No password stored yet for this server. Please enter a password.");
+      onOpenPasswordModal();
+      return;
+    }
+    setTestingPassword(true);
+    setTestResult(null);
+    try {
+      const res = await testServerSshKey(server.id, { authMethod: "password" });
+      if (res.success) {
+        setTestResult(`✓ Password Auth: ${res.message}`);
+        toast.success(res.message);
+      } else {
+        setTestResult(`✕ Password Auth: ${res.message}`);
+        toast.error(res.message);
+      }
+    } catch (err: any) {
+      setTestResult(`✕ Password Auth: ${err.message || "Failed to test password"}`);
+      toast.error(err.message || "Failed to test password");
+    } finally {
+      setTestingPassword(false);
     }
   };
 
@@ -969,21 +1029,42 @@ function SshKeyAccessCard({ server, onAddCustomKey }: { server: any; onAddCustom
 
   return (
     <Card>
-      <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          <KeyRound className="h-4 w-4 text-primary" />
-          SSH Key Access & Host Key Binding
-        </CardTitle>
+      <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0 flex-wrap gap-2">
         <div className="flex items-center gap-2">
+          <KeyRound className="h-4 w-4 text-primary" />
+          <CardTitle className="text-sm font-semibold">
+            SSH Authentication & Credentials
+          </CardTitle>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             size="sm"
             variant="outline"
             className="h-7 text-xs gap-1.5"
             onClick={handleTestKey}
-            disabled={testing}
+            disabled={testingKey || testingPassword}
           >
-            {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />}
+            {testingKey ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5 text-blue-400" />}
             Test Key Login
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1.5"
+            onClick={handleTestPassword}
+            disabled={testingKey || testingPassword}
+          >
+            {testingPassword ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />}
+            Test Password Login
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+            onClick={onOpenPasswordModal}
+          >
+            <Lock className="h-3.5 w-3.5" />
+            {server.hasPassword ? "Change Password" : "Set Password"}
           </Button>
           <Button
             size="sm"
@@ -995,6 +1076,31 @@ function SshKeyAccessCard({ server, onAddCustomKey }: { server: any; onAddCustom
         </div>
       </CardHeader>
       <CardContent className="p-4 pt-2 space-y-3">
+        {/* Status banner */}
+        <div className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20 text-xs">
+          <div className="flex items-center gap-2">
+            <Lock className="h-4 w-4 text-primary" />
+            <span className="font-medium text-foreground">Password Authentication:</span>
+            {server.hasPassword ? (
+              <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">
+                Configured in Vault
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="text-amber-400 bg-amber-500/15 border-amber-500/30 text-[10px]">
+                Not Set (Remote SSH requires key or password prompt)
+              </Badge>
+            )}
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 text-xs text-primary hover:underline px-2"
+            onClick={onOpenPasswordModal}
+          >
+            {server.hasPassword ? "Update Password" : "Enter Password"}
+          </Button>
+        </div>
+
         {testResult && (
           <div
             className={cn(
@@ -1013,7 +1119,7 @@ function SshKeyAccessCard({ server, onAddCustomKey }: { server: any; onAddCustom
 
         <div className="text-xs text-muted-foreground">
           <p>
-            When connecting to <strong className="text-foreground">{server.username}@{server.ip}</strong>, the backend verifies authentication using available host keys or custom keys before falling back to stored password. Privileged commands seamlessly elevate using the decrypted Vault password.
+            When connecting to <strong className="text-foreground">{server.username}@{server.ip}</strong>, the backend verifies authentication using available host keys or custom keys before automatically falling back to stored password and PAM keyboard-interactive. Privileged commands seamlessly elevate using the decrypted Vault password.
           </p>
         </div>
 
@@ -1066,6 +1172,171 @@ function SshKeyAccessCard({ server, onAddCustomKey }: { server: any; onAddCustom
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// ----------------------------------------------------------------------
+// Dialog: Set / Test Server Password
+// ----------------------------------------------------------------------
+function ServerPasswordDialog({
+  serverId,
+  hostname,
+  ip,
+  username,
+  sshPort,
+  open,
+  onOpenChange,
+  onSuccess,
+}: {
+  serverId: number;
+  hostname: string;
+  ip: string;
+  username: string;
+  sshPort: number;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [password, setPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [testStatus, setTestStatus] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleTest = async () => {
+    if (!password) {
+      toast.error("Enter a password to test");
+      return;
+    }
+    setTesting(true);
+    setTestStatus(null);
+    try {
+      const res = await testServerSshKey(serverId, { authMethod: "password", password });
+      setTestStatus(res);
+      if (res.success) {
+        toast.success(res.message);
+      } else {
+        toast.error(res.message);
+      }
+    } catch (err: any) {
+      setTestStatus({ success: false, message: err.message || "Failed to test password" });
+      toast.error(err.message || "Failed to test password");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password) {
+      toast.error("Please enter a password");
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateServer(serverId, { password });
+      toast.success("Server password saved and encrypted in Vault!");
+      queryClient.invalidateQueries({ queryKey: serverKeys.detail(serverId) });
+      onOpenChange(false);
+      setPassword("");
+      setTestStatus(null);
+      onSuccess?.();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save password");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <KeyRound className="h-5 w-5 text-primary" />
+            Set Server SSH Password
+          </DialogTitle>
+          <DialogDescription>
+            Configure SSH password for <strong className="text-foreground">{username}@{ip}:{sshPort}</strong> ({hostname}).
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSave} className="space-y-4 pt-2">
+          {testStatus && (
+            <div
+              className={cn(
+                "p-2.5 rounded-lg border text-xs font-mono flex items-center justify-between",
+                testStatus.success
+                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                  : "bg-destructive/10 border-destructive/20 text-destructive"
+              )}
+            >
+              <span>{testStatus.success ? "✓" : "✕"} {testStatus.message}</span>
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">SSH Password</Label>
+            <div className="relative">
+              <Input
+                type={showPass ? "text" : "password"}
+                placeholder="Enter SSH password for remote host"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="pr-10 font-mono text-sm"
+                autoFocus
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={() => setShowPass(!showPass)}
+                tabIndex={-1}
+              >
+                {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              This password will be encrypted using the Master Credential Vault and used for SSH login and sudo elevation.
+            </p>
+          </div>
+
+          <DialogFooter className="flex items-center justify-between sm:justify-between gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="text-xs gap-1.5"
+              onClick={handleTest}
+              disabled={testing || !password}
+            >
+              {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />}
+              Test Login
+            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-xs"
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                className="text-xs gap-1.5"
+                disabled={saving || !password}
+              >
+                {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Save to Vault
+              </Button>
+            </div>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

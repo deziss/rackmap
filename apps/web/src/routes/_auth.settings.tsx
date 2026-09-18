@@ -1,23 +1,272 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
-import { fetchPreferences, updatePreferences } from "@/lib/queries";
+import {
+  fetchPreferences,
+  updatePreferences,
+  fetchVaultStatus,
+  unlockVaultGlobal,
+  lockVaultGlobal,
+  resetVault,
+  vaultKeys,
+} from "@/lib/queries";
 import { toast } from "sonner";
-import { Bell } from "lucide-react";
+import { Bell, ShieldCheck, ShieldAlert, KeyRound, Lock, Unlock, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/_auth/settings")({
   component: SettingsPage,
 });
 
 function SettingsPage() {
+  const { data: session } = authClient.useSession();
+  const isAdmin = session?.user?.role === "admin";
+
   return (
-    <div className="space-y-6 max-w-xl">
+    <div className="space-y-6 max-w-xl pb-12">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">Manage your notification preferences</p>
+        <p className="text-muted-foreground text-sm mt-0.5">Manage notifications, credential security, and global vault settings</p>
       </div>
+
+      {isAdmin && <VaultConfigurationSection />}
+
       <NotificationPreferencesSection />
+    </div>
+  );
+}
+
+function VaultConfigurationSection() {
+  const qc = useQueryClient();
+  const { data: vaultStatus, isLoading } = useQuery({
+    queryKey: vaultKeys.status,
+    queryFn: fetchVaultStatus,
+  });
+
+  const [passphrase, setPassphrase] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [persistToEnv, setPersistToEnv] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  // Reset mode state
+  const [showReset, setShowReset] = useState(false);
+  const [newPassphrase, setNewPassphrase] = useState("");
+  const [confirmPassphrase, setConfirmPassphrase] = useState("");
+
+  const isUnlocked = !!vaultStatus?.isUnlocked;
+  const isGlobal = !!vaultStatus?.isGlobalUnlocked;
+
+  async function handleUnlockGlobal(e: React.FormEvent) {
+    e.preventDefault();
+    if (!passphrase.trim()) {
+      toast.error("Please enter a vault passphrase");
+      return;
+    }
+    setLoading(true);
+    try {
+      await unlockVaultGlobal(passphrase, persistToEnv);
+      toast.success("Vault unlocked globally! All servers can now decrypt credentials.");
+      setPassphrase("");
+      qc.invalidateQueries({ queryKey: vaultKeys.status });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to unlock vault globally");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleLockGlobal() {
+    setLoading(true);
+    try {
+      await lockVaultGlobal();
+      toast.success("Global vault locked");
+      qc.invalidateQueries({ queryKey: vaultKeys.status });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to lock vault");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResetVault(e: React.FormEvent) {
+    e.preventDefault();
+    if (newPassphrase.length < 8) {
+      toast.error("Passphrase must be at least 8 characters");
+      return;
+    }
+    if (newPassphrase !== confirmPassphrase) {
+      toast.error("Passphrases do not match");
+      return;
+    }
+    setLoading(true);
+    try {
+      await resetVault(newPassphrase);
+      toast.success("Master vault reset and unlocked with new passphrase!");
+      setShowReset(false);
+      setNewPassphrase("");
+      setConfirmPassphrase("");
+      qc.invalidateQueries({ queryKey: vaultKeys.status });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to reset vault");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-card/60 backdrop-blur-md p-5 space-y-4 shadow-lg">
+      <div className="flex items-center justify-between pb-3 border-b border-border/40">
+        <div className="flex items-center gap-2.5">
+          <KeyRound className="h-5 w-5 text-primary" />
+          <div>
+            <h2 className="font-semibold text-base text-foreground">Credential Vault & Encryption</h2>
+            <p className="text-xs text-muted-foreground">Manage global passphrase to decrypt server & service passwords system-wide</p>
+          </div>
+        </div>
+
+        {isLoading ? (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        ) : isUnlocked ? (
+          <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 gap-1 text-xs">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            {isGlobal ? "Unlocked Globally" : "Unlocked (Session)"}
+          </Badge>
+        ) : (
+          <Badge variant="destructive" className="gap-1 text-xs">
+            <ShieldAlert className="h-3.5 w-3.5" />
+            Vault Locked
+          </Badge>
+        )}
+      </div>
+
+      {isUnlocked ? (
+        <div className="space-y-3 pt-1">
+          <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-xs space-y-1 text-emerald-300">
+            <p className="font-semibold flex items-center gap-1.5">
+              <ShieldCheck className="h-4 w-4" /> Vault is currently active and unlocked
+            </p>
+            <p className="text-emerald-400/80">
+              Auto-discovery, ATOP, Forensic Logs, and Terminal sessions can automatically decrypt passwords across all servers without prompting.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="border-red-500/30 text-red-400 hover:bg-red-500/10 gap-1.5 text-xs"
+              onClick={handleLockGlobal}
+              disabled={loading}
+            >
+              <Lock className="h-3.5 w-3.5" /> Lock Vault Now
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setShowReset(!showReset)}
+            >
+              Reset / Change Passphrase
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={handleUnlockGlobal} className="space-y-3 pt-1">
+          <p className="text-xs text-muted-foreground">
+            Enter your Master Vault Passphrase to unlock credentials globally for all servers and background probes.
+          </p>
+
+          <div className="space-y-2">
+            <div className="relative">
+              <Input
+                type={showPass ? "text" : "password"}
+                placeholder="Enter Master Vault Passphrase"
+                value={passphrase}
+                onChange={(e) => setPassphrase(e.target.value)}
+                className="pr-10 bg-background/50 text-sm font-mono"
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={() => setShowPass(!showPass)}
+                tabIndex={-1}
+              >
+                {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={persistToEnv}
+                onChange={(e) => setPersistToEnv(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+              />
+              Keep unlocked permanently (save to .env file for auto-unlock on container reboot)
+            </label>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <Button type="submit" size="sm" className="gap-1.5 text-xs" disabled={loading || !passphrase.trim()}>
+              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlock className="h-3.5 w-3.5" />}
+              Unlock Globally
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setShowReset(!showReset)}
+            >
+              Reset / Re-key Vault
+            </Button>
+          </div>
+        </form>
+      )}
+
+      {/* Re-key / Reset Form */}
+      {showReset && (
+        <div className="mt-4 p-4 border border-destructive/30 rounded-lg bg-destructive/5 space-y-3">
+          <div className="flex items-center gap-2 text-destructive font-semibold text-xs">
+            <ShieldAlert className="h-4 w-4" />
+            <span>Reset Master Vault Passphrase</span>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Warning: Resetting creates a new Master Key. Existing stored passwords may need to be re-entered if encrypted under a previous forgotten passphrase.
+          </p>
+          <form onSubmit={handleResetVault} className="space-y-2.5">
+            <Input
+              type="password"
+              placeholder="New Master Passphrase (min 8 chars)"
+              value={newPassphrase}
+              onChange={(e) => setNewPassphrase(e.target.value)}
+              className="text-xs font-mono bg-background/50"
+            />
+            <Input
+              type="password"
+              placeholder="Confirm New Passphrase"
+              value={confirmPassphrase}
+              onChange={(e) => setConfirmPassphrase(e.target.value)}
+              className="text-xs font-mono bg-background/50"
+            />
+            <div className="flex items-center gap-2 pt-1">
+              <Button type="submit" size="sm" variant="destructive" className="h-7 text-xs" disabled={loading || !newPassphrase}>
+                Confirm Vault Reset
+              </Button>
+              <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowReset(false)}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
@@ -59,10 +308,13 @@ function NotificationPreferencesSection() {
   if (!prefs) return null;
 
   return (
-    <div className="rounded-xl border border-white/10 bg-card/60 backdrop-blur-md p-4 space-y-4">
-      <div className="flex items-center gap-2 mb-2">
-        <Bell className="h-4 w-4" />
-        <span className="font-medium text-sm">Email Notifications</span>
+    <div className="rounded-xl border border-white/10 bg-card/60 backdrop-blur-md p-5 space-y-4 shadow-lg">
+      <div className="flex items-center gap-2 mb-2 pb-2 border-b border-border/40">
+        <Bell className="h-5 w-5 text-primary" />
+        <div>
+          <h2 className="font-semibold text-base text-foreground">Email Notifications</h2>
+          <p className="text-xs text-muted-foreground">Choose what system events trigger alert emails</p>
+        </div>
       </div>
       
       <div className="space-y-3">

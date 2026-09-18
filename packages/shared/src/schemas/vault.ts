@@ -3,6 +3,7 @@ import { z } from "zod";
 export const VaultStatusResponse = z.object({
   isInitialized: z.boolean(),
   isUnlocked: z.boolean(),
+  isGlobalUnlocked: z.boolean().optional(),
   autoLockMinutes: z.number(),
   expiresAt: z.string().nullable(),
   isEnvUnlocked: z.boolean().optional(),

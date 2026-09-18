@@ -72,6 +72,13 @@ export function fetchServer(id: number) {
   return apiFetch<ServerDto>(`/api/v1/servers/${id}`);
 }
 
+export function updateServer(id: number, updates: Record<string, any>) {
+  return apiFetch<ServerDto>(`/api/v1/servers/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+}
+
 export function fetchServerMetrics(id: number) {
   return apiFetch<ServerMetricsDto>(`/api/v1/servers/${id}/metrics`);
 }
@@ -181,6 +188,19 @@ export function unlockVault(passphrase: string) {
 
 export function lockVault() {
   return apiFetch<{ locked: boolean }>("/api/v1/vault/lock", {
+    method: "POST",
+  });
+}
+
+export function unlockVaultGlobal(passphrase: string, persistToEnv: boolean = false) {
+  return apiFetch<{ ok: boolean; isGlobalUnlocked: boolean }>("/api/v1/vault/unlock-global", {
+    method: "POST",
+    body: JSON.stringify({ passphrase, persistToEnv }),
+  });
+}
+
+export function lockVaultGlobal() {
+  return apiFetch<{ ok: boolean }>("/api/v1/vault/lock-global", {
     method: "POST",
   });
 }
@@ -300,9 +320,13 @@ export function removeSshKey(id: string) {
   });
 }
 
-export function testServerSshKey(serverId: number) {
+export function testServerSshKey(
+  serverId: number,
+  options?: { authMethod?: "auto" | "key" | "password"; password?: string; keyId?: string }
+) {
   return apiFetch<SshKeyTestResult>(`/api/v1/ssh-keys/test-server/${serverId}`, {
     method: "POST",
+    body: options ? JSON.stringify(options) : undefined,
   });
 }
 

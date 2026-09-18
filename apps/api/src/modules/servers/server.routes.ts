@@ -201,7 +201,8 @@ export const serverRoutes = new Hono()
       const { id } = c.req.valid("param");
       const user = c.get("user");
       try {
-        const metrics = await fetchMetrics(id);
+        const sshPass = c.req.header("x-ssh-password") || undefined;
+        const metrics = await fetchMetrics(id, sshPass);
         if (shouldAuditMetrics(user.id, id)) {
           await writeAuditDirect({
             ctx: getAuditCtx(c),
@@ -226,7 +227,8 @@ export const serverRoutes = new Hono()
     async (c) => {
       const { id } = c.req.valid("param");
       try {
-        const info = await autoDiscoverAndApply(id, getAuditCtx(c));
+        const sshPass = c.req.header("x-ssh-password") || undefined;
+        const info = await autoDiscoverAndApply(id, getAuditCtx(c), sshPass);
         const server = await getServer(id);
         return c.json({ server, hardware: info, ...info });
       } catch (err) {
@@ -244,7 +246,8 @@ export const serverRoutes = new Hono()
     async (c) => {
       const { id } = c.req.valid("param");
       try {
-        const users = await listOsUsers(id);
+        const sshPass = c.req.header("x-ssh-password") || undefined;
+        const users = await listOsUsers(id, sshPass);
         return c.json({ users });
       } catch (err) {
         const { status, message } = sshErrorToHttp(err);
@@ -263,7 +266,8 @@ export const serverRoutes = new Hono()
       const { id } = c.req.valid("param");
       const input = c.req.valid("json");
       try {
-        const result = await createOsUser(id, input, getAuditCtx(c));
+        const sshPass = c.req.header("x-ssh-password") || undefined;
+        const result = await createOsUser(id, input, getAuditCtx(c), sshPass);
         return c.json(result, 201);
       } catch (err: any) {
         return c.json({ error: { code: "OS_USER_CREATE_ERROR", message: err.message } }, 400);
@@ -281,7 +285,8 @@ export const serverRoutes = new Hono()
       const { id, username } = c.req.valid("param");
       const input = c.req.valid("json");
       try {
-        const result = await updateOsUser(id, username, input, getAuditCtx(c));
+        const sshPass = c.req.header("x-ssh-password") || undefined;
+        const result = await updateOsUser(id, username, input, getAuditCtx(c), sshPass);
         return c.json(result);
       } catch (err: any) {
         return c.json({ error: { code: "OS_USER_UPDATE_ERROR", message: err.message } }, 400);
@@ -299,7 +304,8 @@ export const serverRoutes = new Hono()
       const { id, username } = c.req.valid("param");
       const input = c.req.valid("query");
       try {
-        const result = await deleteOsUser(id, username, input, getAuditCtx(c));
+        const sshPass = c.req.header("x-ssh-password") || undefined;
+        const result = await deleteOsUser(id, username, input, getAuditCtx(c), sshPass);
         return c.json(result);
       } catch (err: any) {
         return c.json({ error: { code: "OS_USER_DELETE_ERROR", message: err.message } }, 400);
@@ -317,7 +323,8 @@ export const serverRoutes = new Hono()
       const { id } = c.req.valid("param");
       const input = c.req.valid("json");
       try {
-        const result = await updateSudoPermission(id, input, getAuditCtx(c));
+        const sshPass = c.req.header("x-ssh-password") || undefined;
+        const result = await updateSudoPermission(id, input, getAuditCtx(c), sshPass);
         return c.json(result);
       } catch (err: any) {
         return c.json({ error: { code: "SUDO_CONFIG_ERROR", message: err.message } }, 400);
@@ -335,7 +342,8 @@ export const serverRoutes = new Hono()
       const { id } = c.req.valid("param");
       const input = c.req.valid("json");
       try {
-        const response = await queryServerLogs(id, input);
+        const sshPass = c.req.header("x-ssh-password") || undefined;
+        const response = await queryServerLogs(id, input, sshPass);
         return c.json(response);
       } catch (err) {
         const { status, message } = sshErrorToHttp(err);
@@ -352,7 +360,8 @@ export const serverRoutes = new Hono()
     async (c) => {
       const { id } = c.req.valid("param");
       try {
-        const res = await getAtopDates(id);
+        const sshPass = c.req.header("x-ssh-password") || undefined;
+        const res = await getAtopDates(id, sshPass);
         return c.json(res);
       } catch (err) {
         const { status, message } = sshErrorToHttp(err);
@@ -371,7 +380,8 @@ export const serverRoutes = new Hono()
       const { id } = c.req.valid("param");
       const input = c.req.valid("json");
       try {
-        const res = await getAtopSnapshots(id, input);
+        const sshPass = c.req.header("x-ssh-password") || undefined;
+        const res = await getAtopSnapshots(id, input, sshPass);
         return c.json(res);
       } catch (err) {
         const { status, message } = sshErrorToHttp(err);
@@ -390,7 +400,8 @@ export const serverRoutes = new Hono()
       const { id } = c.req.valid("param");
       const { date, time } = c.req.valid("json");
       try {
-        const procs = await getAtopIntervalProcesses(id, date, time);
+        const sshPass = c.req.header("x-ssh-password") || undefined;
+        const procs = await getAtopIntervalProcesses(id, date, time, sshPass);
         return c.json({ processes: procs });
       } catch (err) {
         const { status, message } = sshErrorToHttp(err);
@@ -409,7 +420,8 @@ export const serverRoutes = new Hono()
       const { id } = c.req.valid("param");
       const { date, time } = c.req.valid("json");
       try {
-        const topProcesses = await getAtopTopProcesses(id, date, time);
+        const sshPass = c.req.header("x-ssh-password") || undefined;
+        const topProcesses = await getAtopTopProcesses(id, date, time, sshPass);
         return c.json({ date, time: time || null, topProcesses });
       } catch (err) {
         const { status, message } = sshErrorToHttp(err);
@@ -425,7 +437,8 @@ export const serverRoutes = new Hono()
     async (c) => {
       const { id } = c.req.valid("param");
       try {
-        const res = await getAutoUpdateStatus(id);
+        const sshPass = c.req.header("x-ssh-password") || undefined;
+        const res = await getAutoUpdateStatus(id, sshPass);
         return c.json(res);
       } catch (err) {
         const { status, message } = sshErrorToHttp(err);
@@ -444,7 +457,8 @@ export const serverRoutes = new Hono()
       const { id } = c.req.valid("param");
       const input = c.req.valid("json");
       try {
-        const res = await updateAutoUpdateStatus(id, input);
+        const sshPass = c.req.header("x-ssh-password") || undefined;
+        const res = await updateAutoUpdateStatus(id, input, sshPass);
         return c.json(res);
       } catch (err: any) {
         return c.json({ error: { code: "AUTO_UPDATE_ERROR", message: err.message } }, 400);

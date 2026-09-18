@@ -3,7 +3,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback } from "react";
 import { ServerDetailModal } from "@/components/server-detail-modal";
-import { fetchServers, checkServer, checkAllServers, revealPassword, serverKeys } from "@/lib/queries";
+import { fetchServers, checkServer, checkAllServers, revealPassword, serverKeys, fetchVaultStatus, vaultKeys } from "@/lib/queries";
+import { VaultUnlockDialog } from "@/components/vault-unlock-dialog";
 import { apiFetch } from "@/lib/api";
 import { StatusDot } from "@/components/status-dot";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { toast } from "sonner";
 import {
   ExternalLink, RefreshCw, Eye, EyeOff, Trash2, RotateCcw, Zap,
-  Download, AlertTriangle, Terminal, Copy, ShieldCheck,
+  Download, AlertTriangle, Terminal, Copy, ShieldCheck, ShieldAlert,
 } from "lucide-react";
 import type { ServerDto } from "@inv/shared";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -95,6 +96,13 @@ function ServersPage() {
   const [includeDeleted, setIncludeDeleted] = useState(false);
   const [detailServerId, setDetailServerId] = useState<number | null>(null);
   const [revealedPasswords, setRevealedPasswords] = useState<Record<number, string | null>>({});
+  const [vaultModalOpen, setVaultModalOpen] = useState(false);
+  const [pendingRevealServer, setPendingRevealServer] = useState<ServerDto | null>(null);
+
+  const { data: vaultStatus } = useQuery({
+    queryKey: vaultKeys.status,
+    queryFn: () => fetchVaultStatus(),
+  });
   const debouncedQ = useDebounce(q, 300);
 
   const params = {
@@ -151,8 +159,14 @@ function ServersPage() {
           () => setRevealedPasswords((prev) => { const n = { ...prev }; delete n[server.id]; return n; }),
           30_000,
         );
-      } catch (e: unknown) {
-        toast.error((e as Error).message);
+      } catch (e: any) {
+        if (e.code === "VAULT_LOCKED" || e.message?.includes("Vault is locked") || e.message?.includes("different vault key")) {
+          setPendingRevealServer(server);
+          setVaultModalOpen(true);
+          toast.error("Unlock the Credential Vault to decrypt this server password.");
+        } else {
+          toast.error(e.message || "Failed to reveal password");
+        }
       }
     },
     [revealedPasswords],
@@ -233,6 +247,26 @@ function ServersPage() {
           </TooltipTrigger>
           <TooltipContent>Refresh</TooltipContent>
         </Tooltip>
+
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5 h-8 text-xs font-mono"
+          onClick={() => setVaultModalOpen(true)}
+          title={vaultStatus?.isUnlocked ? "Credential Vault Unlocked" : "Credential Vault Locked"}
+        >
+          {vaultStatus?.isUnlocked ? (
+            <>
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+              <span className="text-emerald-500 hidden sm:inline">Vault: Unlocked</span>
+            </>
+          ) : (
+            <>
+              <ShieldAlert className="h-3.5 w-3.5 text-amber-500" />
+              <span className="text-amber-500 hidden sm:inline">Vault: Locked</span>
+            </>
+          )}
+        </Button>
         {canEdit && (
           <Button size="sm" variant="outline" className="gap-2" onClick={() => checkAllMutation.mutate()} disabled={checkAllMutation.isPending}>
             <RefreshCw className={`h-3.5 w-3.5 ${checkAllMutation.isPending ? "animate-spin" : ""}`} />
@@ -611,6 +645,21 @@ function ServersPage() {
       />
 
       <ServerDetailModal serverId={detailServerId} onClose={() => setDetailServerId(null)} />
+
+      <VaultUnlockDialog
+        open={vaultModalOpen}
+        onOpenChange={(open) => {
+          setVaultModalOpen(open);
+          if (!open) setPendingRevealServer(null);
+        }}
+        onSuccess={() => {
+          qc.invalidateQueries({ queryKey: vaultKeys.status });
+          if (pendingRevealServer) {
+            handleReveal(pendingRevealServer);
+            setPendingRevealServer(null);
+          }
+        }}
+      />
     </div>
   );
 }

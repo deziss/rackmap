@@ -11,8 +11,8 @@ function sanitizeUsername(username: string): string {
   return sanitized;
 }
 
-export async function listOsUsers(serverId: number): Promise<OsUserInfo[]> {
-  const { client, password } = await connectToServer(serverId);
+export async function listOsUsers(serverId: number, overridePassword?: string): Promise<OsUserInfo[]> {
+  const { client, password } = await connectToServer(serverId, overridePassword);
   const sudoCat = buildSudoCommand("cat /etc/sudoers /etc/sudoers.d/*", password);
 
   const script = `
@@ -146,10 +146,11 @@ function parseUsers(output: string): OsUserInfo[] {
 export async function updateSudoPermission(
   serverId: number,
   input: SudoPermissionInput,
-  ctx: AuditCtx = {}
+  ctx: AuditCtx = {},
+  overridePassword?: string
 ): Promise<{ ok: boolean; message: string }> {
   const targetUser = sanitizeUsername(input.username);
-  const { client } = await connectToServer(serverId);
+  const { client, password } = await connectToServer(serverId, overridePassword);
 
   return new Promise((resolve, reject) => {
     const fileName = `/etc/sudoers.d/rackmap_${targetUser}`;
@@ -212,10 +213,11 @@ sudo chmod 0440 ${fileName} || (rm -f ${tmpFile}; exit 1)
 export async function createOsUser(
   serverId: number,
   input: CreateOsUserInput,
-  ctx: AuditCtx = {}
+  ctx: AuditCtx = {},
+  overridePassword?: string
 ): Promise<{ ok: boolean; message: string }> {
   const username = sanitizeUsername(input.username);
-  const { client } = await connectToServer(serverId);
+  const { client, password } = await connectToServer(serverId, overridePassword);
 
   return new Promise((resolve, reject) => {
     const flags: string[] = [];
@@ -294,10 +296,11 @@ export async function updateOsUser(
   serverId: number,
   rawUsername: string,
   input: UpdateOsUserInput,
-  ctx: AuditCtx = {}
+  ctx: AuditCtx = {},
+  overridePassword?: string
 ): Promise<{ ok: boolean; message: string }> {
   const username = sanitizeUsername(rawUsername);
-  const { client } = await connectToServer(serverId);
+  const { client, password } = await connectToServer(serverId, overridePassword);
 
   return new Promise((resolve, reject) => {
     const steps: string[] = [];
@@ -383,7 +386,8 @@ export async function deleteOsUser(
   serverId: number,
   rawUsername: string,
   input: DeleteOsUserInput,
-  ctx: AuditCtx = {}
+  ctx: AuditCtx = {},
+  overridePassword?: string
 ): Promise<{ ok: boolean; message: string }> {
   const username = sanitizeUsername(rawUsername);
 
@@ -399,7 +403,7 @@ export async function deleteOsUser(
     throw new Error("Cannot delete the active SSH administration account for this server");
   }
 
-  const { client } = await connectToServer(serverId);
+  const { client, password } = await connectToServer(serverId, overridePassword);
 
   return new Promise((resolve, reject) => {
     const flags: string[] = [];

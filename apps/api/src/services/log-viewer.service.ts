@@ -53,8 +53,8 @@ function parseLogLine(raw: string, defaultSource: string): LogEntry {
   };
 }
 
-export async function queryServerLogs(serverId: number, query: LogQueryInput): Promise<LogResponse> {
-  const { client, password } = await connectToServer(serverId);
+export async function queryServerLogs(serverId: number, query: LogQueryInput, overridePassword?: string): Promise<LogResponse> {
+  const { client, password } = await connectToServer(serverId, overridePassword);
   const lines = Math.min(Math.max(query.lines || 200, 1), 2000);
 
   let command = "";

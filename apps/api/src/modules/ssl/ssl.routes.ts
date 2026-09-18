@@ -16,12 +16,23 @@ sslRoutes.get("/", zValidator("query", SslStatusListQuery), async (c) => {
 
   const showDeleted = includeDeleted;
 
-  const where = {
+  const where: any = {
     ...(showDeleted ? {} : { deletedAt: null }),
-    ...(q ? { domain: { contains: q } } : {}),
     ...(status ? { status } : {}),
     ...(cursor && !sortBy ? { id: { lt: cursor } } : {}),
   };
+
+  if (q && q.trim()) {
+    const term = q.trim();
+    where.OR = [
+      { domain: { contains: term } },
+      { team: { contains: term } },
+      { project: { contains: term } },
+      { issuer: { contains: term } },
+      { server: { hostname: { contains: term } } },
+      { service: { serviceName: { contains: term } } },
+    ];
+  }
 
   const orderBy = sortBy ? { [sortBy]: sortDir || "asc" } : { id: "desc" };
   const skip = pageNum ? (pageNum - 1) * limit : sortBy ? (cursor || 0) : undefined;

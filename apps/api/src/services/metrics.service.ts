@@ -198,8 +198,8 @@ function parseMetrics(raw: string): Omit<ServerMetricsDto, "collectedAt"> {
 }
 
 /** SSH into a server, collect resource metrics, parse to a typed DTO. Throws SshError on failure. */
-export async function fetchMetrics(serverId: number): Promise<ServerMetricsDto> {
-  const { client } = await connectToServer(serverId);
+export async function fetchMetrics(serverId: number, overridePassword?: string): Promise<ServerMetricsDto> {
+  const { client } = await connectToServer(serverId, overridePassword);
 
   return new Promise<ServerMetricsDto>((resolve, reject) => {
     let stdout = "";

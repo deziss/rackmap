@@ -46,12 +46,18 @@ export const sshKeyRoutes = new Hono()
     },
   )
 
-  // POST /api/v1/ssh-keys/test-server/:serverId — test connectivity
+  // POST /api/v1/ssh-keys/test-server/:serverId — test connectivity (key, password, or auto)
   .post(
     "/test-server/:serverId",
     async (c) => {
       const serverId = parseInt(c.req.param("serverId"), 10);
-      const res = await testServerSshKey(serverId);
+      let body: any = {};
+      try {
+        body = await c.req.json();
+      } catch {
+        // empty body is fine
+      }
+      const res = await testServerSshKey(serverId, body);
       return c.json(res);
     },
   );

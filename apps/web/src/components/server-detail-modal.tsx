@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchServer, fetchServerMetrics, serverKeys, revealPassword, systemKeys, fetchMe } from "@/lib/queries";
+import { VaultUnlockDialog } from "@/components/vault-unlock-dialog";
 import { authClient } from "@/lib/auth-client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusDot } from "@/components/status-dot";
@@ -89,6 +90,7 @@ function CopySSHBtn({ server, sudo = false }: { server: { ip: string; username: 
 function PasswordBox({ serverId }: { serverId: number }) {
   const [pwd, setPwd] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [vaultModalOpen, setVaultModalOpen] = useState(false);
 
   async function handleReveal() {
     setLoading(true);
@@ -96,7 +98,12 @@ function PasswordBox({ serverId }: { serverId: number }) {
       const res = await revealPassword(serverId);
       setPwd(res.password);
     } catch (e: any) {
-      toast.error(e.message ?? "Failed to reveal password");
+      if (e.code === "VAULT_LOCKED" || e.message?.includes("Vault is locked") || e.message?.includes("different vault key")) {
+        setVaultModalOpen(true);
+        toast.error("Unlock the Credential Vault to decrypt this server password.");
+      } else {
+        toast.error(e.message ?? "Failed to reveal password");
+      }
     } finally {
       setLoading(false);
     }
@@ -114,9 +121,18 @@ function PasswordBox({ serverId }: { serverId: number }) {
   }
 
   return (
-    <Button size="sm" variant="ghost" className="h-5 px-1.5 text-xs text-muted-foreground -ml-1.5" onClick={handleReveal} disabled={loading}>
-      {loading ? "Revealing..." : "Reveal"}
-    </Button>
+    <>
+      <Button size="sm" variant="ghost" className="h-5 px-1.5 text-xs text-muted-foreground -ml-1.5" onClick={handleReveal} disabled={loading}>
+        {loading ? "Revealing..." : "Reveal"}
+      </Button>
+      <VaultUnlockDialog
+        open={vaultModalOpen}
+        onOpenChange={setVaultModalOpen}
+        onSuccess={() => {
+          handleReveal();
+        }}
+      />
+    </>
   );
 }
 

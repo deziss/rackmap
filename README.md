@@ -147,6 +147,18 @@ Default admin credentials are set by `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD`.
 | `METRICS_ENABLED` | `true` | Enable agentless SSH metrics collection |
 | `METRICS_SSH_TIMEOUT_MS` | `10000` | SSH exec timeout for metrics collection |
 
+### SSH Dual-Mode Authentication & Password Fallback
+
+RackMap supports diverse hybrid infrastructure environments where some servers require SSH key pairs while others enforce password or PAM authentication:
+- **Automatic Multi-Method Fallback**: The SSH client automatically attempts public key authentication first (`/data/id_ed25519` and custom uploaded keys). If the remote target host rejects the key, it automatically falls back to password authentication and PAM keyboard-interactive prompts without failing.
+- **Server Detail SSH Controls (`/servers/:id`)**:
+  - **Test Key Login**: Runs an immediate SSH handshake test using keys and reports round-trip latency.
+  - **Test Password Login**: Tests password authentication against the host in real time.
+  - **Set / Change Password**: Secure dialog allowing operators to test and store passwords encrypted in the Credential Vault.
+  - **Auto-Prompt on Auth Failure**: If automated discovery, ATOP, logs, or metrics encounter an unauthorized remote server, a password dialog prompts for the credential and auto-retries.
+- **SSH Terminal Host Filter (`/ssh`)**: Search input in the sidebar allows filtering hosts in real-time by hostname or IP address.
+- **SSL Certificate Multi-Field Search (`/ssl`)**: Search bar filters across domains, services, issuers, teams, projects, and server hostnames.
+
 ### Optional — SSH Terminal
 
 | Variable | Default | Description |
@@ -191,11 +203,12 @@ You can configure encryption through two primary mechanisms:
     VAULT_PASSPHRASE="YourMasterVaultPassphraseHere!"
     ```
     When set, RackMap auto-initializes or unlocks the vault on API startup, allowing automated background tasks (hardware auto-discovery, scheduled metrics polling, log querying) to decrypt SSH credentials without operator intervention.
-  - **Option B: Interactive Web UI (Ephemeral Session)**
-    Leave `VAULT_PASSPHRASE` unset in `.env`. Operators unlock the vault interactively in the Web UI:
-    1. Navigate to **Security** (`/security`) or any Server Detail page (`/servers/:id`).
-    2. Click the **"Vault: Locked"** badge or **"Unlock Vault"** button.
-    3. Enter the master passphrase. The vault unlocks in-memory for 30 minutes and automatically re-locks thereafter.
+  - **Option B: Global Unlock in Admin Settings UI (`/settings`)**
+    Admins can navigate to **Settings** → **Credential Vault & Passphrase Configuration**:
+    1. Enter the master passphrase to unlock the vault globally for all server operations.
+    2. Optionally check **"Persist to .env file"** to write `VAULT_PASSPHRASE` directly to disk so background jobs and restarts remain unlocked permanently.
+  - **Option C: Interactive Ephemeral Session (`/servers/:id`)**
+    Operators can also unlock the vault interactively per session from the header of any Server Detail page for 30 minutes.
 
 ### Resetting a Forgotten Vault Passphrase
 

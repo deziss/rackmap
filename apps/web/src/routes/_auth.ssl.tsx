@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SslFormDialog } from "@/components/ssl-form-dialog";
 import { toast } from "sonner";
-import { RefreshCw, Trash2, Shield, AlertTriangle, RotateCcw } from "lucide-react";
+import { RefreshCw, Trash2, Shield, AlertTriangle, RotateCcw, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { useDebounce } from "@/hooks/use-debounce";
 import type { SslStatusDto } from "@inv/shared";
 import { authClient } from "@/lib/auth-client";
 
@@ -23,14 +25,16 @@ function SslPage() {
   const isAdmin = role === "admin";
 
   const [includeDeleted, setIncludeDeleted] = useState(false);
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [sortBy, setSortBy] = useState<string>("id");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const { data, isLoading } = useQuery({
-    queryKey: sslKeys.list({ page, limit, sortBy, sortDir, includeDeleted }),
-    queryFn: () => fetchSslList({ page, limit, sortBy, sortDir, includeDeleted }),
+    queryKey: sslKeys.list({ page, limit, sortBy, sortDir, includeDeleted, q: debouncedSearch }),
+    queryFn: () => fetchSslList({ page, limit, sortBy, sortDir, includeDeleted, q: debouncedSearch }),
   });
 
   const handleSort = (key: string) => {
@@ -91,6 +95,18 @@ function SslPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <div className="relative w-64">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Search domains, teams..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="h-8 pl-8 pr-2 text-xs bg-zinc-900/60 border-zinc-700 font-mono"
+            />
+          </div>
           {isAdmin && (
             <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer select-none">
               <input

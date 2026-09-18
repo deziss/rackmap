@@ -1,8 +1,8 @@
 import { connectToServer, buildSudoCommand, SshError } from "./ssh.service.js";
 import type { AutoUpdateStatus, AutoUpdateActionInput } from "@inv/shared";
 
-export async function getAutoUpdateStatus(serverId: number): Promise<AutoUpdateStatus> {
-  const { client } = await connectToServer(serverId);
+export async function getAutoUpdateStatus(serverId: number, overridePassword?: string): Promise<AutoUpdateStatus> {
+  const { client } = await connectToServer(serverId, overridePassword);
 
   const script = `
 if which unattended-upgrade >/dev/null 2>&1; then
@@ -85,9 +85,10 @@ echo "LOG_END"
 
 export async function updateAutoUpdateStatus(
   serverId: number,
-  input: AutoUpdateActionInput
+  input: AutoUpdateActionInput,
+  overridePassword?: string
 ): Promise<{ success: boolean; message: string }> {
-  const { client, password } = await connectToServer(serverId);
+  const { client, password } = await connectToServer(serverId, overridePassword);
   const action = input.action;
 
   let rawCmd = "";

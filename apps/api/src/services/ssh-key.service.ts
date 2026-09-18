@@ -177,22 +177,33 @@ export async function removeSshKey(keyId: string): Promise<{ success: boolean; m
 
 export async function testServerSshKey(
   serverId: number,
-  _keyId?: string
+  keyIdOrOptions?: string | { authMethod?: "auto" | "key" | "password"; password?: string; keyId?: string }
 ): Promise<SshKeyTestResult> {
+  const opts =
+    typeof keyIdOrOptions === "string"
+      ? { keyId: keyIdOrOptions, authMethod: "key" as const }
+      : keyIdOrOptions || { authMethod: "auto" as const };
+
   const start = Date.now();
   try {
-    const { client } = await connectToServer(serverId);
+    const { client, authMethodUsed } = await connectToServer(serverId, {
+      overridePassword: opts.password,
+      preferredAuth: opts.authMethod,
+      keyId: opts.keyId,
+    });
     const latency = Date.now() - start;
     client.end();
+    const methodLabel = authMethodUsed === "password" ? "Password" : "SSH Key";
     return {
       success: true,
       latencyMs: latency,
-      message: `SSH Key authentication verified successfully (${latency}ms round-trip latency)`,
+      authMethodUsed,
+      message: `${methodLabel} authentication verified successfully (${latency}ms round-trip latency)`,
     };
   } catch (err: any) {
     return {
       success: false,
-      message: err.message || "Failed to authenticate with SSH key",
+      message: err.message || "Failed to authenticate with server",
     };
   }
 }

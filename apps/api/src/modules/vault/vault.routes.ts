@@ -1,10 +1,19 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
+import { z } from "zod";
 import { requireSession } from "../../middleware/session.js";
 import { requirePermission } from "../../middleware/require-permission.js";
 import { writeAudit } from "../../lib/audit.js";
 import { VaultInitInput, VaultUnlockInput, VaultResetInput } from "@inv/shared";
-import { getVaultStatus, initVault, unlockVault, lockVault, resetVault } from "../../services/vault.service.js";
+import {
+  getVaultStatus,
+  initVault,
+  unlockVault,
+  lockVault,
+  resetVault,
+  unlockVaultGlobal,
+  lockVaultGlobal,
+} from "../../services/vault.service.js";
 
 function getSessionToken(c: any): string {
   // Better-auth uses cookie better-auth.session_token
@@ -69,6 +78,46 @@ export const vaultRoutes = new Hono()
       } catch (err: any) {
         return c.json({ error: { code: "INVALID_PASSPHRASE", message: err.message } }, 401);
       }
+    },
+  )
+
+  // POST /vault/unlock-global (admin only)
+  .post(
+    "/unlock-global",
+    requirePermission({ server: ["update"] }),
+    zValidator("json", z.object({ passphrase: z.string().min(1), persistToEnv: z.boolean().optional() })),
+    async (c) => {
+      const { passphrase, persistToEnv } = c.req.valid("json");
+      const user = c.get("user");
+      try {
+        const result = await unlockVaultGlobal(passphrase, !!persistToEnv);
+        await writeAudit({
+          ctx: { actorId: user?.id, actorEmail: user?.email, ip: c.req.header("x-forwarded-for") },
+          category: "security",
+          action: "vault.unlock_global",
+          entity: "vault",
+        });
+        return c.json(result);
+      } catch (err: any) {
+        return c.json({ error: { code: "INVALID_PASSPHRASE", message: err.message } }, 401);
+      }
+    },
+  )
+
+  // POST /vault/lock-global (admin only)
+  .post(
+    "/lock-global",
+    requirePermission({ server: ["update"] }),
+    async (c) => {
+      const user = c.get("user");
+      const result = lockVaultGlobal();
+      await writeAudit({
+        ctx: { actorId: user?.id, actorEmail: user?.email, ip: c.req.header("x-forwarded-for") },
+        category: "security",
+        action: "vault.lock_global",
+        entity: "vault",
+      });
+      return c.json(result);
     },
   )
 

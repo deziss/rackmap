@@ -16,8 +16,8 @@ function formatTodayDate(): string {
   return `${y}${m}${d}`;
 }
 
-export async function getAtopDates(serverId: number): Promise<AtopDatesResponse> {
-  const { client, password } = await connectToServer(serverId);
+export async function getAtopDates(serverId: number, overridePassword?: string): Promise<AtopDatesResponse> {
+  const { client, password } = await connectToServer(serverId, overridePassword);
   const sudoLs = buildSudoCommand("ls -1 /var/log/atop/atop_*", password);
 
   const script = `
@@ -275,8 +275,8 @@ export function parseAtopRawOutput(
   return snapshots.sort((a, b) => b.timestamp - a.timestamp);
 }
 
-export async function getAtopSnapshots(serverId: number, query: AtopQueryInput): Promise<AtopSnapshotsResponse> {
-  const { client, password } = await connectToServer(serverId);
+export async function getAtopSnapshots(serverId: number, query: AtopQueryInput, overridePassword?: string): Promise<AtopSnapshotsResponse> {
+  const { client, password } = await connectToServer(serverId, overridePassword);
   const targetDate = query.date ? query.date.replace(/[^0-9]/g, "") : formatTodayDate();
   const filePath = `/var/log/atop/atop_${targetDate}`;
 
@@ -373,9 +373,10 @@ ss -tp 2>/dev/null | head -n 60
 export async function getAtopTopProcesses(
   serverId: number,
   date: string,
-  time?: string
+  time?: string,
+  overridePassword?: string
 ): Promise<AtopTopProcesses> {
-  const { client, password } = await connectToServer(serverId);
+  const { client, password } = await connectToServer(serverId, overridePassword);
   const targetDate = date.replace(/[^0-9]/g, "");
   const filePath = `/var/log/atop/atop_${targetDate}`;
   const timeFlag = time ? `-b ${time}` : "";
@@ -423,9 +424,10 @@ ss -tp 2>/dev/null | head -n 60
 export async function getAtopIntervalProcesses(
   serverId: number,
   date: string,
-  time: string
+  time: string,
+  overridePassword?: string
 ): Promise<AtopProcess[]> {
-  const { client } = await connectToServer(serverId);
+  const { client } = await connectToServer(serverId, overridePassword);
   const targetDate = date.replace(/[^0-9]/g, "");
   const filePath = `/var/log/atop/atop_${targetDate}`;
 
