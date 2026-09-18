@@ -25,6 +25,7 @@ import {
   Globe,
   Lock,
   BarChart3,
+  Sparkles,
 } from "lucide-react";
 
 interface User {
@@ -50,7 +51,8 @@ type NavPath =
   | "/audit"
   | "/reports"
   | "/security"
-  | "/settings";
+  | "/settings"
+  | "/portal";
 
 interface NavItem {
   to: NavPath;
@@ -94,6 +96,7 @@ const navSections: NavSection[] = [
       { to: "/audit", label: "Audit Log", icon: Clock, roles: ["admin"] },
       { to: "/security", label: "Security", icon: Shield },
       { to: "/settings", label: "Settings", icon: Settings },
+      { to: "/portal", label: "Product Portal", icon: Sparkles },
     ],
   },
 ];

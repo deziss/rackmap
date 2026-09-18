@@ -1,11 +1,11 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { CloudCog, Eye, EyeOff, Loader2 } from "lucide-react";
+import { CloudCog, Eye, EyeOff, Loader2, Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -60,6 +60,18 @@ function LoginPage() {
   return (
     <div className="mesh-bg relative flex min-h-screen items-center justify-center p-4 bg-background">
       <div className="w-full max-w-sm animate-fade-up">
+        {/* Portal link pill */}
+        <div className="flex justify-center mb-6">
+          <Link
+            to="/portal"
+            className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3.5 py-1 text-xs font-medium text-primary hover:bg-primary/20 transition-all shadow-sm group"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-primary group-hover:scale-110 transition-transform" />
+            <span>Explore Plans on Product Portal</span>
+            <span className="text-primary/70">&rarr;</span>
+          </Link>
+        </div>
+
         {/* Logo */}
         <div className="flex flex-col items-center mb-8 gap-3">
           <div className="flex items-center justify-center rounded-2xl bg-primary/90 w-14 h-14 text-primary-foreground shadow-2xl shadow-primary/30">
@@ -170,6 +182,15 @@ function LoginPage() {
             </>
           )}
         </p>
+
+        <div className="mt-6 text-center">
+          <Link
+            to="/portal"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
+          >
+            &larr; Back to RackMap Product Portal
+          </Link>
+        </div>
       </div>
     </div>
   );

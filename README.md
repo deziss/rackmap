@@ -3,6 +3,8 @@
 > **Status: Complete** — All planned phases shipped and production-ready.
 >
 > **[User Guide →](USER_GUIDE.md)** — Setup, features, roles, troubleshooting
+>
+> **[Product Portal & Pricing →](/portal)** — Interactive landing page, feature showcase & Licencia plan comparison
 
 Full-stack infrastructure inventory and monitoring platform. Track bare-metal and cloud servers, monitor live metrics via agentless SSH, manage access, and maintain a complete audit trail — no agents installed on target servers.
 
@@ -23,6 +25,7 @@ Full-stack infrastructure inventory and monitoring platform. Track bare-metal an
 - **Audit log** — every data mutation and auth event recorded with before/after diffs
 - **Export** — Excel (.xlsx) and JSON export with search filter
 - **Lookup tables** — Cloud Provider, GPU Type, Allocated To, Location, Server Type dropdowns
+- **Customer Portal & Pricing Website** — public dark-mode showcase (`/portal`) with interactive mock console, monthly/annual Licencia pricing comparison, and 1-minute quickstart
 - **Docker deploy** — single `docker compose up` for production; SQLite with volume persistence
 
 ---
@@ -237,6 +240,19 @@ If the master vault passphrase is lost or needs rotation:
 
 
 ---
+
+
+---
+
+## Customer Portal & Pricing Website (`/portal`)
+
+RackMap includes a built-in public landing and product portal accessible at `/portal`:
+- **Product Showcase**: Highlighting agentless SSH architecture, client-side zero-knowledge AES-256-GCM vault, and kernel-level ATOP performance analysis.
+- **Interactive Mock Console**: Live simulator for Server Fleet, ATOP Replay, Master Key Unlocking, and Remote OS User audits.
+- **Dynamic Licencia Pricing Matrix**: Monthly vs Annual billing toggle comparing Free Community ($0), Professional ($39/mo or $31/mo annual), and Enterprise ($249/mo or $199/mo annual) tiers.
+- **Self-Hosting Quickstart**: Copyable one-minute `docker-compose.yml` snippet.
+- **Interactive FAQ**: Common architectural questions on zero-knowledge encryption, air-gapped activation, and supported Linux distros.
+- **Bidirectional Navigation**: Direct links between `/portal`, `/login`, and the main authenticated console (`/servers`).
 
 ## Licensing & Subscription Tiers (Powered by Licencia)
 

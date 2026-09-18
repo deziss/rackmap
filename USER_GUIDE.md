@@ -2,7 +2,7 @@
 
 ## Table of Contents
 
-1. [Getting Started](#getting-started)
+1. [Getting Started & Product Portal](#getting-started--product-portal)
 2. [Dashboard & Server List](#dashboard--server-list)
 3. [Adding a Server](#adding-a-server)
 4. [Server Detail Page & Specs](#server-detail-page--specs)
@@ -26,11 +26,19 @@
 
 ---
 
-## Getting Started
+## Getting Started & Product Portal
 
-Open the app in your browser (default: `http://localhost:8080`). Sign in with your email and password. First-time setup creates an admin account using the `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` values from `.env`.
+### Product Landing & Pricing Portal (`/portal`)
+Before signing in or when exploring platform capabilities, visit the customer-facing **Product Portal** at `http://localhost:3123/portal`:
+- **Interactive Mock Console**: Test the Server Fleet overview, live ATOP Replay, client-side Zero-Knowledge decryption, and Remote Sudoers audits.
+- **Licencia Plan Calculator**: Toggle between monthly and annual billing to compare Free Community, Pro ($39/mo or $31/mo billed annually), and Enterprise ($249/mo or $199/mo billed annually).
+- **One-Minute Quickstart**: Copyable Docker Compose production configuration.
+- **FAQ & Architectural Guides**: Deep-dives into agentless SSH, client WebCrypto AES-256-GCM vault security, and air-gapped activation.
 
-After signing in you land on the **Servers** page.
+### Signing In to the Console
+Open `http://localhost:3123/login` in your browser. Sign in with your email and password. First-time setup creates an admin account using the `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` values from `.env`.
+
+After signing in you land on the **Servers** page. You can jump back to the Product Portal at any time via the sidebar navigation item **Product Portal**.
 
 ---
 
