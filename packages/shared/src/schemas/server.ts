@@ -30,6 +30,16 @@ export const ServerCreateInput = z.object({
   isPrivateIp: z.boolean().default(false).optional(),
   purpose: z.string().trim().max(255).nullable().optional(),
   createdBy: z.string().trim().max(100).nullable().optional(),
+  backupScript: z.string().trim().max(1000).nullable().optional(),
+  backupDestination: z.string().trim().max(1000).nullable().optional(),
+  backupSchedule: z.string().trim().max(255).nullable().optional(),
+  backupDurability: z.string().trim().max(100).nullable().optional(),
+  backupDataType: z.string().trim().max(500).nullable().optional(),
+  zone: z.string().trim().max(100).nullable().optional(),
+  inferenceEngine: z.string().trim().max(100).nullable().optional(),
+  inferenceModels: z.string().trim().max(2000).nullable().optional(),
+  inferencePort: z.number().int().min(1).max(65535).nullable().optional(),
+  authToken: z.string().trim().max(1000).nullable().optional(),
 });
 export type ServerCreateInput = z.infer<typeof ServerCreateInput>;
 
@@ -86,6 +96,16 @@ export const ServerDto = z.object({
   isPrivateIp: z.boolean(),
   purpose: z.string().nullable(),
   createdBy: z.string().nullable(),
+  backupScript: z.string().nullable().optional(),
+  backupDestination: z.string().nullable().optional(),
+  backupSchedule: z.string().nullable().optional(),
+  backupDurability: z.string().nullable().optional(),
+  backupDataType: z.string().nullable().optional(),
+  zone: z.string().nullable().optional(),
+  inferenceEngine: z.string().nullable().optional(),
+  inferenceModels: z.string().nullable().optional(),
+  inferencePort: z.number().int().nullable().optional(),
+  hasAuthToken: z.boolean().optional(),
 });
 export type ServerDto = z.infer<typeof ServerDto>;
 

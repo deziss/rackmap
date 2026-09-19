@@ -78,6 +78,7 @@ export function ServiceDetailModal({ serviceId, onClose }: ServiceDetailModalPro
                 <CardContent className="pt-0">
                   <InfoRow label="Server IP" value={service.serverIp} />
                   <InfoRow label="Port" value={service.port} />
+                  <InfoRow label="NodePort" value={service.nodePort ? String(service.nodePort) : null} />
                   <InfoRow label="DB Name" value={service.dbName} icon={Database} />
                 </CardContent>
               </Card>
@@ -91,7 +92,10 @@ export function ServiceDetailModal({ serviceId, onClose }: ServiceDetailModalPro
                 </CardHeader>
                 <CardContent className="pt-0">
                   <InfoRow label="Managed By" value={service.managedBy} />
-                  <InfoRow label="Auth User" value={service.authUser} />
+                  <InfoRow label="Auth User" value={service.authUser || service.username} />
+                  <InfoRow label="Role / Scope" value={service.role} />
+                  <InfoRow label="Account ID" value={service.accountId} />
+                  <InfoRow label="Cloud Region" value={service.region} />
                   <InfoRow
                     label="Password"
                     value={

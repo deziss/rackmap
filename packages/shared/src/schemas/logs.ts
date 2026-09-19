@@ -29,5 +29,7 @@ export const LogResponse = z.object({
   entries: z.array(LogEntry),
   total: z.number(),
   source: z.string(),
+  totalLogSize: z.string().nullable().optional(),
+  journalDiskUsage: z.string().nullable().optional(),
 });
 export type LogResponse = z.infer<typeof LogResponse>;

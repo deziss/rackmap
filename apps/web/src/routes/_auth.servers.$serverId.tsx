@@ -89,6 +89,7 @@ import {
   Sparkles,
   UserPlus,
   Pencil,
+  Save,
 } from "lucide-react";
 import { toast } from "sonner";
 import type {
@@ -973,6 +974,98 @@ function OverviewTab({
         </Card>
 
       </div>
+
+      {/* Backup Automation & Disaster Recovery */}
+      {Boolean(server && (server.backupScript || server.backupSchedule || server.backupDestination)) && (
+        <Card className="border-emerald-500/30 bg-emerald-950/10 shadow-sm">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-emerald-400">
+              <Save className="h-4 w-4 text-emerald-500" /> Backup Policy & Automation
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-0 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            {server.backupScript && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-muted-foreground text-[11px]">Backup Script:</span>
+                <code className="font-mono bg-zinc-900/80 px-2 py-1 rounded text-emerald-300 border border-emerald-500/20">{server.backupScript}</code>
+              </div>
+            )}
+            {server.backupDestination && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-muted-foreground text-[11px]">Destination:</span>
+                <code className="font-mono bg-zinc-900/80 px-2 py-1 rounded text-zinc-300 border border-zinc-800">{server.backupDestination}</code>
+              </div>
+            )}
+            {server.backupSchedule && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-muted-foreground text-[11px]">Cron Schedule:</span>
+                <span className="font-mono font-medium text-foreground">{server.backupSchedule}</span>
+              </div>
+            )}
+            {server.backupDurability && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-muted-foreground text-[11px]">Retention / Durability:</span>
+                <Badge variant="outline" className="w-fit text-[11px] border-emerald-500/40 text-emerald-300">{server.backupDurability}</Badge>
+              </div>
+            )}
+            {server.backupDataType && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-muted-foreground text-[11px]">Data Category:</span>
+                <span className="font-medium text-foreground">{server.backupDataType}</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* AI Inference & Model Topology */}
+      {Boolean(server && (server.inferenceEngine || server.inferenceModels || server.inferencePort)) && (
+        <Card className="border-purple-500/30 bg-purple-950/10 shadow-sm">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-purple-400">
+              <Cpu className="h-4 w-4 text-purple-400" /> AI Inference Topology & Models
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-0 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            {server.inferenceEngine && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-muted-foreground text-[11px]">Inference Engine:</span>
+                <Badge variant="secondary" className="w-fit font-mono text-purple-300 bg-purple-500/20">{server.inferenceEngine}</Badge>
+              </div>
+            )}
+            {server.zone && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-muted-foreground text-[11px]">Network Zone:</span>
+                <Badge variant="outline" className="w-fit font-mono text-[11px] border-blue-500/40 text-blue-300">{server.zone}</Badge>
+              </div>
+            )}
+            {server.inferencePort && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-muted-foreground text-[11px]">Serving Port:</span>
+                <span className="font-mono font-medium text-foreground">Port {server.inferencePort}</span>
+              </div>
+            )}
+            {server.authTokenEnc && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-muted-foreground text-[11px]">API Bearer Auth:</span>
+                <Badge variant="outline" className="w-fit text-[10px] border-amber-500/30 text-amber-300">Vault Encrypted (AES-256-GCM)</Badge>
+              </div>
+            )}
+            {server.inferenceModels && (
+              <div className="flex flex-col gap-0.5 md:col-span-2">
+                <span className="text-muted-foreground text-[11px]">Hosted Models:</span>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {server.inferenceModels.split(",").map((m: string, i: number) => (
+                    <Badge key={i} variant="outline" className="font-mono text-[11px] bg-zinc-900 border-zinc-700 text-zinc-200">
+                      {m.trim()}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* SSH Key Access & Host Key Discovery */}
       <SshKeyAccessCard server={server} onAddCustomKey={onAddCustomKey} onOpenPasswordModal={onOpenPasswordModal} />
@@ -2712,6 +2805,28 @@ function LogsViewerTab({ serverId }: { serverId: number }) {
           </div>
         </div>
 
+        {/* Total Log Size & Storage Stats */}
+        {(data?.totalLogSize || data?.journalDiskUsage) && (
+          <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-zinc-900/60 border border-zinc-800 text-xs flex-wrap">
+            <div className="flex items-center gap-1.5 text-zinc-400">
+              <HardDrive className="h-3.5 w-3.5 text-amber-400" />
+              <span className="text-[11px] font-medium text-zinc-300">Disk Footprint:</span>
+            </div>
+            {data.totalLogSize && (
+              <Badge variant="outline" className="bg-amber-500/10 text-amber-300 border-amber-500/30 text-[11px] font-mono gap-1">
+                <span>/var/log Total:</span>
+                <span className="font-semibold text-amber-200">{data.totalLogSize}</span>
+              </Badge>
+            )}
+            {data.journalDiskUsage && (
+              <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30 text-[11px] font-mono gap-1">
+                <span>journalctl Usage:</span>
+                <span className="font-semibold text-blue-200">{data.journalDiskUsage}</span>
+              </Badge>
+            )}
+          </div>
+        )}
+
         {/* Filter Inputs */}
         <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 pt-2 border-t border-border/50 text-xs">
           <div className="space-y-1">
@@ -2803,11 +2918,23 @@ function LogsViewerTab({ serverId }: { serverId: number }) {
       {/* Forensic Log Stream Console */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-950 font-mono text-xs overflow-hidden flex flex-col shadow-inner">
         <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800 bg-zinc-900/80 text-[11px] text-zinc-400">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             <span>Output: {entries.length} lines</span>
             {data?.total !== undefined && (
               <span>({data.total} matching filters)</span>
+            )}
+            {data?.totalLogSize && (
+              <>
+                <span className="text-zinc-600">|</span>
+                <span className="text-amber-400/90 font-mono">/var/log: {data.totalLogSize}</span>
+              </>
+            )}
+            {data?.journalDiskUsage && (
+              <>
+                <span className="text-zinc-600">|</span>
+                <span className="text-blue-400/90 font-mono">journal: {data.journalDiskUsage}</span>
+              </>
             )}
           </div>
           <span className="text-zinc-500 text-[10px]">Execute forensic audit logs</span>

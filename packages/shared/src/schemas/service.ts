@@ -18,6 +18,11 @@ export const ServiceCreateInput = z.object({
   managedBy: z.string().trim().max(255).nullable().optional(),
   remark: z.string().trim().max(2000).nullable().optional(),
   healthUrl: z.string().trim().max(1000).nullable().optional(),
+  nodePort: z.number().int().min(1).max(65535).nullable().optional(),
+  role: z.string().trim().max(255).nullable().optional(),
+  accountId: z.string().trim().max(100).nullable().optional(),
+  region: z.string().trim().max(100).nullable().optional(),
+  authToken: z.string().trim().max(1000).nullable().optional(),
   status: z.enum(["working", "not_working"]).default("working").optional(),
   tagIds: z.array(z.number().int().positive()).max(50).optional(),
 });
@@ -54,6 +59,11 @@ export const ServiceDto = z.object({
   managedBy: z.string().nullable(),
   remark: z.string().nullable(),
   healthUrl: z.string().nullable(),
+  nodePort: z.number().int().nullable().optional(),
+  role: z.string().nullable().optional(),
+  accountId: z.string().nullable().optional(),
+  region: z.string().nullable().optional(),
+  hasAuthToken: z.boolean().optional(),
   status: z.string().nullable(),
   
   lastStatus: z.enum(SERVER_STATUS),

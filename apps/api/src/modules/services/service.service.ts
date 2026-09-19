@@ -23,6 +23,11 @@ const serviceSelect = {
   remark: true,
   healthUrl: true,
   status: true,
+  nodePort: true,
+  role: true,
+  accountId: true,
+  region: true,
+  authTokenEnc: true,
   lastStatus: true,
   lastCheckedAt: true,
   lastLatencyMs: true,
@@ -32,11 +37,12 @@ const serviceSelect = {
   tags: { select: { tag: { select: { id: true, name: true, color: true } } } },
 } as const;
 
-function toDto(raw: { passwordEnc: string | null; tags: { tag: { id: number; name: string; color: string | null } }[]; [key: string]: unknown }) {
-  const { passwordEnc, tags, ...rest } = raw;
+function toDto(raw: { passwordEnc: string | null; authTokenEnc?: string | null; tags: { tag: { id: number; name: string; color: string | null } }[]; [key: string]: unknown }) {
+  const { passwordEnc, authTokenEnc, tags, ...rest } = raw;
   return {
     ...rest,
     hasPassword: passwordEnc !== null,
+    hasAuthToken: !!authTokenEnc,
     tags: tags.map((t) => t.tag),
   };
 }
@@ -109,12 +115,13 @@ export async function getService(id: number) {
 }
 
 export async function createService(input: ServiceCreateInput, ctx: AuditCtx = {}) {
-  const { password, tagIds, ...data } = input;
+  const { password, authToken, tagIds, ...data } = input;
   const service = await prisma.$transaction(async (tx) => {
     const s = await tx.service.create({
       data: {
         ...data,
         passwordEnc: password ? encryptSecret(password) : null,
+        authTokenEnc: authToken ? encryptSecret(authToken) : null,
         tags: tagIds?.length
           ? { create: tagIds.map((tagId) => ({ tag: { connect: { id: tagId } } })) }
           : undefined,

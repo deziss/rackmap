@@ -91,11 +91,13 @@ export async function queryServerLogs(serverId: number, query: LogQueryInput, ov
     command = `${buildSudoCommand(dmesgCmd, password)} 2>/dev/null || ${dmesgCmd}`;
   }
 
+  const probeCmd = `SZ=$( (sudo -n du -sh /var/log 2>/dev/null || du -sh /var/log 2>/dev/null) | head -n 1 | awk '{print $1}'); JU=$( (sudo -n journalctl --disk-usage 2>/dev/null || journalctl --disk-usage 2>/dev/null) | awk '{for(i=1;i<=NF;i++) if($i ~ /^[0-9.]+[KMGTPEB]+$/) print $i}' | head -n 1); echo "===METADATA:LOG_SIZE=\${SZ:-N/A}:JOURNAL_SIZE=\${JU:-N/A}===";`;
+
   return new Promise((resolve, reject) => {
     let stdout = "";
     let stderr = "";
 
-    client.exec(command, (err, stream) => {
+    client.exec(`${probeCmd} ${command}`, (err, stream) => {
       if (err) {
         client.end();
         return reject(new SshError("unreachable", `Failed to execute log query: ${err.message}`));
@@ -111,13 +113,32 @@ export async function queryServerLogs(serverId: number, query: LogQueryInput, ov
 
       stream.on("close", () => {
         client.end();
-        const rawLines = stdout.split("\n").filter((l) => l.trim().length > 0);
-        const entries = rawLines.map((l) => parseLogLine(l, query.source));
+        let totalLogSize: string | null = null;
+        let journalDiskUsage: string | null = null;
+
+        const rawLines = stdout.split("\n");
+        const cleanLines: string[] = [];
+
+        for (const line of rawLines) {
+          const metaMatch = line.match(/^===METADATA:LOG_SIZE=([^:]+):JOURNAL_SIZE=([^=]+)===/);
+          if (metaMatch) {
+            const sz = metaMatch[1]?.trim();
+            const ju = metaMatch[2]?.trim();
+            totalLogSize = sz && sz !== "N/A" ? sz : null;
+            journalDiskUsage = ju && ju !== "N/A" ? ju : null;
+          } else if (line.trim().length > 0) {
+            cleanLines.push(line);
+          }
+        }
+
+        const entries = cleanLines.map((l) => parseLogLine(l, query.source));
 
         resolve({
           entries,
           total: entries.length,
           source: query.source,
+          totalLogSize,
+          journalDiskUsage,
         });
       });
     });
