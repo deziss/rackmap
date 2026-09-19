@@ -12,7 +12,7 @@ import { SshTerminal } from "@/components/ssh-terminal";
 import { cn } from "@/lib/utils";
 import {
   Cpu, MemoryStick, HardDrive, Network, Zap, AlertTriangle,
-  Terminal, Copy, Check, ShieldCheck, Server, Lock, Activity, Globe, Tag, Save, Sparkles
+  Terminal, Copy, Check, ShieldCheck, Server, Lock, Activity, Globe, Tag, Save
 } from "lucide-react";
 import { toast } from "sonner";
 import type { ProcInfo } from "@inv/shared";
@@ -308,25 +308,7 @@ export function ServerDetailModal({ serverId, onClose }: ServerDetailModalProps)
                 </Card>
               )}
 
-              {/* AI Inference & Model Topology */}
-              {Boolean(server && (server.inferenceEngine || server.inferenceModels)) && server && (
-                <Card className="border-purple-500/30 bg-purple-950/10 md:col-span-2">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm flex items-center gap-2 text-purple-400">
-                      <Sparkles className="h-4 w-4 text-purple-500" /> AI Inference Topology
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0 grid grid-cols-1 md:grid-cols-2 gap-x-6">
-                    <InfoRow label="Inference Engine" value={server.inferenceEngine} />
-                    <InfoRow label="Network Zone" value={server.zone} />
-                    <InfoRow label="Inference Port" value={server.inferencePort ? String(server.inferencePort) : null} />
-                    <InfoRow label="Auth Status" value={server.hasAuthToken ? "Bearer Token Protected" : "Open Access"} />
-                    <div className="md:col-span-2">
-                      <InfoRow label="Served Models" value={server.inferenceModels} />
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+
 
               {/* Tags */}
           {server && (server.tags as { id: number; name: string; color?: string | null }[]).length > 0 && (

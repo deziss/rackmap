@@ -243,12 +243,6 @@ model Server {
   backupDurability  String?  @map("backup_durability")
   backupDataType    String?  @map("backup_data_type")
 
-  // ── AI Inference & Topology ────────────────────────────────────────────────
-  zone              String?
-  inferenceEngine   String?  @map("inference_engine")
-  inferenceModels   String?  @map("inference_models")
-  inferencePort     Int?     @map("inference_port")
-  authTokenEnc      String?  @map("auth_token")
 
   statusChecks    StatusCheck[]
   accessRequests  AccessRequest[]

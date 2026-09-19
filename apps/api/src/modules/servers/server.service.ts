@@ -44,16 +44,11 @@ export const serverSelect = {
   backupSchedule: true,
   backupDurability: true,
   backupDataType: true,
-  zone: true,
-  inferenceEngine: true,
-  inferenceModels: true,
-  inferencePort: true,
-  authTokenEnc: true,
 } as const;
 
 /** Strip passwordEnc and add hasPassword. */
-function toDto(raw: { passwordEnc: string | null; authTokenEnc?: string | null; tags: { tag: { id: number; name: string; color: string | null } }[]; [key: string]: unknown }) {
-  const { passwordEnc, authTokenEnc, tags, ...rest } = raw;
+function toDto(raw: { passwordEnc: string | null; tags: { tag: { id: number; name: string; color: string | null } }[]; [key: string]: unknown }) {
+  const { passwordEnc, tags, ...rest } = raw;
   let hardwareInfo: any = null;
   if (raw.cpu || raw.ram || raw.osType || (raw as any).disk) {
     const cpuParts = String(raw.cpu || "").split(" - ");
@@ -80,7 +75,6 @@ function toDto(raw: { passwordEnc: string | null; authTokenEnc?: string | null; 
   return {
     ...rest,
     hasPassword: passwordEnc !== null,
-    hasAuthToken: !!authTokenEnc,
     tags: tags.map((t) => t.tag),
     hardwareInfo,
   };
@@ -177,7 +171,7 @@ export async function getServer(id: number) {
 }
 
 export async function createServer(input: ServerCreateInput, ctx: AuditCtx = {}, sessionToken?: string) {
-  const { password, authToken, tagIds, ...data } = input;
+  const { password, tagIds, ...data } = input;
   const server = await prisma.$transaction(async (tx) => {
     const hasGpu = (data.gpuCount !== null && data.gpuCount !== undefined && data.gpuCount > 0) || (data.gpuTypeId !== null && data.gpuTypeId !== undefined);
     const typeName = hasGpu ? "GPU Server" : "CPU Server";
@@ -187,7 +181,6 @@ export async function createServer(input: ServerCreateInput, ctx: AuditCtx = {},
       data: {
         ...data,
         passwordEnc: password ? encryptPasswordWithVault(password, sessionToken) : null,
-        authTokenEnc: authToken ? encryptPasswordWithVault(authToken, sessionToken) : null,
         updatedByEmail: ctx.actorEmail ?? null,
         tags: tagIds?.length
           ? { create: tagIds.map((tagId) => ({ tag: { connect: { id: tagId } } })) }
@@ -218,18 +211,13 @@ export async function updateServer(id: number, input: ServerUpdateInput, ctx: Au
   const existing = await prisma.server.findUnique({ where: { id } });
   if (!existing || existing.deletedAt) throw notFound("Server");
 
-  const { password, authToken, tagIds, ...data } = input;
+  const { password, tagIds, ...data } = input;
 
   // password: undefined = unchanged, null = clear, string = re-encrypt
   const passwordEnc =
     password === undefined ? undefined :
     password === null ? null :
     encryptPasswordWithVault(password, sessionToken);
-
-  const authTokenEnc =
-    authToken === undefined ? undefined :
-    authToken === null ? null :
-    encryptPasswordWithVault(authToken, sessionToken);
 
   const updated = await prisma.$transaction(async (tx) => {
     const newGpuCount = data.gpuCount !== undefined ? data.gpuCount : existing.gpuCount;
