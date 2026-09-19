@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { CheckoutDialog } from "@/components/checkout-dialog";
 
 export const Route = createFileRoute("/_auth/settings")({
   component: SettingsPage,
@@ -360,6 +361,7 @@ function PrefToggle({ label, prefKey, val, onChange, disabled }: { label: string
 // ----------------------------------------------------------------------
 function LicensingConfigurationSection() {
   const qc = useQueryClient();
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const { data: license, isLoading } = useQuery({
     queryKey: licenseKeys.status(),
     queryFn: fetchLicenseStatus,
@@ -423,10 +425,19 @@ function LicensingConfigurationSection() {
             Enterprise licensing, node limits, and feature entitlements powered by Licencia
           </p>
         </div>
-        {isLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        ) : (
-          <Badge
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={() => setCheckoutOpen(true)}
+            className="h-7 text-xs bg-blue-600 hover:bg-blue-500 text-white font-medium gap-1.5 shadow-sm"
+          >
+            <Sparkles className="h-3 w-3 text-blue-200" />
+            Upgrade / Checkout
+          </Button>
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          ) : (
+            <Badge
             className={
               license?.tier === "enterprise"
                 ? "bg-amber-500/20 text-amber-400 border-amber-500/30 uppercase text-[10px]"
@@ -438,6 +449,7 @@ function LicensingConfigurationSection() {
             {license?.planName || "Free Community"}
           </Badge>
         )}
+        </div>
       </div>
 
       {/* Node Capacity & Utilization */}
@@ -574,6 +586,12 @@ function LicensingConfigurationSection() {
           </div>
         )}
       </form>
+
+      <CheckoutDialog
+        open={checkoutOpen}
+        onOpenChange={setCheckoutOpen}
+        initialPlan="pro"
+      />
     </div>
   );
 }

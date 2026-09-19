@@ -508,3 +508,23 @@ Manual backup:
 ```bash
 sqlite3 /data/inventory.db ".backup '/backups/inventory-$(date +%Y%m%d).db'"
 ```
+
+---
+
+## CI/CD & Container Registry Publishing
+
+RackMap includes a GitHub Actions workflow in [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml) to automatically build, test, and push multi-stage production Docker images for both API and Web services to **GitHub Container Registry (GHCR)** and **Docker Hub**.
+
+### Triggers
+- **Push to `main`**: Builds and tags images as `latest` and `sha-<commit>`.
+- **Git Tags (`v*.*.*`)**: Builds and tags images with the corresponding semantic version (`1.0.0`, `1.0`, etc.).
+- **Pull Requests**: Runs a test build of both containers without pushing to verify containerization integrity.
+- **Workflow Dispatch**: Allows manual trigger with optional target registry selection (`push_to_dockerhub` and `push_to_ghcr`).
+
+### Supported Registries
+1. **GitHub Container Registry (GHCR)**:
+   - Built-in and zero-configuration using `${{ secrets.GITHUB_TOKEN }}`.
+   - Images: `ghcr.io/<owner>/rackmap/api` and `ghcr.io/<owner>/rackmap/web`.
+2. **Docker Hub**:
+   - Enabled when `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` are configured in repository secrets.
+   - Images: `<username>/server-inventory-api` and `<username>/server-inventory-web`.

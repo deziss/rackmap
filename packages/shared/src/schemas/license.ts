@@ -34,3 +34,52 @@ export const ActivateLicenseRequestSchema = z.object({
   offlineToken: z.string().optional(),
 });
 export type ActivateLicenseRequest = z.infer<typeof ActivateLicenseRequestSchema>;
+
+
+// ─── Checkout & Payment Schemas ───────────────────────────────────────────────
+
+export const CreateCheckoutSessionSchema = z.object({
+  planId: z.enum(["free", "pro", "enterprise"]),
+  billingCycle: z.enum(["monthly", "annual"]).default("annual"),
+  company: z.string().optional(),
+});
+export type CreateCheckoutSessionInput = z.infer<typeof CreateCheckoutSessionSchema>;
+
+export const CheckoutSessionResponseSchema = z.object({
+  sessionId: z.string(),
+  planId: z.enum(["free", "pro", "enterprise"]),
+  planName: z.string(),
+  billingCycle: z.enum(["monthly", "annual"]),
+  unitPrice: z.number(),
+  amount: z.number(),
+  currency: z.string(),
+  maxServers: z.number(),
+  customerName: z.string(),
+  customerEmail: z.string(),
+  company: z.string().optional(),
+  requiresPayment: z.boolean(),
+  orderId: z.string(),
+});
+export type CheckoutSessionResponse = z.infer<typeof CheckoutSessionResponseSchema>;
+
+export const CompleteCheckoutSchema = z.object({
+  sessionId: z.string(),
+  paymentMethod: z.enum(["free", "card", "razorpay"]).default("card"),
+  paymentReference: z.string().optional(),
+  cardNumberLast4: z.string().optional(),
+  autoActivate: z.boolean().default(true),
+});
+export type CompleteCheckoutInput = z.infer<typeof CompleteCheckoutSchema>;
+
+export const CheckoutResultSchema = z.object({
+  success: z.boolean(),
+  orderId: z.string(),
+  invoiceNumber: z.string(),
+  licenseKey: z.string(),
+  tier: z.enum(["free", "pro", "enterprise"]),
+  maxServers: z.number(),
+  expiresAt: z.string().nullable(),
+  activated: z.boolean(),
+  message: z.string(),
+});
+export type CheckoutResult = z.infer<typeof CheckoutResultSchema>;

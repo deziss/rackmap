@@ -36,6 +36,7 @@ model User {
   accessRequests         AccessRequest[]         @relation("Requester")
   resolvedRequests       AccessRequest[]         @relation("Resolver")
   notificationPreference NotificationPreference?
+  orders                 Order[]
 
   @@map("user")
 }
@@ -453,4 +454,28 @@ model SystemLicense {
   updatedAt    DateTime  @updatedAt
 
   @@map("system_license")
+}
+
+// ─── Orders & Subscriptions (Licencia Checkout) ──────────────────────────────
+model Order {
+  id             String    @id @default(uuid())
+  sessionId      String    @unique
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId         String    // "free" | "pro" | "enterprise"
+  billingCycle   String    // "monthly" | "annual"
+  amount         Float
+  currency       String    @default("USD")
+  customerName   String
+  customerEmail  String
+  company        String?
+  status         String    @default("pending") // "pending" | "paid" | "failed"
+  paymentGateway String?   // "razorpay" | "card" | "free"
+  paymentRef     String?
+  licenseKey     String?
+  invoiceNumber  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("orders")
 }

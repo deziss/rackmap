@@ -50,7 +50,9 @@ export function verifyLicenseToken(token: string, publicKeyPem: string, opts: Ve
   if (parts.length !== 3) {
     throw new Error("Malformed license token: expected 3 dot-separated parts");
   }
-  const [headerB64, payloadB64, sigB64] = parts;
+  const headerB64 = parts[0]!;
+  const payloadB64 = parts[1]!;
+  const sigB64 = parts[2]!;
 
   const signingInput = Buffer.from(`${headerB64}.${payloadB64}`, "ascii");
   const signature = base64urlDecode(sigB64);
