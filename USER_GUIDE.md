@@ -48,21 +48,18 @@ The servers table shows all servers you have access to.
 
 | Column | Description |
 |--------|-------------|
-| # | Server ID and sort order |
-| Hostname | Hostname with environment badge (Cloud / On-Premise) |
+| # | Fixed sticky ID column during horizontal scrolling |
+| Hostname | Fixed sticky server hostname & domain with solid opaque background |
 | IP | IPv4 address |
-| Port | SSH port (default 22) |
 | Status | Live status dot (Up / Down / Unknown) |
 | User | Configured SSH username |
 | Password | Password reveal button (masked with one-click copy) |
 | CPU | Dedicated processor column (e.g. `12 Cores`) |
 | RAM | Dedicated physical memory column (e.g. `15GB`) |
-| Storage | Dedicated storage capacity column (e.g. `477GB`) |
-| OS | Operating system and distribution (e.g. `Ubuntu 24.04.5 LTS`) |
 | GPU | Detected GPU count and model |
 | Project / Location | Assigned project and datacenter / rack location |
 | Tags | Colored categorical badges |
-| Actions | Quick actions: live metrics, terminal, edit, delete |
+| Actions | Fixed sticky quick actions: health check, SSH copy, dedicated page, terminal, edit, delete (vibrant hover highlight colors) |
 
 ### Universal Pagination
 Every table in RackMap features an interactive pagination bar:

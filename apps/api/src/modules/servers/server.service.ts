@@ -91,6 +91,7 @@ export async function listServers(query: ServerListQuery, isAdmin: boolean) {
       OR: [
         { hostname: { contains: q } },
         { ip: { contains: q } },
+        { domain: { contains: q } },
         { username: { contains: q } },
         { remark: { contains: q } },
         { networkType: { name: { contains: q } } },

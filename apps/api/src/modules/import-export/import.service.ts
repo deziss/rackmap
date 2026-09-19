@@ -167,6 +167,7 @@ export async function exportServers(filters: Record<string, string | undefined>)
       OR: [
         { hostname: { contains: filters.q, mode: 'insensitive' } },
         { ip: { contains: filters.q, mode: 'insensitive' } },
+        { domain: { contains: filters.q, mode: 'insensitive' } },
         { username: { contains: filters.q, mode: 'insensitive' } },
         { remark: { contains: filters.q, mode: 'insensitive' } },
         { networkType: { name: { contains: filters.q, mode: 'insensitive' } } },
@@ -250,6 +251,7 @@ export async function exportServersJson(filters: Record<string, string | undefin
       OR: [
         { hostname: { contains: filters.q } },
         { ip: { contains: filters.q } },
+        { domain: { contains: filters.q } },
         { username: { contains: filters.q } },
         { remark: { contains: filters.q } },
         { networkType: { name: { contains: filters.q } } },

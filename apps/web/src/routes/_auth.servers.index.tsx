@@ -46,7 +46,7 @@ function DeleteConfirm({ server, onConfirm, isPending }: { server: ServerDto; on
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            className="h-7 w-7 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/20 transition-colors"
             onClick={() => setOpen(true)}
             disabled={isPending}
           >
@@ -227,7 +227,7 @@ function ServersPage() {
       <div className="sticky top-[-24px] z-30 -mx-6 px-6 pt-[24px] pb-4 bg-background/95 backdrop-blur-md border-b border-white/10 flex items-center gap-2.5 flex-wrap">
         <h1 className="text-xl font-semibold mr-auto tracking-tight">Servers</h1>
         <Input
-          placeholder="Search hostname, IP, user…"
+          placeholder="Search hostname, IP, domain, user…"
           value={q}
           onChange={(e) => { setQ(e.target.value); setPage(1); }}
           className="w-52 h-8 text-sm"
@@ -316,22 +316,60 @@ function ServersPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-xl border border-white/10 bg-card/60 backdrop-blur-md shadow-xl overflow-auto">
-        <table className="w-full text-sm">
+      <div className="rounded-xl border border-border bg-card shadow-xl overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
           <thead>
-            <tr className="border-b border-white/8 bg-white/3">
+            <tr className="border-b border-border/80 bg-muted/30">
+              {/* Sticky # column */}
+              <th
+                className="sticky left-0 z-20 bg-card w-12 min-w-[48px] max-w-[48px] px-3 py-2.5 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted transition-colors select-none"
+                onClick={() => {
+                  if (sortBy === "id") {
+                    setSortDir(sortDir === "asc" ? "desc" : "asc");
+                  } else {
+                    setSortBy("id");
+                    setSortDir("asc");
+                  }
+                  setPage(1);
+                }}
+              >
+                <div className="flex items-center justify-center gap-1">
+                  #
+                  {sortBy === "id" && (
+                    <span className="text-[10px]">{sortDir === "asc" ? "▲" : "▼"}</span>
+                  )}
+                </div>
+              </th>
+
+              {/* Sticky Hostname (Name) column */}
+              <th
+                className="sticky left-12 z-20 bg-card min-w-[200px] px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted transition-colors border-r border-border/60 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.3)] select-none"
+                onClick={() => {
+                  if (sortBy === "hostname") {
+                    setSortDir(sortDir === "asc" ? "desc" : "asc");
+                  } else {
+                    setSortBy("hostname");
+                    setSortDir("asc");
+                  }
+                  setPage(1);
+                }}
+              >
+                <div className="flex items-center gap-1">
+                  Hostname
+                  {sortBy === "hostname" && (
+                    <span className="text-[10px]">{sortDir === "asc" ? "▲" : "▼"}</span>
+                  )}
+                </div>
+              </th>
+
+              {/* Regular columns (OS, Port, Storage removed) */}
               {[
-                { key: "id", label: "#" },
-                { key: "hostname", label: "Hostname" },
                 { key: "ip", label: "IP" },
-                { key: "port", label: "Port" },
                 { key: "lastStatus", label: "Status" },
                 { key: "username", label: "User" },
                 { key: "password", label: "Password" },
                 { key: "cpu", label: "CPU" },
                 { key: "ram", label: "RAM" },
-                { key: "disk", label: "Storage" },
-                { key: "osType", label: "OS" },
                 { key: "gpu", label: "GPU" },
                 { key: "project", label: "Project" },
                 { key: "network", label: "Network" },
@@ -341,7 +379,7 @@ function ServersPage() {
               ].map(col => (
                 <th
                   key={col.key}
-                  className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-white/5 transition-colors"
+                  className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50 transition-colors whitespace-nowrap select-none"
                   onClick={() => {
                     if (sortBy === col.key) {
                       setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -360,24 +398,37 @@ function ServersPage() {
                   </div>
                 </th>
               ))}
-              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
+
+              {/* Sticky Actions column */}
+              <th className="sticky right-0 z-20 bg-card min-w-[220px] px-3 py-2.5 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider border-l border-border/60 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.3)]">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
             {isLoading && (
               Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i} className="border-b border-white/5">
-                  {Array.from({ length: 18 }).map((__, j) => (
+                <tr key={i} className="border-b border-border/40">
+                  <td className="sticky left-0 z-10 bg-card w-12 min-w-[48px] px-3 py-3">
+                    <Skeleton className="h-4 w-full" />
+                  </td>
+                  <td className="sticky left-12 z-10 bg-card min-w-[200px] px-3 py-3 border-r border-border/60">
+                    <Skeleton className="h-4 w-full" />
+                  </td>
+                  {Array.from({ length: 12 }).map((__, j) => (
                     <td key={j} className="px-3 py-3">
                       <Skeleton className="h-4 w-full" />
                     </td>
                   ))}
+                  <td className="sticky right-0 z-10 bg-card min-w-[220px] px-3 py-3 border-l border-border/60">
+                    <Skeleton className="h-4 w-full" />
+                  </td>
                 </tr>
               ))
             )}
             {!isLoading && data?.items.length === 0 && (
               <tr>
-                <td colSpan={18} className="px-3 py-12 text-center text-muted-foreground text-sm">
+                <td colSpan={15} className="px-3 py-12 text-center text-muted-foreground text-sm">
                   No servers found
                 </td>
               </tr>
@@ -388,11 +439,16 @@ function ServersPage() {
               return (
                 <tr
                   key={server.id}
-                  className={`row-animate border-b border-white/5 last:border-0 transition-colors hover:bg-white/4 ${isDeleted ? "opacity-50" : ""}`}
+                  className={`group row-animate border-b border-border/40 last:border-0 transition-colors hover:bg-muted/30 ${isDeleted ? "opacity-50" : ""}`}
                   style={{ animationDelay: `${idx * 30}ms` }}
                 >
-                  <td className="px-3 py-2.5 text-muted-foreground text-xs">{server.id}</td>
-                  <td className="px-3 py-2.5 font-mono font-medium">
+                  {/* Sticky # column */}
+                  <td className="sticky left-0 z-10 bg-card group-hover:bg-muted transition-colors w-12 min-w-[48px] max-w-[48px] px-3 py-2.5 text-muted-foreground text-xs text-center font-mono">
+                    {server.id}
+                  </td>
+
+                  {/* Sticky Hostname (Name) column */}
+                  <td className="sticky left-12 z-10 bg-card group-hover:bg-muted transition-colors min-w-[200px] px-3 py-2.5 font-mono font-medium border-r border-border/60 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.3)]">
                     {!isDeleted ? (
                       <Link
                         to="/servers/$serverId"
@@ -405,17 +461,20 @@ function ServersPage() {
                       <span>{server.hostname}</span>
                     )}
                     {server.domain && (
-                      <span className="ml-1.5 text-xs text-muted-foreground">{server.domain}</span>
+                      <span className="ml-1.5 text-xs text-muted-foreground font-sans">({server.domain})</span>
                     )}
                     {server.cloudProvider && (
-                      <span className="ml-1 text-xs text-muted-foreground opacity-70">
-                        ({server.cloudProvider.name})
+                      <span className="ml-1 text-xs text-muted-foreground opacity-70 font-sans">
+                        [{server.cloudProvider.name}]
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 font-mono text-xs">{server.ip}</td>
-                  <td className="px-3 py-2.5 text-muted-foreground text-xs">{server.sshPort}</td>
-                  <td className="px-3 py-2.5">
+
+                  {/* IP */}
+                  <td className="px-3 py-2.5 font-mono text-xs whitespace-nowrap">{server.ip}</td>
+
+                  {/* Status */}
+                  <td className="px-3 py-2.5 whitespace-nowrap">
                     <div className="flex items-center gap-1.5">
                       <StatusDot
                         status={server.lastStatus as "up" | "down" | "unknown"}
@@ -427,8 +486,12 @@ function ServersPage() {
                       <span className="text-xs capitalize text-muted-foreground">{server.lastStatus}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 text-xs">{server.username}</td>
-                  <td className="px-3 py-2.5">
+
+                  {/* User */}
+                  <td className="px-3 py-2.5 text-xs whitespace-nowrap font-mono">{server.username}</td>
+
+                  {/* Password */}
+                  <td className="px-3 py-2.5 whitespace-nowrap">
                     {server.hasPassword ? (
                       role === "viewer" && !viewerApproved(server.id, "password_reveal") ? (
                         <RequestAccessButton entityId={server.id} entityType="server" type="password_reveal" label="Password" />
@@ -440,7 +503,7 @@ function ServersPage() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="h-5 w-5"
+                            className="h-6 w-6 text-muted-foreground hover:text-foreground hover:bg-muted"
                             onClick={() => handleReveal(server)}
                             title={revealed !== undefined ? "Hide" : "Reveal"}
                           >
@@ -452,40 +515,48 @@ function ServersPage() {
                       <span className="text-muted-foreground text-xs">—</span>
                     )}
                   </td>
+
+                  {/* CPU */}
                   <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap font-mono">
                     {server.cpu || "—"}
                   </td>
+
+                  {/* RAM */}
                   <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap font-mono">
                     {server.ram || "—"}
                   </td>
-                  <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap font-mono">
-                    {server.disk || "—"}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap truncate max-w-[130px]" title={server.osType || undefined}>
-                    {server.osType || "—"}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                    {(!server.gpuCount || server.gpuCount === 0) && !server.gpuType ? "-" :
+
+                  {/* GPU */}
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                    {(!server.gpuCount || server.gpuCount === 0) && !server.gpuType ? "—" :
                       (server.gpuCount && server.gpuCount > 0 && server.gpuType
                         ? `${server.gpuCount}× ${server.gpuType.name}`
-                        : (server.gpuType?.name ?? "-"))}
+                        : (server.gpuType?.name ?? "—"))}
                   </td>
-                  <td className="px-3 py-2.5 text-xs text-muted-foreground">
+
+                  {/* Project */}
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
                     {server.allocatedTo?.name ?? "—"}
                   </td>
-                  <td className="px-3 py-2.5 text-xs text-muted-foreground">
+
+                  {/* Network */}
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
                     {server.networkType?.name ?? "—"}
                   </td>
-                  <td className="px-3 py-2.5 text-xs text-muted-foreground">
+
+                  {/* Location */}
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
                     {server.location?.name ?? "—"}
                   </td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex gap-1 flex-wrap">
+
+                  {/* Tags */}
+                  <td className="px-3 py-2.5 whitespace-nowrap">
+                    <div className="flex gap-1 flex-wrap max-w-xs">
                       {server.tags.map((t) => (
                         <Badge
                           key={t.id}
                           variant="outline"
-                          className="text-xs px-1.5 py-0"
+                          className="text-xs px-1.5 py-0 font-normal"
                           style={t.color ? { backgroundColor: t.color + "22", borderColor: t.color + "55", color: t.color } : {}}
                         >
                           {t.name}
@@ -493,7 +564,9 @@ function ServersPage() {
                       ))}
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 text-xs text-muted-foreground max-w-35">
+
+                  {/* Last Updated By */}
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap max-w-36">
                     {server.updatedByEmail ? (
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -510,8 +583,10 @@ function ServersPage() {
                       <span className="text-muted-foreground/50">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex items-center gap-1">
+
+                  {/* Sticky Actions */}
+                  <td className="sticky right-0 z-10 bg-card group-hover:bg-muted transition-colors min-w-[220px] px-3 py-2.5 text-right whitespace-nowrap border-l border-border/60 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.3)]">
+                    <div className="flex items-center justify-end gap-1">
                       {/* Inline check-now — always visible */}
                       {!isDeleted && (
                         <Tooltip>
@@ -519,14 +594,14 @@ function ServersPage() {
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="h-7 w-7"
+                              className="h-7 w-7 text-muted-foreground hover:text-amber-400 hover:bg-amber-500/20 transition-colors"
                               onClick={() => checkMutation.mutate(server.id)}
                               disabled={checkMutation.isPending}
                             >
                               <Zap className="h-3.5 w-3.5" />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent>Check now</TooltipContent>
+                          <TooltipContent>Check health now</TooltipContent>
                         </Tooltip>
                       )}
 
@@ -537,13 +612,13 @@ function ServersPage() {
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="h-7 w-7 text-emerald-500"
+                              className="h-7 w-7 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/20 transition-colors"
                               onClick={() => restoreMutation.mutate(server.id)}
                             >
                               <RotateCcw className="h-3.5 w-3.5" />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent>Restore</TooltipContent>
+                          <TooltipContent>Restore server</TooltipContent>
                         </Tooltip>
                       )}
 
@@ -553,8 +628,9 @@ function ServersPage() {
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
-                                size="icon" variant="ghost"
-                                className="h-7 w-7 text-muted-foreground hover:text-primary"
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-muted-foreground hover:text-cyan-400 hover:bg-cyan-500/20 transition-colors"
                                 onClick={() => {
                                   void navigator.clipboard.writeText(
                                     `ssh -p ${server.sshPort} ${server.username}@${server.ip}`
@@ -569,8 +645,9 @@ function ServersPage() {
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
-                                size="icon" variant="ghost"
-                                className="h-7 w-7 text-muted-foreground hover:text-amber-500"
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-muted-foreground hover:text-violet-400 hover:bg-violet-500/20 transition-colors"
                                 onClick={() => {
                                   void navigator.clipboard.writeText(
                                     `ssh -p ${server.sshPort} ${server.username}@${server.ip} -t sudo su -`
@@ -585,13 +662,16 @@ function ServersPage() {
                         </>
                       )}
 
-                      
                       {/* Dedicated Server Page */}
                       {!isDeleted && (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Link to="/servers/$serverId" params={{ serverId: String(server.id) }}>
-                              <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-primary">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-muted-foreground hover:text-blue-400 hover:bg-blue-500/20 transition-colors"
+                              >
                                 <ExternalLink className="h-3.5 w-3.5" />
                               </Button>
                             </Link>
@@ -600,12 +680,16 @@ function ServersPage() {
                         </Tooltip>
                       )}
 
-                      {/* SSH Terminal — admin: direct link; others: request access */}
+                      {/* SSH Terminal */}
                       {!isDeleted && role === "admin" && (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Link to="/ssh" search={{ serverId: server.id }}>
-                              <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-primary">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-muted-foreground hover:text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                              >
                                 <Terminal className="h-3.5 w-3.5" />
                               </Button>
                             </Link>
@@ -617,7 +701,11 @@ function ServersPage() {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Link to="/ssh" search={{ serverId: server.id }}>
-                              <Button size="icon" variant="ghost" className="h-7 w-7 text-emerald-500 hover:text-emerald-400">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                              >
                                 <Terminal className="h-3.5 w-3.5" />
                               </Button>
                             </Link>
@@ -635,6 +723,7 @@ function ServersPage() {
                           <ServerFormDialog
                             server={server}
                             onSaved={() => qc.invalidateQueries({ queryKey: serverKeys.all })}
+                            triggerClassName="h-7 w-7 text-muted-foreground hover:text-sky-400 hover:bg-sky-500/20 transition-colors"
                           />
                           <DeleteConfirm
                             server={server}

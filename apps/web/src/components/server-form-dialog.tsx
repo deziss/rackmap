@@ -21,6 +21,7 @@ import { useQuery } from "@tanstack/react-query";
 interface ServerFormDialogProps {
   server?: ServerDto;
   onSaved?: () => void;
+  triggerClassName?: string;
 }
 
 interface LookupEntry { id: number; name: string }
@@ -97,7 +98,7 @@ function LookupSelect({ label, type, value, onChange, filterPredicate }: { label
   );
 }
 
-export function ServerFormDialog({ server, onSaved }: ServerFormDialogProps) {
+export function ServerFormDialog({ server, onSaved, triggerClassName }: ServerFormDialogProps) {
   const [open, setOpen] = useState(false);
   const isEdit = !!server;
 
@@ -178,8 +179,13 @@ export function ServerFormDialog({ server, onSaved }: ServerFormDialogProps) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {isEdit ? (
-          <Button size="icon" variant="ghost" className="h-6 w-6" title="Edit server">
-            <Pencil className="h-3 w-3" />
+          <Button
+            size="icon"
+            variant="ghost"
+            className={triggerClassName || "h-7 w-7 text-muted-foreground hover:text-sky-400 hover:bg-sky-500/20 transition-colors"}
+            title="Edit server"
+          >
+            <Pencil className="h-3.5 w-3.5" />
           </Button>
         ) : (
           <Button size="sm">
