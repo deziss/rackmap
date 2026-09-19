@@ -65,6 +65,7 @@ export const ServerDto = z.object({
   ip: z.string(),
   username: z.string(),
   hasPassword: z.boolean(),
+  authType: z.string().optional(),
   sshPort: z.number().int(),
   cpu: z.string().nullable(),
   ram: z.string().nullable(),

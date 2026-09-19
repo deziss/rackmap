@@ -512,7 +512,9 @@ function ServersPage() {
                         </div>
                       )
                     ) : (
-                      <span className="text-muted-foreground text-xs">—</span>
+                      <Badge variant="outline" className="text-[10px] font-mono text-cyan-400 border-cyan-500/30 bg-cyan-500/10 py-0 px-1.5">
+                        SSH Key
+                      </Badge>
                     )}
                   </td>
 

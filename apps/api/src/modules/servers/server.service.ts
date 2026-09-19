@@ -76,6 +76,7 @@ function toDto(raw: { passwordEnc: string | null; tags: { tag: { id: number; nam
   return {
     ...rest,
     hasPassword: passwordEnc !== null,
+    authType: passwordEnc !== null ? "Password & SSH Key" : "SSH Key Only",
     tags: tags.map((t) => t.tag),
     hardwareInfo,
   };

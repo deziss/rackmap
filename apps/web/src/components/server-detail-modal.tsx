@@ -12,7 +12,7 @@ import { SshTerminal } from "@/components/ssh-terminal";
 import { cn } from "@/lib/utils";
 import {
   Cpu, MemoryStick, HardDrive, Network, Zap, AlertTriangle,
-  Terminal, Copy, Check, ShieldCheck, Server, Lock, Activity, Globe, Tag, Save
+  Terminal, Copy, Check, ShieldCheck, KeyRound, Server, Lock, Activity, Globe, Tag, Save
 } from "lucide-react";
 import { toast } from "sonner";
 import type { ProcInfo } from "@inv/shared";
@@ -242,6 +242,24 @@ export function ServerDetailModal({ serverId, onClose }: ServerDetailModalProps)
                   <InfoRow label="Username" value={server.username} />
                   <InfoRow label="SSH Port" value={String(server.sshPort)} />
                   <InfoRow label="Password" value={<PasswordBox key="pwd" serverId={server.id} />} />
+                  <InfoRow
+                    label="Auth Method"
+                    value={
+                      server.hasPassword ? (
+                        <Badge variant="outline" className="text-[10px] font-medium text-emerald-400 border-emerald-500/30 bg-emerald-500/10 gap-1">
+                          <KeyRound className="h-3 w-3" /> Password & SSH Key
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] font-medium text-cyan-400 border-cyan-500/30 bg-cyan-500/10 gap-1">
+                          <ShieldCheck className="h-3 w-3" /> SSH Key Only
+                        </Badge>
+                      )
+                    }
+                  />
+                  <InfoRow
+                    label="Sudo Access"
+                    value={server.hasPassword ? "Password Authenticated (sudo -S)" : "Passwordless Sudo (sudo -n)"}
+                  />
                 </CardContent>
               </Card>
 

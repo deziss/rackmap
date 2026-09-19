@@ -69,6 +69,7 @@ import {
   ShieldAlert,
   KeyRound,
   Lock,
+  Unlock,
   FileText,
   Users,
   Activity,
@@ -931,9 +932,41 @@ function OverviewTab({
               <span className="text-muted-foreground">SSH Port & User:</span>
               <span className="font-mono">{server.username} (Port {server.sshPort})</span>
             </div>
-            <div className="flex justify-between py-1 border-b border-border/40">
+            <div className="flex justify-between items-center py-1 border-b border-border/40">
               <span className="text-muted-foreground">Authentication Method:</span>
-              <Badge variant="secondary" className="text-[10px] capitalize">{server.authType}</Badge>
+              {server.hasPassword ? (
+                <Badge variant="outline" className="text-[10px] font-medium text-emerald-400 border-emerald-500/30 bg-emerald-500/10 gap-1">
+                  <KeyRound className="h-3 w-3" /> Password & SSH Key
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-[10px] font-medium text-cyan-400 border-cyan-500/30 bg-cyan-500/10 gap-1">
+                  <ShieldCheck className="h-3 w-3" /> SSH Key Only
+                </Badge>
+              )}
+            </div>
+            <div className="flex justify-between items-center py-1 border-b border-border/40">
+              <span className="text-muted-foreground">Credential Vault:</span>
+              {server.hasPassword ? (
+                <span className="flex items-center gap-1 font-mono text-[11px] text-emerald-400">
+                  <Lock className="h-3 w-3 text-emerald-500" /> AES-256-GCM Encrypted
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
+                  <Unlock className="h-3 w-3 text-muted-foreground/60" /> Not Configured
+                </span>
+              )}
+            </div>
+            <div className="flex justify-between items-center py-1 border-b border-border/40">
+              <span className="text-muted-foreground">Privilege Elevation:</span>
+              <span className="font-mono text-[11px] text-foreground/90">
+                {server.hasPassword ? "Password Authenticated (sudo -S)" : "Passwordless Sudo (sudo -n)"}
+              </span>
+            </div>
+            <div className="flex justify-between items-center py-1 border-b border-border/40">
+              <span className="text-muted-foreground">SSH Key Policy:</span>
+              <span className="font-mono text-[11px] text-foreground/90">
+                Auto (ED25519 / RSA Host Keys)
+              </span>
             </div>
             <div className="flex justify-between py-1 border-b border-border/40">
               <span className="text-muted-foreground">Datacenter / Location:</span>
