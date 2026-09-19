@@ -294,6 +294,9 @@ The **SSL** page (`/ssl`) monitors domain certificates for upcoming expiration.
 - **Manual Domains**: Add standalone external domains to monitor.
 - **Background Scanner**: Probes port 443, reads peer certificates, records issuer, validity window, and calculates days remaining.
 - **Alerts**: Color-coded badges for valid, expiring soon (≤30 days), and expired certificates, with automated email warnings.
+- **Wildcard Domain Monitoring**: Track wildcard certificates (e.g. `*.merai.cloud`, `*.domain.com`). The SSL scanner intelligently probes existing active subdomains or apex hosts on port 443 with SNI to retrieve the authoritative certificate.
+- **Automatic Subdomain Omission**: When a wildcard domain is tracked, all related subdomains are automatically grouped and omitted from the default display table to eliminate clutter, showing a summary banner with an omission count.
+- **Show Wildcard Subdomains Toggle**: Use the **Show wildcard subdomains** checkbox in the toolbar to reveal and inspect all covered subdomains at any time.
 
 ---
 

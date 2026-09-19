@@ -11,7 +11,7 @@ const sslRoutes = new Hono().use(requireSession);
 // List SSL Statuses
 sslRoutes.get("/", zValidator("query", SslStatusListQuery), async (c) => {
   const query = c.req.valid("query");
-  const { cursor, limit = 50, sortBy, sortDir, q, status, includeDeleted, page } = query;
+  const { cursor, limit = 50, sortBy, sortDir, q, status, includeDeleted, includeWildcardSubdomains, page } = query;
   const pageNum = page ? Math.max(1, page) : undefined;
 
   const showDeleted = includeDeleted;
@@ -32,6 +32,49 @@ sslRoutes.get("/", zValidator("query", SslStatusListQuery), async (c) => {
       { server: { hostname: { contains: term } } },
       { service: { serviceName: { contains: term } } },
     ];
+  }
+
+  // 1. Detect active wildcard domains
+  const activeWildcardEntries = await prisma.sslStatus.findMany({
+    where: {
+      deletedAt: null,
+      domain: { startsWith: "*." },
+    },
+    select: { domain: true },
+  });
+  const activeWildcards = activeWildcardEntries.map((w) => w.domain.toLowerCase());
+  const wildcardBases = activeWildcards.map((w) => w.slice(2));
+
+  // 2. Omit specific subdomains covered by active wildcard domains (unless requested to include)
+  let omittedSubdomainsCount = 0;
+  if (!includeWildcardSubdomains && wildcardBases.length > 0) {
+    const omitConditions: any[] = [];
+    for (const base of wildcardBases) {
+      omitConditions.push({
+        domain: {
+          endsWith: `.${base}`,
+          not: `*.${base}`,
+        },
+      });
+      omitConditions.push({
+        domain: base,
+      });
+    }
+
+    omittedSubdomainsCount = await prisma.sslStatus.count({
+      where: {
+        deletedAt: null,
+        OR: omitConditions,
+      },
+    });
+
+    if (!where.NOT) {
+      where.NOT = omitConditions;
+    } else if (Array.isArray(where.NOT)) {
+      where.NOT.push(...omitConditions);
+    } else {
+      where.NOT = [where.NOT, ...omitConditions];
+    }
   }
 
   const orderBy = sortBy ? { [sortBy]: sortDir || "asc" } : { id: "desc" };
@@ -78,6 +121,8 @@ sslRoutes.get("/", zValidator("query", SslStatusListQuery), async (c) => {
     total,
     page: pageNum,
     totalPages: Math.ceil(total / limit) || 1,
+    omittedSubdomainsCount,
+    activeWildcards,
   });
 });
 
@@ -134,16 +179,57 @@ sslRoutes.post("/:id/scan", async (c) => {
 // Create manual domain entry
 sslRoutes.post("/", zValidator("json", SslStatusCreateInput), async (c) => {
   const data = c.req.valid("json");
+  let normalizedDomain = data.domain.trim().toLowerCase();
+  normalizedDomain = normalizedDomain.replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
   
-  const existing = await prisma.sslStatus.findUnique({ where: { domain: data.domain } });
-  if (existing) return c.json({ error: "Domain already tracked" }, 409);
+  const existing = await prisma.sslStatus.findUnique({ where: { domain: normalizedDomain } });
+  if (existing) {
+    if (existing.deletedAt) {
+      const restored = await prisma.sslStatus.update({
+        where: { id: existing.id },
+        data: { ...data, domain: normalizedDomain, deletedAt: null, isManual: true }
+      });
+      return c.json(restored, 200);
+    }
+    return c.json({ error: "Domain already tracked" }, 409);
+  }
 
   const ssl = await prisma.sslStatus.create({
     data: {
       ...data,
+      domain: normalizedDomain,
       isManual: true,
     }
   });
+
+  // Automatically attempt initial scan
+  try {
+    const cert = await fetchSslCert(ssl.domain);
+    if (cert) {
+      let status = "valid";
+      if (cert.daysRemaining <= 0) status = "expired";
+      else if (cert.daysRemaining <= 30) status = "expiring_soon";
+
+      const updated = await prisma.sslStatus.update({
+        where: { id: ssl.id },
+        data: {
+          validFrom: cert.validFrom,
+          validTo: cert.validTo,
+          issuer: cert.issuer,
+          daysRemaining: cert.daysRemaining,
+          status,
+          lastError: null,
+          lastScannedAt: new Date(),
+        }
+      });
+      return c.json(updated, 201);
+    }
+  } catch (e: any) {
+    await prisma.sslStatus.update({
+      where: { id: ssl.id },
+      data: { status: "error", lastError: e.message, lastScannedAt: new Date() }
+    });
+  }
   
   return c.json(ssl, 201);
 });

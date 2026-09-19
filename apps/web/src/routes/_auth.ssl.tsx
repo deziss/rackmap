@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SslFormDialog } from "@/components/ssl-form-dialog";
 import { toast } from "sonner";
-import { RefreshCw, Trash2, Shield, AlertTriangle, RotateCcw, Search } from "lucide-react";
+import { RefreshCw, Trash2, Shield, AlertTriangle, RotateCcw, Search, Globe } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useDebounce } from "@/hooks/use-debounce";
 import type { SslStatusDto } from "@inv/shared";
@@ -25,6 +25,7 @@ function SslPage() {
   const isAdmin = role === "admin";
 
   const [includeDeleted, setIncludeDeleted] = useState(false);
+  const [includeWildcardSubdomains, setIncludeWildcardSubdomains] = useState(false);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
   const [page, setPage] = useState(1);
@@ -33,8 +34,8 @@ function SslPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const { data, isLoading } = useQuery({
-    queryKey: sslKeys.list({ page, limit, sortBy, sortDir, includeDeleted, q: debouncedSearch }),
-    queryFn: () => fetchSslList({ page, limit, sortBy, sortDir, includeDeleted, q: debouncedSearch }),
+    queryKey: sslKeys.list({ page, limit, sortBy, sortDir, includeDeleted, includeWildcardSubdomains, q: debouncedSearch }),
+    queryFn: () => fetchSslList({ page, limit, sortBy, sortDir, includeDeleted, includeWildcardSubdomains, q: debouncedSearch }),
   });
 
   const handleSort = (key: string) => {
@@ -107,8 +108,20 @@ function SslPage() {
               className="h-8 pl-8 pr-2 text-xs bg-zinc-900/60 border-zinc-700 font-mono"
             />
           </div>
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={includeWildcardSubdomains}
+              onChange={(e) => {
+                setIncludeWildcardSubdomains(e.target.checked);
+                setPage(1);
+              }}
+              className="accent-primary"
+            />
+            Show wildcard subdomains
+          </label>
           {isAdmin && (
-            <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer select-none">
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={includeDeleted}
@@ -137,6 +150,21 @@ function SslPage() {
       </div>
 
       <div className="flex-1 overflow-auto p-6 space-y-4">
+        {Boolean(data?.omittedSubdomainsCount && data.omittedSubdomainsCount > 0 && !includeWildcardSubdomains) && (
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary font-medium">
+            <Globe className="h-4 w-4 shrink-0" />
+            <span>
+              <strong>{data.omittedSubdomainsCount} related subdomains omitted</strong> because parent wildcard domain{data.activeWildcards?.length > 1 ? "s are" : " is"} tracked ({data.activeWildcards?.join(", ")}).
+            </span>
+            <button
+              onClick={() => setIncludeWildcardSubdomains(true)}
+              className="underline hover:text-foreground font-semibold cursor-pointer ml-auto shrink-0"
+            >
+              Show all subdomains
+            </button>
+          </div>
+        )}
+
         {/* Table */}
         <div className="rounded-xl border border-white/10 bg-card/60 backdrop-blur-md shadow-xl overflow-hidden">
           <table className="w-full text-sm">
@@ -189,8 +217,15 @@ function SslPage() {
                 return (
                 <tr key={ssl.id} className={`border-b border-white/5 last:border-0 hover:bg-white/4 ${isDeleted ? "opacity-50" : ""}`}>
                   <td className="px-3 py-3 font-mono font-medium">
-                    {ssl.domain}
-                    {ssl.isManual && <span className="ml-2 text-[10px] text-muted-foreground">(Manual)</span>}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span>{ssl.domain}</span>
+                      {ssl.domain.startsWith("*.") && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/15 text-primary border-primary/30 font-sans font-semibold">
+                          Wildcard
+                        </Badge>
+                      )}
+                      {ssl.isManual && <span className="text-[10px] text-muted-foreground font-sans">(Manual)</span>}
+                    </div>
                   </td>
                   <td className="px-3 py-3">
                     <StatusBadge status={ssl.status} error={ssl.lastError} />
@@ -218,16 +253,16 @@ function SslPage() {
                   <td className="px-3 py-3 text-right">
                     <div className="flex justify-end gap-1">
                       {isDeleted ? (
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-primary hover:text-primary hover:bg-primary/10" onClick={() => { if(confirm("Restore domain?")) restoreMutation.mutate(ssl.id); }}>
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/20 transition-colors" onClick={() => { if(confirm("Restore domain?")) restoreMutation.mutate(ssl.id); }}>
                           <RotateCcw className="h-3.5 w-3.5" />
                         </Button>
                       ) : (
                         <>
-                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => scanSingleMutation.mutate(ssl.id)} disabled={scanSingleMutation.isPending}>
-                            <RefreshCw className="h-3.5 w-3.5" />
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-amber-400 hover:bg-amber-500/20 transition-colors" onClick={() => scanSingleMutation.mutate(ssl.id)} disabled={scanSingleMutation.isPending} title="Scan SSL Certificate">
+                            <RefreshCw className={`h-3.5 w-3.5 ${scanSingleMutation.isPending ? "animate-spin" : ""}`} />
                           </Button>
                           <SslFormDialog ssl={ssl} onSaved={() => qc.invalidateQueries({ queryKey: sslKeys.all })} />
-                          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => { if(confirm("Remove domain?")) deleteMutation.mutate(ssl.id); }}>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/20 transition-colors" onClick={() => { if(confirm("Remove domain?")) deleteMutation.mutate(ssl.id); }} title="Remove domain">
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </>

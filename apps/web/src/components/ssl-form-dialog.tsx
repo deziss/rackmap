@@ -43,6 +43,9 @@ export function SslFormDialog({ ssl, onSaved }: SslFormDialogProps) {
       const cleaned = Object.fromEntries(
         Object.entries(data).map(([k, v]) => [k, v === "" ? undefined : v])
       );
+      if (typeof cleaned.domain === "string") {
+        cleaned.domain = cleaned.domain.trim().toLowerCase().replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
+      }
       await apiFetch(url, { method, body: JSON.stringify(cleaned) });
       toast.success(isEdit ? "SSL entry updated" : "SSL entry created");
       setOpen(false);
@@ -56,8 +59,13 @@ export function SslFormDialog({ ssl, onSaved }: SslFormDialogProps) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {isEdit ? (
-          <Button size="icon" variant="ghost" className="h-6 w-6" title="Edit SSL info">
-            <Pencil className="h-3 w-3" />
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 text-muted-foreground hover:text-sky-400 hover:bg-sky-500/20 transition-colors"
+            title="Edit SSL info"
+          >
+            <Pencil className="h-3.5 w-3.5" />
           </Button>
         ) : (
           <Button size="sm">
@@ -72,7 +80,8 @@ export function SslFormDialog({ ssl, onSaved }: SslFormDialogProps) {
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-2">
           <div className="space-y-1">
             <Label>Domain *</Label>
-            <Input {...register("domain")} placeholder="e.g. example.com" />
+            <Input {...register("domain")} placeholder="e.g. example.com or *.merai.cloud" />
+            <p className="text-[11px] text-muted-foreground">Standard domains and wildcard domains (*.domain.com) supported.</p>
             {errors.domain && <p className="text-xs text-destructive">{errors.domain?.message?.toString()}</p>}
           </div>
           <div className="space-y-1">

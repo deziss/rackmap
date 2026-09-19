@@ -19,6 +19,7 @@ export const SslStatusListQuery = CursorQuery.extend({
   q: z.string().trim().max(255).optional(),
   status: z.enum(SSL_STATUSES).optional(),
   includeDeleted: z.coerce.boolean().optional(),
+  includeWildcardSubdomains: z.coerce.boolean().optional(),
 });
 export type SslStatusListQuery = z.infer<typeof SslStatusListQuery>;
 
@@ -51,5 +52,7 @@ export const SslStatusListResponse = z.object({
   total: z.number().int(),
   page: z.number().int().optional(),
   totalPages: z.number().int().optional(),
+  omittedSubdomainsCount: z.number().int().optional(),
+  activeWildcards: z.array(z.string()).optional(),
 });
 export type SslStatusListResponse = z.infer<typeof SslStatusListResponse>;

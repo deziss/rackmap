@@ -3,49 +3,145 @@ import { prisma } from "../../db.js";
 import { sendMail } from "../../lib/mail.js"; // Assuming a mail.ts exists or we will create one
 import { resolveTargetHost } from "../../lib/target-resolver.js";
 
-export async function fetchSslCert(domain: string): Promise<{ validFrom: Date; validTo: Date; issuer: string; daysRemaining: number } | null> {
-  const targetHost = resolveTargetHost(domain);
-
+function connectAndGetCert(
+  host: string,
+  sni: string,
+  timeoutMs: number = 5000
+): Promise<{ validFrom: Date; validTo: Date; issuer: string; daysRemaining: number } | null> {
+  const targetHost = resolveTargetHost(host);
   return new Promise((resolve, reject) => {
+    let resolved = false;
     try {
-      const socket = tls.connect({
-        host: targetHost,
-        port: 443,
-        servername: domain,
-        rejectUnauthorized: false, // We want to parse expired certs too
-        timeout: 5000,
-      }, () => {
-        const cert = socket.getPeerCertificate();
-        if (!cert || !cert.valid_from || !cert.valid_to) {
+      const socket = tls.connect(
+        {
+          host: targetHost,
+          port: 443,
+          servername: sni,
+          rejectUnauthorized: false, // We want to parse expired certs too
+          timeout: timeoutMs,
+        },
+        () => {
+          const cert = socket.getPeerCertificate();
           socket.destroy();
-          return resolve(null);
-        }
-        
-        const validFrom = new Date(cert.valid_from);
-        const validTo = new Date(cert.valid_to);
-        const daysRemaining = Math.ceil((validTo.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-        
-        // Issuer can be cert.issuer.O or cert.issuer.CN (may be string or array)
-        const rawIssuer = cert.issuer?.O || cert.issuer?.CN || "Unknown Issuer";
-        const issuer = Array.isArray(rawIssuer) ? rawIssuer.join(", ") : rawIssuer;
+          resolved = true;
+          if (!cert || !cert.valid_from || !cert.valid_to) {
+            return resolve(null);
+          }
 
-        socket.destroy();
-        resolve({ validFrom, validTo, issuer, daysRemaining });
-      });
+          const validFrom = new Date(cert.valid_from);
+          const validTo = new Date(cert.valid_to);
+          const daysRemaining = Math.ceil(
+            (validTo.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+          );
+
+          const rawIssuer = cert.issuer?.O || cert.issuer?.CN || "Unknown Issuer";
+          const issuer = Array.isArray(rawIssuer) ? rawIssuer.join(", ") : rawIssuer;
+
+          resolve({ validFrom, validTo, issuer, daysRemaining });
+        }
+      );
 
       socket.on("error", (err) => {
-        socket.destroy();
-        reject(err);
+        if (!resolved) {
+          socket.destroy();
+          reject(err);
+        }
       });
 
       socket.on("timeout", () => {
-        socket.destroy();
-        reject(new Error("Timeout connecting to 443"));
+        if (!resolved) {
+          socket.destroy();
+          reject(new Error("Timeout connecting to 443"));
+        }
       });
     } catch (e) {
       reject(e);
     }
   });
+}
+
+export async function fetchSslCert(
+  domain: string
+): Promise<{ validFrom: Date; validTo: Date; issuer: string; daysRemaining: number } | null> {
+  const trimmed = domain.trim();
+
+  // If not a wildcard domain, probe directly
+  if (!trimmed.startsWith("*.")) {
+    return connectAndGetCert(trimmed, trimmed);
+  }
+
+  // Wildcard domain handling (e.g. *.merai.cloud)
+  const baseDomain = trimmed.slice(2).trim().toLowerCase();
+
+  // 1. Gather candidate targets for this wildcard domain
+  const candidates: { host: string; sni: string }[] = [];
+
+  // Look for real existing subdomains in Database first
+  try {
+    const existingSubdomains = await prisma.sslStatus.findMany({
+      where: {
+        deletedAt: null,
+        domain: {
+          endsWith: `.${baseDomain}`,
+          not: trimmed,
+        },
+      },
+      select: { domain: true },
+      take: 5,
+    });
+    for (const s of existingSubdomains) {
+      if (s.domain && !s.domain.startsWith("*.")) {
+        candidates.push({ host: s.domain, sni: s.domain });
+      }
+    }
+
+    // Also check servers with matching domains
+    const serversWithDomain = await prisma.server.findMany({
+      where: {
+        deletedAt: null,
+        domain: { endsWith: baseDomain },
+      },
+      select: { domain: true, ip: true },
+      take: 5,
+    });
+    for (const s of serversWithDomain) {
+      if (s.domain && !s.domain.startsWith("*.")) {
+        candidates.push({ host: s.domain, sni: s.domain });
+      }
+    }
+  } catch {
+    // Continue even if DB query fails
+  }
+
+  // Add standard domain candidates
+  candidates.push({ host: baseDomain, sni: baseDomain });
+  candidates.push({ host: `www.${baseDomain}`, sni: `www.${baseDomain}` });
+  candidates.push({ host: `api.${baseDomain}`, sni: `api.${baseDomain}` });
+  candidates.push({ host: `app.${baseDomain}`, sni: `app.${baseDomain}` });
+
+  // Deduplicate candidate hosts
+  const seen = new Set<string>();
+  const uniqueCandidates = candidates.filter((c) => {
+    const key = c.host.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // Try candidates in sequence
+  let lastError: Error = new Error(`Could not connect to any host matching wildcard ${domain}`);
+  for (const cand of uniqueCandidates) {
+    try {
+      const cert = await connectAndGetCert(cand.host, cand.sni, 4000);
+      if (cert) {
+        return cert;
+      }
+    } catch (err: any) {
+      lastError = err;
+    }
+  }
+
+  throw lastError;
 }
 
 export async function scanAllDomains(triggerEmail: boolean = false) {
