@@ -805,14 +805,20 @@ function OverviewTab({
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4 pt-1 space-y-2">
-            <div className="text-lg font-bold font-mono text-foreground">
-              {hw?.disks?.[0]?.size || server.disk || (hw?.disks?.length ? `${hw.disks.length} Devices` : "—")}
+            <div className="text-lg font-bold font-mono text-foreground flex items-baseline gap-2">
+              <span>{hw?.totalStorage || server.disk || hw?.disks?.[0]?.size || (hw?.disks?.length ? `${hw.disks.length} Devices` : "—")}</span>
+              <span className="text-xs font-normal text-muted-foreground">Total Storage</span>
             </div>
-            <p className="text-xs text-muted-foreground truncate">
-              {hw?.disks?.map((d) => `${d.name} (${d.size})`).join(", ") || (server.disk ? `Primary: ${server.disk}` : "Block devices")}
+            <p className="text-xs text-muted-foreground truncate" title={hw?.disks?.map((d) => `${d.name} (${d.size})`).join(", ") || (server.disk ? `Total: ${server.disk}` : "Storage devices")}>
+              {hw?.disks?.length ? `${hw.disks.length} Device${hw.disks.length > 1 ? "s" : ""}: ` + hw.disks.map((d) => `${d.name} (${d.size})`).join(", ") : (server.disk ? `Capacity: ${server.disk}` : "Storage devices")}
             </p>
-            <div className="pt-2 border-t border-border/50 text-[11px] text-muted-foreground">
+            <div className="pt-2 border-t border-border/50 text-[11px] text-muted-foreground flex items-center justify-between">
               <span>Primary: <strong className="font-mono text-foreground">{hw?.disks?.[0]?.name || "/dev/nvme0n1"}</strong></span>
+              {(hw?.totalStorage || server.disk) && (
+                <Badge variant="outline" className="font-mono text-[10px] text-amber-500 border-amber-500/30">
+                  Total: {hw?.totalStorage || server.disk}
+                </Badge>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -841,10 +847,13 @@ function OverviewTab({
       {/* Disks Breakdown Table if available */}
       {hw?.disks && hw.disks.length > 0 && (
         <Card>
-          <CardHeader className="p-4 pb-2">
+          <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <HardDrive className="h-4 w-4 text-amber-500" /> Discovered Storage Devices & Partitions (lsblk)
             </CardTitle>
+            <Badge variant="outline" className="text-xs font-mono text-amber-500 border-amber-500/30">
+              Total Storage: {hw.totalStorage || server.disk || hw.disks[0]?.size || "—"}
+            </Badge>
           </CardHeader>
           <CardContent className="p-4 pt-0">
             <table className="w-full text-xs">
@@ -868,6 +877,16 @@ function OverviewTab({
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr className="border-t border-border font-medium text-foreground bg-muted/20">
+                  <td className="py-2.5 px-1 font-semibold" colSpan={2}>
+                    Total Storage ({hw.disks.filter((d) => d.type === "disk").length || hw.disks.length} Drives)
+                  </td>
+                  <td className="py-2.5 font-bold font-mono text-amber-500" colSpan={2}>
+                    {hw.totalStorage || server.disk || "—"}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </CardContent>
         </Card>

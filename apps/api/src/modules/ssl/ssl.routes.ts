@@ -59,6 +59,16 @@ sslRoutes.get("/", zValidator("query", SslStatusListQuery), async (c) => {
       omitConditions.push({
         domain: base,
       });
+      omitConditions.push({
+        domain: {
+          contains: `.${base}:`,
+        },
+      });
+      omitConditions.push({
+        domain: {
+          contains: `.${base}/`,
+        },
+      });
     }
 
     omittedSubdomainsCount = await prisma.sslStatus.count({

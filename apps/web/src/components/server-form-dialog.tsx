@@ -112,6 +112,7 @@ export function ServerFormDialog({ server, onSaved, triggerClassName }: ServerFo
       sshPort: server?.sshPort ?? 22,
       cpu: server?.cpu ?? "",
       ram: server?.ram ?? "",
+      disk: server?.disk ?? "",
       gpuCount: server?.gpuCount ?? undefined,
       remark: server?.remark ?? "",
       domain: server?.domain ?? "",
@@ -227,6 +228,10 @@ export function ServerFormDialog({ server, onSaved, triggerClassName }: ServerFo
             <div className="space-y-1">
               <Label>RAM</Label>
               <Input {...register("ram")} placeholder="512GB" />
+            </div>
+            <div className="space-y-1">
+              <Label>Total Storage</Label>
+              <Input {...register("disk")} placeholder="e.g. 1TB, 512GB NVMe" />
             </div>
             <div className="space-y-1">
               <Label>GPU Count</Label>

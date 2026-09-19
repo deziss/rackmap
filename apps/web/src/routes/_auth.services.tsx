@@ -46,7 +46,7 @@ function DeleteConfirm({ service, onConfirm, isPending }: { service: ServiceDto;
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7 text-destructive hover:text-destructive/90"
+            className="h-7 w-7 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/20 transition-colors"
             onClick={() => setOpen(true)}
             disabled={isPending}
           >
@@ -338,7 +338,7 @@ function ServicesPage() {
                     </div>
                   </th>
                 ))}
-                <th className="px-3 py-2.5 font-medium text-right sticky right-0 bg-muted/50 z-10">Actions</th>
+                <th className="sticky right-0 z-20 bg-card px-3 py-2.5 font-medium text-right text-xs uppercase tracking-wider text-muted-foreground border-l border-border/60 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.3)] select-none">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -356,7 +356,7 @@ function ServicesPage() {
                     <td className="px-3 py-3"><Skeleton className="h-4 w-24" /></td>
                     <td className="px-3 py-3"><Skeleton className="h-4 w-20" /></td>
                     <td className="px-3 py-3"><Skeleton className="h-4 w-32" /></td>
-                    <td className="px-3 py-3 text-right"><Skeleton className="h-6 w-20 ml-auto" /></td>
+                    <td className="sticky right-0 z-10 bg-card px-3 py-3 text-right border-l border-border/60 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.3)]"><Skeleton className="h-6 w-20 ml-auto" /></td>
                   </tr>
                 ))
               ) : isError ? (
@@ -444,14 +444,14 @@ function ServicesPage() {
                     <td className="px-3 py-2 text-xs text-muted-foreground max-w-[200px] truncate" title={svc.remark || ""}>
                       {svc.remark || "—"}
                     </td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap sticky right-0 bg-card group-hover:bg-muted/30 transition-colors z-10 border-l">
+                    <td className="sticky right-0 z-10 bg-card group-hover:bg-muted transition-colors min-w-[120px] px-3 py-2 text-right whitespace-nowrap border-l border-border/60 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.3)]">
                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="h-7 w-7 text-amber-500 hover:text-amber-400"
+                              className="h-7 w-7 text-muted-foreground hover:text-amber-400 hover:bg-amber-500/20 transition-colors"
                               onClick={() => checkMut.mutate(svc.id)}
                               disabled={checkMut.isPending}
                             >
@@ -466,6 +466,7 @@ function ServicesPage() {
                             <ServiceFormDialog
                               service={svc}
                               onSaved={() => queryClient.invalidateQueries({ queryKey: serviceKeys.all })}
+                              triggerClassName="h-7 w-7 text-muted-foreground hover:text-sky-400 hover:bg-sky-500/20 transition-colors"
                             />
                             <DeleteConfirm
                               service={svc}

@@ -21,6 +21,8 @@ export const ServerHardwareInfo = z.object({
   gpuCount: z.number(),
   gpuModel: z.string().nullable(),
   disks: z.array(HardwareDiskInfo),
+  totalStorage: z.string().optional(),
+  totalStorageBytes: z.number().optional(),
   uptime: z.string(),
 });
 export type ServerHardwareInfo = z.infer<typeof ServerHardwareInfo>;

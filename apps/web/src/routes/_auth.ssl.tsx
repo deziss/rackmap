@@ -2,7 +2,7 @@ import { PaginationBar } from "@/components/pagination-bar";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchSslList, scanAllSsl, scanSslDomain, deleteSslDomain, sslKeys } from "@/lib/queries";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -37,6 +37,24 @@ function SslPage() {
     queryKey: sslKeys.list({ page, limit, sortBy, sortDir, includeDeleted, includeWildcardSubdomains, q: debouncedSearch }),
     queryFn: () => fetchSslList({ page, limit, sortBy, sortDir, includeDeleted, includeWildcardSubdomains, q: debouncedSearch }),
   });
+
+  const displayItems = useMemo(() => {
+    if (!data?.items) return [];
+    if (includeWildcardSubdomains || !data.activeWildcards || data.activeWildcards.length === 0) {
+      return data.items;
+    }
+    const bases = data.activeWildcards.map((w: string) => w.toLowerCase().replace(/^\*\./, "").trim());
+    return data.items.filter((item: SslStatusDto) => {
+      if (item.domain.startsWith("*.")) return true;
+      const clean = item.domain.toLowerCase().trim().replace(/^https?:\/\//, "").split("/")[0]!.split(":")[0]!;
+      for (const base of bases) {
+        if (clean === base || (clean.endsWith(`.${base}`) && clean !== `*.${base}`)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [data?.items, data?.activeWildcards, includeWildcardSubdomains]);
 
   const handleSort = (key: string) => {
     if (sortBy === key) {
@@ -205,14 +223,14 @@ function SslPage() {
                   </tr>
                 ))
               )}
-              {!isLoading && data?.items.length === 0 && (
+              {!isLoading && displayItems.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-3 py-12 text-center text-muted-foreground text-sm">
                     No domains tracked yet. Click "Scan All Domains" to auto-discover.
                   </td>
                 </tr>
               )}
-              {data?.items.map((ssl: SslStatusDto) => {
+              {displayItems.map((ssl: SslStatusDto) => {
                 const isDeleted = !!(ssl as any).deletedAt;
                 return (
                 <tr key={ssl.id} className={`border-b border-white/5 last:border-0 hover:bg-white/4 ${isDeleted ? "opacity-50" : ""}`}>

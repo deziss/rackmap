@@ -69,6 +69,7 @@ function toDto(raw: { passwordEnc: string | null; tags: { tag: { id: number; nam
       gpuCount: Number(raw.gpuCount) || 0,
       gpuModel: null,
       disks,
+      totalStorage: diskStr || undefined,
       uptime: "Active",
     };
   }

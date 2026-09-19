@@ -1,6 +1,7 @@
 import type { ServerMetricsDto, ProcInfo, GpuInfo, GpuProc, DiskInfo, NetInfo } from "@inv/shared";
 import { env } from "../env.js";
 import { connectToServer, SshError } from "./ssh.service.js";
+import { formatStorageBytes } from "./discovery.service.js";
 
 // One combined command, section-delimited, to minimize round-trips.
 // Network is sampled twice ~1s apart so we can report bytes/sec server-side.
@@ -98,6 +99,19 @@ function parseDisks(lines: string[]): DiskInfo[] {
     disks.push({ mount, usedBytes: used, totalBytes: total, pct: Math.round((used / total) * 100) });
   }
   return disks;
+}
+
+export function calculateTotalStorageFromMetrics(disks: DiskInfo[]): { totalBytes: number; formatted: string } {
+  let totalBytes = 0;
+  for (const d of disks) {
+    if (d.totalBytes > 0) {
+      totalBytes += d.totalBytes;
+    }
+  }
+  return {
+    totalBytes,
+    formatted: formatStorageBytes(totalBytes),
+  };
 }
 
 function parseNetSample(lines: string[]): Record<string, { rx: number; tx: number }> {

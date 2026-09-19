@@ -30,10 +30,39 @@ echo "===UNAME==="
 uname -s -r -m
 `;
 
-function formatBytes(bytes: number): string {
-  if (bytes <= 0) return "0GB";
-  const gb = Math.round(bytes / (1024 * 1024 * 1024));
+export function formatStorageBytes(bytes: number): string {
+  if (!bytes || bytes <= 0) return "0GB";
+  const GIB = 1024 * 1024 * 1024;
+
+  // For storage capacities >= 1000 GB / 1 TB, format as TB using standard drive rating (1 TB = 10^12 bytes)
+  if (bytes >= 9.5e11) {
+    const tb = bytes / 1e12;
+    const rounded = Number(tb.toFixed(1));
+    return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded}TB`;
+  }
+
+  const gb = Math.round(bytes / GIB);
   return `${gb}GB`;
+}
+
+export function parseStorageSizeToBytes(sizeStr: string): number {
+  if (!sizeStr) return 0;
+  const match = sizeStr.trim().match(/^([\d.]+)\s*([A-Za-z]+)?$/);
+  if (!match) return 0;
+  const val = parseFloat(match[1] || "0");
+  if (isNaN(val) || val <= 0) return 0;
+  const unit = (match[2] || "").toUpperCase();
+  const GIB = 1024 * 1024 * 1024;
+  if (unit.startsWith("T")) return Math.round(val * GIB * 1024);
+  if (unit.startsWith("G")) return Math.round(val * GIB);
+  if (unit.startsWith("M")) return Math.round(val * 1024 * 1024);
+  if (unit.startsWith("K")) return Math.round(val * 1024);
+  if (unit.startsWith("P")) return Math.round(val * GIB * 1024 * 1024);
+  return Math.round(val);
+}
+
+function formatBytes(bytes: number): string {
+  return formatStorageBytes(bytes);
 }
 
 function parseSection(fullOutput: string, sectionName: string): string {
@@ -118,9 +147,10 @@ export function parseDiscoveryOutput(output: string, hostname: string): ServerHa
     }
   }
 
-  // 5. Disks
+  // 5. Disks & Total Storage Calculation
   const diskText = parseSection(output, "DISK");
   const disks: HardwareDiskInfo[] = [];
+  let totalDiskBytes = 0;
   const diskLines = diskText.split("\n").filter((l) => l.trim().length > 0);
   if (diskLines.length > 1 && diskLines[0]?.includes("NAME")) {
     for (let i = 1; i < diskLines.length; i++) {
@@ -128,15 +158,43 @@ export function parseDiscoveryOutput(output: string, hostname: string): ServerHa
       if (parts.length >= 3) {
         const name = parts[0]!;
         const rawBytes = parseInt(parts[1] || "0", 10);
-        const sizeFormatted = isNaN(rawBytes) || rawBytes <= 0 ? parts[1]! : formatBytes(rawBytes);
+        const sizeFormatted = isNaN(rawBytes) || rawBytes <= 0 ? parts[1]! : formatStorageBytes(rawBytes);
         const type = parts[2]!;
         const model = parts.slice(3).join(" ") || "Disk";
         if (type === "disk" || type === "rom") {
           disks.push({ name, size: sizeFormatted, type, model });
         }
+        if (type === "disk" && !isNaN(rawBytes) && rawBytes > 0) {
+          totalDiskBytes += rawBytes;
+        }
+      }
+    }
+  } else if (diskLines.length > 1 && (diskLines[0]?.includes("Filesystem") || diskLines[0]?.includes("1024-blocks"))) {
+    // Fallback if df -P -B1 output was provided
+    for (let i = 1; i < diskLines.length; i++) {
+      const parts = diskLines[i]!.trim().split(/\s+/);
+      if (parts.length >= 6) {
+        const fs = parts[0]!;
+        const total = parseInt(parts[1] || "0", 10);
+        const mount = parts.slice(5).join(" ");
+        if (fs.startsWith("/dev/") && !fs.includes("loop") && !isNaN(total) && total > 0) {
+          disks.push({ name: fs, size: formatStorageBytes(total), type: "disk", model: mount });
+          totalDiskBytes += total;
+        }
       }
     }
   }
+
+  // Fallback: If totalDiskBytes was 0 but disks exist, sum parsed disk sizes
+  if (totalDiskBytes <= 0 && disks.length > 0) {
+    for (const d of disks) {
+      if (d.type === "disk") {
+        totalDiskBytes += parseStorageSizeToBytes(d.size);
+      }
+    }
+  }
+
+  const totalStorage = totalDiskBytes > 0 ? formatStorageBytes(totalDiskBytes) : (disks[0]?.size || "—");
 
   // 6. Uptime & Kernel
   const uptimeText = parseSection(output, "UPTIME");
@@ -160,6 +218,8 @@ export function parseDiscoveryOutput(output: string, hostname: string): ServerHa
     gpuCount,
     gpuModel,
     disks,
+    totalStorage,
+    totalStorageBytes: totalDiskBytes,
     uptime,
   };
 }
@@ -218,7 +278,7 @@ export async function autoDiscoverAndApply(serverId: number, ctx: AuditCtx = {},
   const typeName = hasGpu ? "GPU Server" : "CPU Server";
   const serverType = await prisma.serverType.findUnique({ where: { name: typeName } });
 
-  const diskCapacity = info.disks && info.disks.length > 0 ? (info.disks[0]?.size || "512GB") : null;
+  const diskCapacity = info.totalStorage || (info.disks && info.disks.length > 0 ? (info.disks[0]?.size || "512GB") : null);
 
   // Automatically update server details in database with clean field-wise values
   await prisma.server.update({

@@ -15,13 +15,15 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Plus, Pencil } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 interface ServiceFormDialogProps {
   service?: ServiceDto;
   onSaved?: () => void;
+  triggerClassName?: string;
 }
 
-export function ServiceFormDialog({ service, onSaved }: ServiceFormDialogProps) {
+export function ServiceFormDialog({ service, onSaved, triggerClassName }: ServiceFormDialogProps) {
   const [open, setOpen] = useState(false);
   const isEdit = !!service;
 
@@ -67,9 +69,18 @@ export function ServiceFormDialog({ service, onSaved }: ServiceFormDialogProps) 
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {isEdit ? (
-          <Button size="icon" variant="ghost" className="h-6 w-6" title="Edit service">
-            <Pencil className="h-3 w-3" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                className={triggerClassName || "h-7 w-7 text-muted-foreground hover:text-sky-400 hover:bg-sky-500/20 transition-colors"}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Edit service</TooltipContent>
+          </Tooltip>
         ) : (
           <Button size="sm">
             <Plus className="h-4 w-4 mr-1" /> Add Service

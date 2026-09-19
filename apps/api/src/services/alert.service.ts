@@ -1,6 +1,7 @@
 import { prisma } from "../db.js";
 import { env } from "../env.js";
 import { fetchMetrics } from "./metrics.service.js";
+import { formatStorageBytes } from "./discovery.service.js";
 import { notifyMetricAlert } from "./notify.service.js";
 import pLimit from "p-limit";
 
@@ -35,6 +36,19 @@ async function checkServer(server: { id: number; hostname: string; ip: string })
       gpuCount: metrics.gpus.length,
       disks: metrics.disks.map((d) => d.mount),
     };
+
+    // Auto calculate and store total storage if not yet set in database
+    if (metrics.disks && metrics.disks.length > 0) {
+      try {
+        const s = await prisma.server.findUnique({ where: { id: server.id }, select: { disk: true } });
+        if (s && !s.disk) {
+          const totalBytes = metrics.disks.reduce((acc, d) => acc + (d.totalBytes || 0), 0);
+          if (totalBytes > 0) {
+            await prisma.server.update({ where: { id: server.id }, data: { disk: formatStorageBytes(totalBytes) } });
+          }
+        }
+      } catch {}
+    }
 
     // CPU Check
     const cpuPct = (metrics.cpu.loadAvg1 / metrics.cpu.cores) * 100;

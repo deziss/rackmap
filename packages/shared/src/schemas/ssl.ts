@@ -18,8 +18,8 @@ export type SslStatusUpdateInput = z.infer<typeof SslStatusUpdateInput>;
 export const SslStatusListQuery = CursorQuery.extend({
   q: z.string().trim().max(255).optional(),
   status: z.enum(SSL_STATUSES).optional(),
-  includeDeleted: z.coerce.boolean().optional(),
-  includeWildcardSubdomains: z.coerce.boolean().optional(),
+  includeDeleted: z.preprocess((v) => v === "true" || v === true, z.boolean()).optional(),
+  includeWildcardSubdomains: z.preprocess((v) => v === "true" || v === true, z.boolean()).optional(),
 });
 export type SslStatusListQuery = z.infer<typeof SslStatusListQuery>;
 

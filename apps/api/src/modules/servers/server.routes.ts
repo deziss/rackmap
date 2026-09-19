@@ -18,7 +18,7 @@ import {
 import { runCheck, runAll } from "../../services/status.service.js";
 import { notifyFlip } from "../../services/notify.service.js";
 import { fetchMetrics } from "../../services/metrics.service.js";
-import { autoDiscoverAndApply } from "../../services/discovery.service.js";
+import { autoDiscoverAndApply, formatStorageBytes } from "../../services/discovery.service.js";
 import { listOsUsers, updateSudoPermission, createOsUser, updateOsUser, deleteOsUser } from "../../services/os-user.service.js";
 import { queryServerLogs } from "../../services/log-viewer.service.js";
 import { getAtopDates, getAtopSnapshots, getAtopIntervalProcesses, getAtopTopProcesses } from "../../services/atop.service.js";
@@ -205,6 +205,18 @@ export const serverRoutes = new Hono()
       try {
         const sshPass = c.req.header("x-ssh-password") || undefined;
         const metrics = await fetchMetrics(id, sshPass);
+        // Auto-calculate and store total storage if currently missing in database
+        if (metrics.disks && metrics.disks.length > 0) {
+          try {
+            const current = await prisma.server.findUnique({ where: { id }, select: { disk: true } });
+            if (current && !current.disk) {
+              const totalBytes = metrics.disks.reduce((acc, d) => acc + (d.totalBytes || 0), 0);
+              if (totalBytes > 0) {
+                await prisma.server.update({ where: { id }, data: { disk: formatStorageBytes(totalBytes) } });
+              }
+            }
+          } catch {}
+        }
         if (shouldAuditMetrics(user.id, id)) {
           await writeAuditDirect({
             ctx: getAuditCtx(c),
@@ -221,6 +233,41 @@ export const serverRoutes = new Hono()
       }
     },
   )
+  // POST /servers/:id/recalculate-storage — calculate and store total storage
+  .post(
+    "/:id/recalculate-storage",
+    requirePermission({ server: ["update"] }),
+    zValidator("param", idParamSchema),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const server = await prisma.server.findUnique({ where: { id } });
+      if (!server || server.deletedAt) throw notFound("Server");
+
+      let calculatedStorage: string | null = null;
+      if (server.passwordEnc) {
+        try {
+          const info = await autoDiscoverAndApply(id, getAuditCtx(c));
+          if (info.totalStorage) calculatedStorage = info.totalStorage;
+        } catch {
+          try {
+            const metrics = await fetchMetrics(id);
+            if (metrics.disks.length > 0) {
+              const totalBytes = metrics.disks.reduce((acc, d) => acc + (d.totalBytes || 0), 0);
+              if (totalBytes > 0) calculatedStorage = formatStorageBytes(totalBytes);
+            }
+          } catch {}
+        }
+      }
+
+      if (calculatedStorage) {
+        await prisma.server.update({ where: { id }, data: { disk: calculatedStorage } });
+      }
+
+      const updated = await getServer(id);
+      return c.json({ server: updated, totalStorage: calculatedStorage || updated.disk });
+    },
+  )
+
   // POST /servers/:id/auto-discover — agentless remote hardware discovery
   .post(
     "/:id/auto-discover",
