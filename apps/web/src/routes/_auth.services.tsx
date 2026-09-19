@@ -445,7 +445,7 @@ function ServicesPage() {
                       {svc.remark || "—"}
                     </td>
                     <td className="sticky right-0 z-10 bg-card group-hover:bg-muted transition-colors min-w-[120px] px-3 py-2 text-right whitespace-nowrap border-l border-border/60 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.3)]">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-1">
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
