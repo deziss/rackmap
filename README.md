@@ -1,10 +1,10 @@
 # RackMap
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
-[![CI](https://github.com/anshukushwaha/server-inventory/actions/workflows/ci.yml/badge.svg)](https://github.com/anshukushwaha/server-inventory/actions/workflows/ci.yml)
-[![Docker Publish](https://github.com/anshukushwaha/server-inventory/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/anshukushwaha/server-inventory/actions/workflows/docker-publish.yml)
+[![CI](https://github.com/deziss/rackmap/actions/workflows/ci.yml/badge.svg)](https://github.com/deziss/rackmap/actions/workflows/ci.yml)
+[![Docker Publish](https://github.com/deziss/rackmap/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/deziss/rackmap/actions/workflows/docker-publish.yml)
 [![Docker](https://img.shields.io/badge/Docker_Hub-server--inventory-2496ED?logo=docker&logoColor=white)](https://hub.docker.com)
-[![GHCR](https://img.shields.io/badge/GHCR-Packages-24292e?logo=github)](https://github.com/anshukushwaha/server-inventory/pkgs/container/server-inventory%2Fapi)
+[![GHCR](https://img.shields.io/badge/GHCR-Packages-24292e?logo=github)](https://github.com/deziss/rackmap/pkgs/container/rackmap%2Fapi)
 
 > **Status: Complete** — All planned phases shipped and production-ready.
 >
@@ -265,7 +265,7 @@ RackMap includes a built-in public landing and product portal accessible at `/po
 
 ## Licensing & Subscription Tiers (Powered by Licencia)
 
-RackMap includes integrated subscription entitlement management backed by [Licencia](file:///home/anshukushwaha/Desktop/learn/licencia).
+RackMap includes integrated subscription entitlement management backed by [Licencia](https://github.com/deziss/licencia).
 
 ### Tiers Matrix
 
