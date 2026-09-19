@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireSession } from "../../middleware/session.js";
 import { requirePermission } from "../../middleware/require-permission.js";
 import { getAuditCtx, writeAuditDirect } from "../../lib/audit.js";
+import { notFound } from "../../lib/errors.js";
 import { ServerCreateInput, ServerUpdateInput, ServerListQuery } from "@inv/shared";
 import {
   listServers,

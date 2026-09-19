@@ -1,5 +1,11 @@
 # RackMap
 
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+[![CI](https://github.com/anshukushwaha/server-inventory/actions/workflows/ci.yml/badge.svg)](https://github.com/anshukushwaha/server-inventory/actions/workflows/ci.yml)
+[![Docker Publish](https://github.com/anshukushwaha/server-inventory/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/anshukushwaha/server-inventory/actions/workflows/docker-publish.yml)
+[![Docker](https://img.shields.io/badge/Docker_Hub-server--inventory-2496ED?logo=docker&logoColor=white)](https://hub.docker.com)
+[![GHCR](https://img.shields.io/badge/GHCR-Packages-24292e?logo=github)](https://github.com/anshukushwaha/server-inventory/pkgs/container/server-inventory%2Fapi)
+
 > **Status: Complete** — All planned phases shipped and production-ready.
 >
 > **[User Guide →](USER_GUIDE.md)** — Setup, features, roles, troubleshooting
@@ -531,3 +537,10 @@ RackMap includes a GitHub Actions workflow in [`.github/workflows/docker-publish
 2. **Docker Hub**:
    - Enabled when `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` are configured in repository secrets.
    - Images: `<username>/server-inventory-api` and `<username>/server-inventory-web`.
+
+---
+
+## License
+
+This software is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+See the [LICENSE](LICENSE) file for the complete license text.

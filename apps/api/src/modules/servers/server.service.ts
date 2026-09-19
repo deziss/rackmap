@@ -4,7 +4,7 @@ import { encryptSecret, decryptSecret } from "../../lib/crypto.js";
 import { encryptPasswordWithVault, decryptPasswordWithVault } from "../../services/vault.service.js";
 import { notFound, conflict } from "../../lib/errors.js";
 import { writeAudit, redact, type AuditCtx } from "../../lib/audit.js";
-import type { ServerCreateInput, ServerUpdateInput, ServerListQuery } from "@inv/shared";
+import type { ServerCreateInput, ServerUpdateInput, ServerListQuery, ServerDto } from "@inv/shared";
 
 // Single shared select — passwordEnc NEVER included
 export const serverSelect = {
@@ -47,7 +47,7 @@ export const serverSelect = {
 } as const;
 
 /** Strip passwordEnc and add hasPassword. */
-function toDto(raw: { passwordEnc: string | null; tags: { tag: { id: number; name: string; color: string | null } }[]; [key: string]: unknown }) {
+function toDto(raw: { passwordEnc: string | null; tags: { tag: { id: number; name: string; color: string | null } }[]; [key: string]: unknown }): ServerDto & { hardwareInfo?: any } {
   const { passwordEnc, tags, ...rest } = raw;
   let hardwareInfo: any = null;
   if (raw.cpu || raw.ram || raw.osType || (raw as any).disk) {
@@ -79,7 +79,7 @@ function toDto(raw: { passwordEnc: string | null; tags: { tag: { id: number; nam
     authType: passwordEnc !== null ? "Password & SSH Key" : "SSH Key Only",
     tags: tags.map((t) => t.tag),
     hardwareInfo,
-  };
+  } as ServerDto & { hardwareInfo?: any };
 }
 
 export async function listServers(query: ServerListQuery, isAdmin: boolean) {
