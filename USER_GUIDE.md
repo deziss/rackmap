@@ -170,12 +170,28 @@ Click the trash icon to safely remove an account:
 
 ---
 
-## Forensic Logs & Auto-Query
+## Forensic Logs & Real-Time Storage Telemetry
 
-The **Forensic Logs & Evidence** tab allows querying systemd `journalctl` and syslog events over SSH:
-- **Filter Parameters**: Filter by log priority (Emergency to Debug), systemd unit (e.g. `ssh`, `nginx`, `cron`), time range (`1 hour ago`, `24 hours ago`), and search text.
-- **Auto-Query Duration**: Choose between `Manual (Click)`, `Auto: 5s`, `Auto: 10s`, `Auto: 30s`, or `Auto: 60s`. When active, a pulsing **Live** badge shows the refresh interval.
-- **Export & Copy**: Export raw logs to a `.log` file or copy all entries to clipboard in one click.
+The **Forensic Logs & Evidence** tab allows deep, real-time forensic auditing of remote systems over SSH without installing any agent software:
+
+### 1. Real-Time Storage Footprint Telemetry
+Every log query automatically probes the remote host's log storage consumption and displays dedicated telemetry badges:
+- **`/var/log` Total Disk Footprint** (Amber Badge): Measured via `du -sh /var/log`, showing total space consumed by all log files on the host (e.g. `3.7G`, `850M`).
+- **`journalctl` Systemd Usage** (Blue Badge): Measured via `journalctl --disk-usage`, showing total archived and active systemd journal volume (e.g. `2.6G`, `500M`).
+- **Telemetry Locations**: Displayed in the filter toolbar above the inputs and directly in the terminal console header next to active line counts.
+
+### 2. Multi-Source Log Streams
+Switch seamlessly between multiple system log sources:
+- **`journalctl (systemd)`**: Full systemd journal with unit filtering (`-u <unit>`), priority levels, and short-iso timestamps.
+- **`/var/log/auth.log`**: Dedicated authentication events, SSH login attempts, sudo invocations, and pam sessions.
+- **`/var/log/syslog`**: General system log stream.
+- **`dmesg (kernel)`**: Kernel ring buffer logs, hardware faults, and OOM killer notifications.
+
+### 3. Filters & Auto-Querying
+- **Priority Filter**: Emergency (0), Alert (1), Critical (2), Error (3), Warning (4), Notice (5), Info (6), Debug (7).
+- **Auto-Query Interval**: Select `Manual (Click)`, `Auto: 5s`, `Auto: 10s`, `Auto: 30s`, or `Auto: 60s` for hands-free live stream monitoring with a pulsing status badge.
+- **Evidence Search & Time Range**: Fast full-text keyword search and time bounds (e.g. `1 hour ago`, `24 hours ago`).
+- **Export & Copy**: Export results directly to a `.log` text file or copy lines to clipboard.
 
 ## Live Metrics
 
@@ -243,20 +259,29 @@ All SSH open/close events are recorded in the audit log.
 
 ---
 
-## Services Inventory
+## Services Inventory & Multi-Hosting Architecture
 
-The **Services** page (`/services`) tracks applications, databases, cache nodes, and web services running across your infrastructure.
+The **Services** page (`/services`) manages 175+ microservices, internal applications, AI model endpoints, and system daemons categorized by runtime environment.
 
-| Field | Description |
-|-------|-------------|
-| Service Name | Friendly identifier for the service |
-| Service Type | Category (e.g. database, web, cache, queue) |
-| Server IP & Port | Host and port where the service is reachable |
-| Health URL | HTTP/HTTPS endpoint for automated health checks |
-| Environment | Deployment tier (production, staging, dev, on-premise) |
-| Credentials | Encrypted at rest; accessible via direct role or access request |
+### 1. Multi-Hosting Runtime Environments
+Services are categorized by their hosting model:
+- **`server` (Host-Native)**: Applications running directly on bare-metal or cloud host machines (e.g., Mattermost on `:13373`, Jenkins on `:8081`, GitLab on `:8999`, Zabbix Server, Canvas, and direct system daemons).
+- **`docker` (Containerized)**: Standalone Docker containers or Docker-Compose deployments (e.g., Uptime Kuma, Quay Registry, Sonarqube, Posthog, Minio).
+- **`k8s` (Kubernetes)**: Kubernetes microservices and operators with dedicated **NodePort** allocation tracking (e.g., Aim `:31000`, Bytebase `:30420`, Elasticsearch `:30092`, Keycloak `:30845`, RabbitMQ `:31672`, Redis `:31068`).
 
-Services are periodically checked by the background scheduler. Alerts are sent via Telegram, Webhook, and Email on status changes.
+### 2. AI Model & Inference Topology
+AI deployments on vLLM, Ollama, and llama.cpp are tracked as first-class services bound to their host server:
+- **Hosted Models**: Individual model endpoints (e.g. `Qwen3.5-122B-A10B-BF16`, `nomic-embed-text:latest`, `nemotron-3-super:120b`, `llama3.3:latest`) are registered with their host server IP and listening port.
+- **API Bearer Tokens**: Authenticated endpoints store API authorization bearer tokens encrypted at rest with AES-256-GCM, accessible only to authorized operators.
+- **Automatic Server Mapping**: When viewing any server detail page (`/servers/:id`), all associated AI models and hosted services automatically populate the **Hosted Applications & Services** table.
+
+### 3. Server Backup Automation & Disaster Recovery Tracking
+Servers track automated backup policies and disaster recovery state:
+- **Backup Script Path**: Shell scripts executed for backups (e.g. `/home/script/docker_dump.sh`, `/home/script/k8s_backup.sh`, `gitlab.sh`).
+- **Destination Storage**: Target location for dumps (NVMe disks, central NFS network storage e.g. `/MNnfsF90SRV15/backup/`).
+- **Cron Schedules**: Exact schedule execution times (e.g. `05 21 * * 1-6`, `Every night 11 PM`).
+- **Retention Durability**: Durability guarantees (e.g. `60 days`, `30 days`).
+- **Data Categories**: Identifies whether the backup contains database volumes, Kubernetes YAML manifests, or full system state.
 
 ---
 

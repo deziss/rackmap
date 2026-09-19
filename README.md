@@ -12,10 +12,13 @@ Full-stack infrastructure inventory and monitoring platform. Track bare-metal an
 
 ## Features
 
-- **Server CRUD & Specifications** — hostname, IP, SSH port, credentials (AES-256 encrypted at rest), tags, metadata with dedicated columns for CPU, RAM, Storage, and OS
+- **Server CRUD & Specifications** — hostname, IP, SSH port (standard and non-standard e.g. 7722), credentials (AES-256-GCM encrypted at rest), tags, metadata with dedicated columns for CPU, RAM, Storage, OS, and hardware accelerators (H100, H200, RTX PRO 6000, RTX 4090)
+- **Service-First Multi-Hosting Architecture** — track 175+ microservices and applications categorized by runtime environment: `server` (host-native system services such as Mattermost, Jenkins, GitLab, Zabbix Server), `docker` (containerized workloads), and `k8s` (Kubernetes deployments with dedicated NodePort tracking)
+- **AI Model & Inference Topology** — first-class tracking for vLLM, Ollama, and llama.cpp model deployments with designated ports, host machine bindings, and AES-256-GCM encrypted API authorization bearer tokens
+- **Server Backup Automation & Policy Tracking** — dedicated tracking for backup script paths, destination storage (NVMe disks, central NFS mounts), automated cron schedules, retention durability periods, and backup data categories
+- **Forensic Logs & Real-Time Storage Footprint** — query systemd journalctl, syslog, auth.log, and kernel dmesg with real-time remote `/var/log` storage size (`du -sh /var/log`) and systemd journal disk footprint (`journalctl --disk-usage`) badges, evidence search, auto-refresh intervals (5s, 10s, 30s, 60s, manual), and `.log` exports
 - **OS User & Sudoers Management** — create, update, lock/unlock, and delete Linux accounts with full Linux options (-m, -r, custom shells, secondary groups, custom UID/GID, sudoers rules) and root/SSH safeguards
 - **Universal Numbered Pagination** — rows-per-page selector (10, 25, 50, 100), range display, and numbered page buttons across Servers, Services, SSL, Audit, Users, and OS Users tables
-- **Forensic Logs & Auto-Query** — query systemd journalctl and syslog with selectable auto-refresh intervals (5s, 10s, 30s, 60s, manual) and live indicators
 - **Visual Audit Inspection** — before/after JSON diff inspection dialogs for all audit events
 - **Live status monitoring** — TCP ping probe on a configurable interval; up/down history; webhook + Telegram alerts
 - **Live metrics** — CPU load, memory, disk, network I/O, per-process tables — collected via one SSH exec command (no agent install)
