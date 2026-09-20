@@ -70,7 +70,7 @@ export async function fetchSslCert(
     return connectAndGetCert(trimmed, trimmed);
   }
 
-  // Wildcard domain handling (e.g. *.merai.cloud)
+  // Wildcard domain handling (e.g. *.example.com)
   const baseDomain = trimmed.slice(2).trim().toLowerCase();
 
   // 1. Gather candidate targets for this wildcard domain

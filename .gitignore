@@ -1,17 +1,62 @@
+# --- Dependencies ---
 node_modules/
+.pnpm-store/
+
+# --- Build output ---
 dist/
 build/
+.turbo/
+*.tsbuildinfo
+apps/web/src/routeTree.gen.ts
+
+# --- Secrets & environment ---
+# Only .env.example is committed. Never commit a real environment file.
+.env
+.env.*
+!.env.example
+
+# --- Databases & persisted data ---
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
-.env
-.env.local
+*.sqlite
+*.sqlite3
 data/
-coverage/
-.turbo/
-*.tsbuildinfo
-apps/web/src/routeTree.gen.ts
 backups/
-.env.docker
-.env.docker
+
+# --- Credentials & keys ---
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+known_hosts
+
+# --- Test & coverage artifacts ---
+coverage/
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# --- Logs & runtime ---
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+pids/
+*.pid
+
+# --- Internal planning docs (not part of the public project) ---
+docs/superpowers/
+
+# --- Editor & OS cruft ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

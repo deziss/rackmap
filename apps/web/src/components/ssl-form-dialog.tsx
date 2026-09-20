@@ -80,7 +80,7 @@ export function SslFormDialog({ ssl, onSaved }: SslFormDialogProps) {
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-2">
           <div className="space-y-1">
             <Label>Domain *</Label>
-            <Input {...register("domain")} placeholder="e.g. example.com or *.merai.cloud" />
+            <Input {...register("domain")} placeholder="e.g. app.example.com or *.example.com" />
             <p className="text-[11px] text-muted-foreground">Standard domains and wildcard domains (*.domain.com) supported.</p>
             {errors.domain && <p className="text-xs text-destructive">{errors.domain?.message?.toString()}</p>}
           </div>

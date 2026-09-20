@@ -1,0 +1,63 @@
+name: Feature request
+description: Suggest a capability or improvement
+title: "feat: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What operational problem are you trying to solve?
+      description: Describe the situation you run into, not just the feature you want. This helps us find the right solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like RackMap to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you have considered
+      description: Other tools, workarounds, or approaches you have tried.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Servers / inventory
+        - Services
+        - SSL certificates
+        - SSH terminal
+        - Live metrics / GPU
+        - Logs / ATOP
+        - OS users & sudoers
+        - Auth / RBAC / access requests
+        - Credential vault / encryption
+        - Audit log
+        - Dashboard / reports
+        - Deployment / Docker
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: scale
+    attributes:
+      label: Fleet size
+      description: Roughly how many servers and services do you manage? Helps us weigh performance impact.
+      placeholder: "~150 servers, ~200 services"
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and discussions for this idea
+          required: true

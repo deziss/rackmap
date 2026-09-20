@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/deziss/rackmap/security/advisories/new
+    about: Report privately through GitHub Security Advisories. Never open a public issue for a vulnerability.
+  - name: 📖 User Guide
+    url: https://github.com/deziss/rackmap/blob/main/USER_GUIDE.md
+    about: Setup, features, roles, and troubleshooting before you file an issue.
+  - name: 💬 Questions and ideas
+    url: https://github.com/deziss/rackmap/discussions
+    about: Ask how something works or float an idea before opening a feature request.
