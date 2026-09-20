@@ -80,7 +80,7 @@ jobs:
 
       - name: Extract Docker metadata (Tags & Labels)
         id: meta-api
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: |
             ${{ steps.check-logins.outputs.has_dockerhub == 'true' && format('{0}/{1}', secrets.DOCKERHUB_USERNAME, env.IMAGE_API) || '' }}
@@ -186,7 +186,7 @@ jobs:
 
       - name: Extract Docker metadata (Tags & Labels)
         id: meta-web
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: |
             ${{ steps.check-logins.outputs.has_dockerhub == 'true' && format('{0}/{1}', secrets.DOCKERHUB_USERNAME, env.IMAGE_WEB) || '' }}
