@@ -115,6 +115,10 @@ model ApiKey {
   requestCount        Int       @default(0)
   remaining           Int?
   expiresAt           DateTime?
+  /// Optional role ceiling for this key. When set, requests authenticated with
+  /// it are capped at this role even if the owning user is more privileged —
+  /// so an automation key can be read-only. Null means "inherit the owner's role".
+  scopeRole           String?
   deletedAt           DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -491,4 +495,46 @@ model Order {
   updatedAt      DateTime  @updatedAt
 
   @@map("orders")
+}
+
+// ─── SSH host keys (trust-on-first-use) ──────────────────────────────────────
+/// One row per SSH *endpoint* — the (host, port) pair the client actually dialled
+/// — NOT per Server row.
+///
+/// The trust anchor deliberately is not `serverId`: a Server's `ip` is editable by
+/// any user with server.update, so keying trust on the server row would let an
+/// edited `ip` silently inherit the previous host's pinned key and connect (with
+/// the decrypted password, over the keyboard-interactive fallback) to an attacker
+/// endpoint with no mismatch raised. `host` is the value AFTER `resolveTargetHost`,
+/// lower-cased, so what we pin is exactly what we connected to.
+///
+/// `serverId` is a best-effort, non-relational back-reference for operator review
+/// only. There is intentionally no foreign key: deleting and recreating a server
+/// row must NOT discard the pinned key for an endpoint that is still reachable.
+model SshHostKey {
+  id          Int      @id @default(autoincrement())
+  /// Address actually connected to (post-`resolveTargetHost`), lower-cased.
+  host        String
+  port        Int      @default(22)
+  /// Public key algorithm read from the key blob, e.g. "ssh-ed25519", "ssh-rsa".
+  keyType     String
+  /// OpenSSH-style fingerprint: "SHA256:" + base64(sha256(blob)), padding stripped.
+  /// Matches `ssh-keygen -lf` output, so operators can diff it against the host.
+  fingerprint String
+  /// Base64 of the raw public key blob exactly as the server presented it.
+  publicKey   String
+  /// When this endpoint's key was first pinned (TOFU moment).
+  firstSeenAt DateTime @default(now())
+  /// Last time this exact key was presented and matched. Deliberately NOT bumped
+  /// on a mismatch — a mismatch leaves the pinned row completely untouched.
+  lastSeenAt  DateTime @default(now())
+  /// Best-effort back-reference (no FK — see model note above).
+  serverId    Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([host, port])
+  @@index([serverId])
+  @@index([fingerprint])
+  @@map("ssh_host_key")
 }

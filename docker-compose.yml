@@ -8,9 +8,20 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       IN_DOCKER: "true"
+      NODE_ENV: ${NODE_ENV:-production}
       DATABASE_URL: ${DOCKER_DATABASE_URL:-file:/data/inventory.db}
       PORT: "3001"
       BETTER_AUTH_URL: http://api:3001
+      # nginx (the web service) terminates in front of the API, so forwarding
+      # headers come from a proxy we control and can be trusted here.
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+      # Must list every origin the UI is actually reached at. Defaults to
+      # WEB_ORIGIN; set explicitly if you browse by host IP as well as by name.
+      TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
+      ALLOW_SELF_SIGNUP: ${ALLOW_SELF_SIGNUP:-false}
+      # Demo accounts (editor@/viewer@) and sample servers. Never enable in
+      # production — the credentials are published in the repository.
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
       # Override remaining vars from .env file or env:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
@@ -27,7 +38,7 @@ services:
       NOTIFY_TELEGRAM_CHAT_ID: ${NOTIFY_TELEGRAM_CHAT_ID:-}
       BACKUP_DIR: /backups
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@example.com}
-      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-changeme123}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
       # Browser SSH terminal — set SSH_ENABLED=true to enable (admin-only).
       # Gates only the interactive terminal; other features still exec over SSH.
       SSH_ENABLED: ${SSH_ENABLED:-false}

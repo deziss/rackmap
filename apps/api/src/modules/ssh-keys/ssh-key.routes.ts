@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { requireSession } from "../../middleware/session.js";
 import { requirePermission } from "../../middleware/require-permission.js";
+import { sshCredentialTestResourceLimit, sshCredentialTestUserLimit } from "../../middleware/rate-limit.js";
 import { AddSshKeyInput } from "@inv/shared";
 import { writeAudit } from "../../lib/audit.js";
 import { listSshKeys, addSshKey, removeSshKey, testServerSshKey } from "../../services/ssh-key.service.js";
@@ -72,9 +73,18 @@ export const sshKeyRoutes = new Hono()
   )
 
   // POST /api/v1/ssh-keys/test-server/:serverId — test connectivity (key, password, or auto)
+  //
+  // This is an online credential oracle: it reports `success` and `latencyMs`
+  // for an arbitrary password against a managed host. Rate limited to 10 per
+  // host and 30 overall per user per 5 minutes; the per-host limiter runs first
+  // so requests it rejects do not also consume the fleet-wide budget. It sits
+  // after requirePermission so an unauthorized caller is rejected outright
+  // rather than spending a budget. See middleware/rate-limit.ts.
   .post(
     "/test-server/:serverId",
     requirePermission({ server: ["update"] }),
+    sshCredentialTestResourceLimit,
+    sshCredentialTestUserLimit,
     async (c) => {
       const serverId = Number.parseInt(c.req.param("serverId") ?? "", 10);
       if (!Number.isInteger(serverId) || serverId <= 0) {

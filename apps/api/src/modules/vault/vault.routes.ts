@@ -16,12 +16,32 @@ import {
   lockVaultGlobal,
 } from "../../services/vault.service.js";
 
-function getSessionToken(c: any): string {
-  // Better-auth uses cookie better-auth.session_token
+/**
+ * Identify the caller's vault session.
+ *
+ * Returns the raw Better Auth session cookie value, which vault.service.ts hashes before
+ * using it as a key. There is deliberately no shared fallback bucket: a request we cannot
+ * attribute to one session gets no vault session at all (requireSession has already proven
+ * the caller is authenticated, so this only trips on an unexpected cookie shape).
+ */
+function getSessionToken(c: any): string | null {
+  // Better-auth uses cookie better-auth.session_token (or __Secure-better-auth.session_token)
   const cookies = c.req.header("cookie") || "";
   const match = cookies.match(/better-auth\.session_token=([^;]+)/);
-  if (match) return match[1];
-  return c.get("session")?.token || "anonymous";
+  if (match && match[1]) return match[1];
+  return null;
+}
+
+function noSessionTokenResponse(c: any) {
+  return c.json(
+    {
+      error: {
+        code: "NO_VAULT_SESSION",
+        message: "Could not identify the session for this request. Sign in again and retry.",
+      },
+    },
+    401,
+  );
 }
 
 export const vaultRoutes = new Hono()
@@ -30,7 +50,7 @@ export const vaultRoutes = new Hono()
   // GET /vault/status
   .get("/status", async (c) => {
     const token = getSessionToken(c);
-    const status = await getVaultStatus(token);
+    const status = await getVaultStatus(token ?? undefined);
     return c.json(status);
   })
 
@@ -42,6 +62,7 @@ export const vaultRoutes = new Hono()
     async (c) => {
       const { passphrase } = c.req.valid("json");
       const token = getSessionToken(c);
+      if (!token) return noSessionTokenResponse(c);
       const user = c.get("user");
       try {
         const result = await initVault(passphrase, token);
@@ -66,6 +87,7 @@ export const vaultRoutes = new Hono()
     async (c) => {
       const { passphrase } = c.req.valid("json");
       const token = getSessionToken(c);
+      if (!token) return noSessionTokenResponse(c);
       const user = c.get("user");
       try {
         const result = await unlockVault(passphrase, token);
@@ -139,16 +161,28 @@ export const vaultRoutes = new Hono()
     requirePermission({ vault: ["reset"] }),
     zValidator("json", VaultResetInput),
     async (c) => {
-      const { passphrase } = c.req.valid("json");
+      const { newPassphrase, currentPassphrase, forceDestroy } = c.req.valid("json");
       const token = getSessionToken(c);
+      if (!token) return noSessionTokenResponse(c);
       const user = c.get("user");
+
+      // Destroying every stored credential is a separate, explicitly requested act: the
+      // schema refuses a reset that neither proves the current passphrase nor asks for it.
       try {
-        const result = await resetVault(passphrase, token);
+        const result = await resetVault({
+          newPassphrase,
+          currentPassphrase,
+          forceDestroy: forceDestroy === true,
+          sessionToken: token,
+        });
         await writeAudit({
           ctx: { actorId: user?.id, actorEmail: user?.email, ip: c.req.header("x-forwarded-for") },
           category: "security",
+          // The path taken is recorded in `after` — the audit action vocabulary lives in
+          // packages/shared/src/constants.ts and has no destructive-reset entry.
           action: "vault.reset",
           entity: "vault",
+          after: { mode: result.mode, forceDestroy: forceDestroy === true },
         });
         return c.json(result);
       } catch (err: any) {
@@ -160,6 +194,7 @@ export const vaultRoutes = new Hono()
   // POST /vault/lock
   .post("/lock", async (c) => {
     const token = getSessionToken(c);
+    if (!token) return noSessionTokenResponse(c);
     const user = c.get("user");
     const result = lockVault(token);
     await writeAudit({

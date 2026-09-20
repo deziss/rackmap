@@ -3,8 +3,10 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { requireSession } from "../../middleware/session.js";
 import { requirePermission } from "../../middleware/require-permission.js";
+import { revealPasswordResourceLimit, revealPasswordUserLimit } from "../../middleware/rate-limit.js";
 import { getAuditCtx, writeAuditDirect } from "../../lib/audit.js";
 import { notFound } from "../../lib/errors.js";
+import { can } from "../../lib/permissions.js";
 import { ServerCreateInput, ServerUpdateInput, ServerListQuery } from "@inv/shared";
 import {
   listServers,
@@ -120,16 +122,24 @@ export const serverRoutes = new Hono()
     },
   )
 
-  // POST /servers/:id/reveal-password — admin/editor OR viewer with approved AccessRequest
+  // POST /servers/:id/reveal-password — server:revealPassword OR approved AccessRequest
+  //
+  // Rate limited: 5 per server and 20 overall per user per 5 minutes. The
+  // per-server limiter runs first so requests it rejects do not also consume
+  // the fleet-wide budget. See middleware/rate-limit.ts for the reasoning.
   .post(
     "/:id/reveal-password",
     zValidator("param", idParamSchema),
+    revealPasswordResourceLimit,
+    revealPasswordUserLimit,
     async (c) => {
       const user = c.get("user") as { id?: string; role?: string } | undefined;
       if (!user?.id) return c.json({ error: { code: "UNAUTHORIZED", message: "Unauthorized" } }, 401);
       const { id } = c.req.valid("param");
 
-      const hasDirectPerm = user.role === "admin" || user.role === "editor";
+      // Ask the RBAC single source of truth rather than hardcoding role names,
+      // so editing a role in @inv/shared cannot silently desync this check.
+      const hasDirectPerm = can(user.role ?? "viewer", "server", "revealPassword");
       if (!hasDirectPerm) {
         // Check for valid approved AccessRequest
         const req = await prisma.accessRequest.findFirst({

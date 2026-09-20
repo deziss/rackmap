@@ -247,6 +247,39 @@ All configuration is environment-driven. Copy [`.env.example`](.env.example) to 
 | `SSH_IDLE_TIMEOUT_MS` | `300000` | Idle session timeout (5 minutes) |
 | `SSH_MAX_SESSION_MS` | `3600000` | Maximum session duration (1 hour) |
 | `SSH_MAX_CONCURRENT` | `5` | Maximum simultaneous SSH terminal sessions |
+| `SSH_HOST_POLICY` | `accept-any` | Host-key verification. `accept-any` pins keys and warns loudly on a change but still connects; `tofu` refuses the connection. See below |
+| `SSH_REAUTH_INTERVAL_MS` | `60000` | How often a live terminal re-checks that the operator is still authorised |
+| `TRUST_PROXY` | `false` | Honour `X-Forwarded-For` / `X-Real-IP`. Enable **only** behind a reverse proxy you control — these headers set the audit-log IP and the rate-limit bucket |
+| `ALLOW_SELF_SIGNUP` | `false` | Let anyone reaching the API create their own `viewer` account |
+
+### SSH host-key verification
+
+RackMap pins each endpoint's host key on first contact and compares it on every
+later connection. Verification runs during key exchange, **before** any
+credential is offered, so a changed key cannot harvest your password.
+
+`accept-any` (the default) pins and warns but still connects — it exists so an
+existing fleet can populate the store without an outage. `tofu` refuses.
+
+**Migrating an existing fleet:**
+
+1. Run on `accept-any` until every server has been contacted at least once. Servers that are never polled need a
+   manual connection test, otherwise they are simply absent from the store.
+2. Review what was pinned, and compare against the hosts themselves:
+   ```bash
+   sqlite3 /data/inventory.db "SELECT host, port, key_type, fingerprint FROM ssh_host_key ORDER BY first_seen_at;"
+   ssh <host> 'for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf $f; done'
+   ```
+   Fingerprints are standard OpenSSH `SHA256:` values, so they compare directly.
+3. Resolve anything unexpected, then set `SSH_HOST_POLICY=tofu` and restart.
+
+After a legitimate rebuild or reimage, delete the pinned row so the next connection re-pins it:
+
+```bash
+sqlite3 /data/inventory.db "DELETE FROM ssh_host_key WHERE host='10.0.0.5' AND port=22;"
+```
+
+A mismatch never overwrites the stored key — self-healing would erase the evidence.
 
 ### Optional — licensing (Licencia)
 
@@ -299,24 +332,36 @@ Three ways to unlock it:
 | **B — global unlock via UI** | **Settings → Credential Vault** | Admins unlocking for the whole instance. Optionally tick *Persist to .env file* to survive restarts |
 | **C — ephemeral session** | Header of any server detail page | Per-operator, time-boxed unlock (30 minutes) |
 
-### Resetting a forgotten passphrase
+### Changing or recovering the master passphrase
 
-1. Go to **Security** (`/security`), or click the **Vault** badge in any server header.
-2. If locked: click **Forgot passphrase? Reset vault** (admin only).
-3. If unlocked: click **Manage / Reset Passphrase → Reset / Re-key**.
-4. Enter and confirm a new master passphrase (minimum 8 characters).
+There are two distinct operations, and only one of them destroys data.
 
-Or via the API:
+**Change the passphrase (safe).** Requires the current passphrase. The data-encryption key is re-wrapped under
+the new passphrase, so every stored credential keeps working.
 
 ```bash
 curl -X POST http://localhost:3001/api/v1/vault/reset \
   -H "Content-Type: application/json" \
   -H "Cookie: better-auth.session_token=<admin-session>" \
-  -d '{"passphrase":"NewSecureMasterPassphrase!"}'
+  -d '{"currentPassphrase":"OldPassphrase!","newPassphrase":"NewSecureMasterPassphrase!"}'
 ```
 
-> **Resetting generates a brand-new master data-encryption key.** Any server passwords encrypted under the old
-> passphrase become unrecoverable and must be re-entered.
+**Recover a forgotten passphrase (destructive).** Only when the current passphrase is genuinely lost. This mints
+a brand-new data-encryption key.
+
+```bash
+curl -X POST http://localhost:3001/api/v1/vault/reset \
+  -H "Content-Type: application/json" \
+  -H "Cookie: better-auth.session_token=<admin-session>" \
+  -d '{"newPassphrase":"NewSecureMasterPassphrase!","forceDestroy":true}'
+```
+
+> **`forceDestroy` is irreversible.** Every credential encrypted under the old passphrase becomes permanently
+> unreadable and must be re-entered. A request that supplies neither `currentPassphrase` nor `forceDestroy` is
+> rejected — the API will not guess which one you meant.
+
+In the UI: **Settings → Credential Vault → Change Passphrase**, or the **Vault** badge in any server header.
+The destructive path is behind an explicit checkbox.
 
 ---
 
@@ -504,6 +549,69 @@ Set `BACKUP_DIR` to enable automatic SQLite backups (mounted at `/backups` in Do
 ```bash
 sqlite3 /data/inventory.db ".backup '/backups/inventory-$(date +%Y%m%d).db'"
 ```
+
+---
+
+## 🤖 Automation & API keys
+
+RackMap is meant to be the source of truth for your fleet, so machine clients are
+first-class. Create an **API key** under **Security → API Keys** and use it as a
+bearer token:
+
+```bash
+curl -H "Authorization: Bearer sk_..." https://rackmap.example.com/api/v1/servers
+```
+
+Keys carry a **role ceiling** (`scopeRole`) and an optional expiry. A key can never
+exceed the role of whoever created it, and it is capped again at request time
+against the owner's *current* role — so demoting or banning a user immediately
+demotes their keys. Keys default to `viewer`; mint the least privilege that works.
+
+```bash
+# A read-only key that expires in 90 days
+curl -X POST https://rackmap.example.com/api/v1/api-keys \
+  -H "Content-Type: application/json" \
+  -H "Cookie: better-auth.session_token=<your session>" \
+  -d '{"name":"ansible","scopeRole":"viewer","expiresInDays":90}'
+```
+
+The raw key is returned **once**.
+
+### Ansible dynamic inventory
+
+[`contrib/rackmap-inventory.py`](contrib/rackmap-inventory.py) turns your RackMap
+inventory into an Ansible one, so you stop maintaining the fleet in two places:
+
+```bash
+export RACKMAP_URL=https://rackmap.example.com
+export RACKMAP_API_KEY=sk_...
+ansible -i contrib/rackmap-inventory.py gpu -m ping
+```
+
+Hosts are grouped by environment, cloud provider, location, server type, owning
+team, tag, probe status, and whether they have GPUs. See [contrib/README.md](contrib/README.md).
+
+### Prometheus
+
+`GET /api/v1/metrics` exposes fleet state in the Prometheus text format. RackMap
+deliberately does not store a time series of its own — Prometheus does that job
+better than SQLite would.
+
+```yaml
+scrape_configs:
+  - job_name: rackmap
+    metrics_path: /api/v1/metrics
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/rackmap.key
+    static_configs:
+      - targets: ["rackmap.example.com"]
+```
+
+Exports server/service/certificate counts by status, per-host up/down and probe
+latency, probe staleness (a rising `rackmap_server_last_probe_age_seconds` means
+the scheduler has stopped), GPU counts, and days remaining on every tracked
+certificate.
 
 ---
 

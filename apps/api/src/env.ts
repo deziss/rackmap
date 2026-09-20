@@ -19,6 +19,14 @@ const EnvSchema = z.object({
   // "any origin". "*" is still accepted as an explicit opt-in for internal deployments
   // on a trusted private network, and boots with a loud warning.
   TRUSTED_ORIGINS: z.string().optional(),
+  // Trust X-Forwarded-For / X-Real-IP. Enable ONLY when RackMap sits behind a
+  // reverse proxy you control that overwrites these headers. When false, the
+  // headers are ignored: a client can otherwise forge its own audit-log IP and
+  // mint an unlimited rate-limit bucket by rotating the value.
+  TRUST_PROXY: z
+    .string()
+    .default("false")
+    .transform((v) => v === "true"),
   // Allow anyone who can reach the API to create their own account (role: viewer).
   // Off by default — an admin should be creating accounts instead.
   ALLOW_SELF_SIGNUP: z
@@ -71,9 +79,20 @@ const EnvSchema = z.object({
   SSH_IDLE_TIMEOUT_MS: z.coerce.number().int().min(10_000).default(300_000),
   SSH_MAX_SESSION_MS: z.coerce.number().int().min(60_000).default(3_600_000),
   SSH_MAX_CONCURRENT: z.coerce.number().int().min(1).default(5),
-  // NOT IMPLEMENTED — declared but never read anywhere in the codebase. Host keys are
-  // currently always accepted regardless of this value; setting it has no effect.
-  // Real host-key verification is a later phase.
+  // How often a live SSH terminal WebSocket re-checks that the operator is STILL
+  // allowed to hold it (session valid, not banned, role still grants server.ssh or
+  // the approved AccessRequest has not expired). Authorization is otherwise only
+  // evaluated once, at upgrade time.
+  SSH_REAUTH_INTERVAL_MS: z.coerce.number().int().min(10_000).default(60_000),
+  // Host-key verification policy for every outbound SSH connection
+  // (see services/ssh-host-key.service.ts).
+  //   "accept-any" — record + log, never refuse. First sightings are pinned and a
+  //                  changed key logs a loud warning but the connection proceeds.
+  //                  Rollout default so an existing fleet keeps working while the
+  //                  host-key store is populated and reviewed.
+  //   "tofu"       — trust on first use. First sighting is pinned and accepted; a
+  //                  later mismatch aborts the handshake before authentication, so
+  //                  no password is ever offered to the impostor.
   SSH_HOST_POLICY: z.enum(["accept-any", "tofu"]).default("accept-any"),
   // Absolute path to a private key tried first when opening SSH connections (optional).
   SSH_PRIVATE_KEY_PATH: z.string().optional(),

@@ -8,18 +8,25 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 async function tick() {
   if (running) return; // overlap guard
   running = true;
-  try {
-    await runAll();
-    await runAllServices();
-    await pruneStatusHistory();
-  } catch (err) {
-    console.error("[scheduler] error:", err);
-  } finally {
-    running = false;
-    if (timer !== null) {
-      // reschedule only if not stopped
-      timer = setTimeout(tick, env.PING_INTERVAL_MS);
+  // Each sub-job is isolated: a single try/catch around all three meant a throw
+  // in runAll() also skipped the service sweep and the history prune for that
+  // tick, so one failing subsystem quietly stopped two others.
+  for (const [name, job] of [
+    ["servers", runAll],
+    ["services", runAllServices],
+    ["prune", pruneStatusHistory],
+  ] as const) {
+    try {
+      await job();
+    } catch (err) {
+      console.error(`[scheduler] ${name} failed:`, err);
     }
+  }
+
+  running = false;
+  if (timer !== null) {
+    // reschedule only if not stopped
+    timer = setTimeout(tick, env.PING_INTERVAL_MS);
   }
 }
 
