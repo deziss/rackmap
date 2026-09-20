@@ -32,12 +32,12 @@ Nothing is installed on the machines you monitor. That makes it a good fit for:
 - **Mixed fleets** — bare metal, VMs, and cloud instances side by side, on standard or non-standard SSH ports
 - **GPU and AI infrastructure** — NVIDIA, AMD, and Intel accelerators, plus vLLM / Ollama / llama.cpp endpoints as first-class inventory
 - **Environments you don't fully control** — customer hardware, colo racks, or hosts where installing an agent is not an option
-- **Teams that need an audit trail** — every mutation and auth event is recorded with before/after state
+- **Teams that need an audit trail** — inventory changes, access approvals, credential reveals and auth events are recorded with before/after state
 
 | | |
 |---|---|
 | **No agents** | One SSH exec per poll. Nothing to install, patch, or roll back on target hosts. |
-| **Credentials encrypted at rest** | AES-256-GCM, plus an optional zero-knowledge vault whose passphrase never touches disk. |
+| **Credentials encrypted at rest** | AES-256-GCM, plus an optional envelope-encryption vault (PBKDF2 → KEK → DEK) whose passphrase is never stored in the database. |
 | **RBAC + access requests** | admin / editor / viewer, with a request-and-approve flow for SSH and password reveal. |
 | **Self-hosted, AGPL-3.0** | Your inventory stays on your infrastructure. One `docker compose up`. |
 
@@ -79,7 +79,7 @@ Change the published port by setting `PORT` in `.env`. Next steps: [add your fir
 |----------|--------------|
 | **[User Guide](USER_GUIDE.md)** | Day-to-day usage: every page, every feature, roles, troubleshooting |
 | **[Configuration](#%EF%B8%8F-configuration)** | Every environment variable, with defaults |
-| **[Encryption Guide](#-encryption--credential-vault)** | At-rest encryption, the zero-knowledge vault, passphrase recovery |
+| **[Encryption Guide](#-encryption--credential-vault)** | At-rest encryption, the credential vault, passphrase recovery |
 | **[Deployment](#-deployment)** | Docker Compose, bare metal / PM2 / systemd, PostgreSQL |
 | **[API Overview](#-api-overview)** | REST endpoints and required roles |
 | **[Contributing](CONTRIBUTING.md)** | Dev setup, branch and commit conventions, PR checklist |
@@ -119,9 +119,9 @@ Change the published port by setting `PORT` in `.env`. Next steps: [add your fir
 
 - **RBAC** — admin / editor / viewer roles via Better Auth
 - **Access requests** — viewers request SSH access or password reveal; admins approve with an expiry window
-- **Zero-knowledge credential vault** — envelope encryption (PBKDF2, 100k iterations, SHA-512) where the master passphrase is never written to disk
+- **Credential vault** — envelope encryption (PBKDF2, 100k iterations, SHA-512) where the master passphrase is never stored in the database. Unlocking sends the passphrase to the server, which performs the key derivation, so run RackMap behind TLS. Opting in to auto-unlock writes the passphrase to `.env` on the host
 - **SSH dual-mode auth** — public key first, with automatic fallback to password and PAM keyboard-interactive
-- **Browser SSH terminal** — full xterm.js terminal over WebSocket, admin-only, off by default behind a kill-switch
+- **Browser SSH terminal** — full xterm.js terminal over WebSocket, admin-only, off by default behind `SSH_ENABLED`
 - **OS user & sudoers management** — create, update, lock/unlock, and delete Linux accounts with full options (`-m`, `-r`, custom shells, secondary groups, custom UID/GID, sudoers rules) and root/SSH safeguards
 - **Audit log** — every data mutation and auth event with actor, IP, and a before/after JSON diff viewer
 
@@ -242,7 +242,7 @@ All configuration is environment-driven. Copy [`.env.example`](.env.example) to 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SSH_ENABLED` | `false` | **Kill-switch.** Set to `true` to enable the browser SSH terminal (admin-only) |
+| `SSH_ENABLED` | `false` | Set to `true` to enable the browser SSH terminal (admin-only). Note this gates **only** the interactive terminal — metrics, discovery, log viewing, ATOP and OS-user management still execute commands over SSH when it is `false` |
 | `SSH_CONNECT_TIMEOUT_MS` | `10000` | SSH connection timeout |
 | `SSH_IDLE_TIMEOUT_MS` | `300000` | Idle session timeout (5 minutes) |
 | `SSH_MAX_SESSION_MS` | `3600000` | Maximum session duration (1 hour) |
@@ -284,10 +284,12 @@ APP_ENCRYPTION_KEY=$(openssl rand -base64 32)
 APP_ENCRYPTION_PASSPHRASE="YourSecurePassphraseHere123!"
 ```
 
-### Tier 2 — zero-knowledge credential vault
+### Tier 2 — credential vault (envelope encryption)
 
 Envelope encryption (`v2.<iv>.<tag>.<cipher>`) using PBKDF2 (100,000 iterations, SHA-512) to derive a 256-bit
-key-encryption key that wraps an ephemeral 256-bit data-encryption key. **The master passphrase is never stored on disk.**
+key-encryption key that wraps an ephemeral 256-bit data-encryption key. **The master passphrase is never stored in the
+database** — only a random salt and a verifier. Key derivation happens on the server, so the passphrase travels over
+the connection on unlock: terminate TLS in front of RackMap. Option A below deliberately writes it to `.env`.
 
 Three ways to unlock it:
 
@@ -541,11 +543,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming, commit conventions, an
 
 RackMap ships with a public product portal at `/portal`:
 
-- **Product showcase** — agentless SSH architecture, zero-knowledge vault, kernel-level ATOP analysis
+- **Product showcase** — agentless SSH architecture, encrypted credential vault, kernel-level ATOP analysis
 - **Interactive mock console** — simulated server fleet, ATOP replay, vault unlock, and remote OS user audit
 - **Pricing matrix** — monthly vs. annual toggle across Free, Professional, and Enterprise tiers
 - **Self-hosting quickstart** — a copyable `docker-compose.yml` snippet
-- **FAQ** — zero-knowledge encryption, air-gapped activation, supported Linux distributions
+- **FAQ** — envelope encryption, air-gapped activation, supported Linux distributions
 
 ## 💳 Licensing Tiers (Licencia)
 

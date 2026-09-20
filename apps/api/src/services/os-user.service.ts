@@ -1,5 +1,6 @@
 import { prisma } from "../db.js";
 import { connectToServer, buildSudoCommand, SshError } from "./ssh.service.js";
+import { escapeShellArg } from "./shell-escape.js";
 import { writeAudit, type AuditCtx } from "../lib/audit.js";
 import type { OsUserInfo, SudoPermissionInput, CreateOsUserInput, UpdateOsUserInput, DeleteOsUserInput } from "@inv/shared";
 
@@ -9,6 +10,107 @@ function sanitizeUsername(username: string): string {
     throw new Error("Invalid Linux username format");
   }
   return sanitized;
+}
+
+/**
+ * The patterns below mirror packages/shared/src/schemas/os-user.ts. Everything
+ * built in this module ends up on a root shell on the managed host, so the
+ * format is re-checked here and never trusted to have been validated upstream.
+ */
+const ABSOLUTE_PATH_PATTERN = /^\/[A-Za-z0-9._@+-]*(?:\/[A-Za-z0-9._@+-]+)*$/;
+const GROUP_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_.-]*\$?$/;
+const SUDO_COMMAND_PATTERN = /^\/[A-Za-z0-9._@+-]+(?:\/[A-Za-z0-9._@+-]+)*(?: [A-Za-z0-9._@+/-]+)*$/;
+// Case-sensitive on purpose: sudoers keywords and tags are uppercase, so this
+// rejects `ALL` / `NOPASSWD` without also rejecting `/usr/bin/passwd`.
+const SUDO_RESERVED_WORD_PATTERN =
+  /\b(?:ALL|NOPASSWD|PASSWD|SETENV|NOSETENV|EXEC|NOEXEC|LOG_INPUT|NOLOG_INPUT|LOG_OUTPUT|NOLOG_OUTPUT|MAIL|NOMAIL|FOLLOW|NOFOLLOW)\b/;
+
+/** Validate an absolute path and return it single-quoted for the remote shell. */
+function shellSafeAbsolutePath(value: string, label: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length > 255 || !ABSOLUTE_PATH_PATTERN.test(trimmed)) {
+    throw new Error(`Invalid ${label} "${value}": expected an absolute path such as /bin/bash`);
+  }
+  if (trimmed.split("/").includes("..")) {
+    throw new Error(`Invalid ${label} "${value}": path segments may not be ".."`);
+  }
+  return escapeShellArg(trimmed);
+}
+
+/** Validate every supplied group name, returning the trimmed non-empty ones. */
+function validateGroupNames(groups: string[]): string[] {
+  const clean = groups.map((g) => g.trim()).filter(Boolean);
+  for (const group of clean) {
+    if (group.length > 32 || !GROUP_NAME_PATTERN.test(group)) {
+      throw new Error(`Invalid Linux group name "${group}"`);
+    }
+  }
+  return clean;
+}
+
+/**
+ * A sudoers entry is rule TEXT, not a shell word, and `visudo -cf` only checks
+ * syntax. Without this allowlist a caller could grant itself root outright
+ * (`ALL`), or close the generated rule and start a new one using `=` /
+ * `NOPASSWD:` / `,`. Each entry must therefore be an absolute command path
+ * followed by plain arguments — nothing else is accepted.
+ */
+function sanitizeSudoCommand(raw: string): string {
+  const spec = raw.trim();
+  if (!spec) {
+    throw new Error("A sudo command entry must not be empty");
+  }
+  if (spec.length > 256) {
+    throw new Error(`Sudo command "${raw}" is too long (maximum 256 characters)`);
+  }
+  if (SUDO_RESERVED_WORD_PATTERN.test(spec)) {
+    throw new Error(`Sudo command "${raw}" may not contain the sudoers keyword ALL or a sudoers tag such as NOPASSWD`);
+  }
+  if (!SUDO_COMMAND_PATTERN.test(spec)) {
+    throw new Error(
+      `Invalid sudo command "${raw}": expected an absolute command path with plain arguments, e.g. "/usr/bin/systemctl restart nginx"`
+    );
+  }
+  return spec;
+}
+
+type SudoGrantType = "all_nopasswd" | "all_passwd" | "custom";
+
+/** Build the single sudoers line for a grant, validating any custom commands. */
+function buildSudoersRuleLine(user: string, grant: SudoGrantType, customCommands?: string[]): string {
+  if (grant === "all_nopasswd") return `${user} ALL=(ALL:ALL) NOPASSWD:ALL`;
+  if (grant === "all_passwd") return `${user} ALL=(ALL:ALL) ALL`;
+
+  const cmds = (customCommands || []).map(sanitizeSudoCommand);
+  if (cmds.length === 0) {
+    // Previously this fell back to "ALL", silently turning an empty custom list
+    // into an unrestricted passwordless root grant.
+    throw new Error('A custom sudo permission requires at least one command, e.g. "/usr/bin/systemctl restart nginx"');
+  }
+  return `${user} ALL=(ALL:ALL) NOPASSWD: ${cmds.join(", ")}`;
+}
+
+/**
+ * Install a sudoers rule without the shell ever seeing the rule text: the line
+ * travels as base64 and is decoded on the target, so `$(...)`, backticks and
+ * backslashes cannot expand during the write (the old `echo "<rule>"` form ran
+ * them as root).
+ *
+ * The scratch file comes from `mktemp` — the previous fixed
+ * `/tmp/rackmap_sudo_<Date.now()>_<Math.random()>` name was predictable enough
+ * for a local attacker to win a symlink race between the write and the move.
+ * `install` runs as root so the result is root:root 0440, which is what sudo
+ * requires (the old `mv` left the file owned by the SSH user).
+ */
+function buildSudoersWriteCommand(ruleLine: string, fileName: string): string {
+  const payload = Buffer.from(`${ruleLine}\n`, "utf8").toString("base64");
+  return (
+    `(tmp=$(mktemp /tmp/rackmap_sudo.XXXXXXXX) && ` +
+    `printf %s ${escapeShellArg(payload)} | base64 -d > "$tmp" && ` +
+    `sudo visudo -cf "$tmp" && ` +
+    `sudo install -o root -g root -m 0440 "$tmp" ${escapeShellArg(fileName)}; ` +
+    `rc=$?; rm -f "$tmp" 2>/dev/null; exit $rc)`
+  );
 }
 
 export async function listOsUsers(serverId: number, overridePassword?: string): Promise<OsUserInfo[]> {
@@ -150,34 +252,21 @@ export async function updateSudoPermission(
   overridePassword?: string
 ): Promise<{ ok: boolean; message: string }> {
   const targetUser = sanitizeUsername(input.username);
+  const fileName = `/etc/sudoers.d/rackmap_${targetUser}`;
+
+  // Built and validated before the SSH session is opened so invalid input never
+  // leaves a connection dangling.
+  const execCmd =
+    input.permissionType === "none"
+      ? `sudo rm -f ${escapeShellArg(fileName)}`
+      : buildSudoersWriteCommand(
+          buildSudoersRuleLine(targetUser, input.permissionType, input.customCommands),
+          fileName
+        );
+
   const { client, password } = await connectToServer(serverId, overridePassword);
 
   return new Promise((resolve, reject) => {
-    const fileName = `/etc/sudoers.d/rackmap_${targetUser}`;
-    let execCmd = "";
-
-    if (input.permissionType === "none") {
-      execCmd = `sudo rm -f ${fileName}`;
-    } else {
-      let ruleLine = "";
-      if (input.permissionType === "all_nopasswd") {
-        ruleLine = `${targetUser} ALL=(ALL:ALL) NOPASSWD:ALL`;
-      } else if (input.permissionType === "all_passwd") {
-        ruleLine = `${targetUser} ALL=(ALL:ALL) ALL`;
-      } else if (input.permissionType === "custom") {
-        const cmds = input.customCommands && input.customCommands.length > 0 ? input.customCommands.join(", ") : "ALL";
-        ruleLine = `${targetUser} ALL=(ALL:ALL) NOPASSWD: ${cmds}`;
-      }
-
-      const tmpFile = `/tmp/rackmap_sudo_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-      execCmd = `
-echo "${ruleLine}" > ${tmpFile} && \
-sudo visudo -cf ${tmpFile} && \
-sudo mv ${tmpFile} ${fileName} && \
-sudo chmod 0440 ${fileName} || (rm -f ${tmpFile}; exit 1)
-`;
-    }
-
     client.exec(execCmd, (err, stream) => {
       if (err) {
         client.end();
@@ -217,43 +306,37 @@ export async function createOsUser(
   overridePassword?: string
 ): Promise<{ ok: boolean; message: string }> {
   const username = sanitizeUsername(input.username);
+
+  // Built and validated before the SSH session is opened: every value below is
+  // interpolated into a command that runs as root on the managed host.
+  const flags: string[] = [];
+  if (input.createHome !== false) flags.push("-m");
+  if (input.shell) flags.push(`-s ${shellSafeAbsolutePath(input.shell, "shell")}`);
+  if (input.homeDir) flags.push(`-d ${shellSafeAbsolutePath(input.homeDir, "home directory")}`);
+  if (input.isSystemUser) flags.push("-r");
+  if (input.uid) flags.push(`-u ${input.uid}`);
+  if (input.gid) flags.push(`-g ${input.gid}`);
+  if (input.groups && input.groups.length > 0) {
+    const cleanGroups = validateGroupNames(input.groups).join(",");
+    if (cleanGroups) flags.push(`-G ${escapeShellArg(cleanGroups)}`);
+  }
+
+  let execCmd = `sudo useradd ${flags.join(" ")} ${escapeShellArg(username)}`;
+  if (input.password) {
+    execCmd += ` && echo ${escapeShellArg(`${username}:${input.password}`)} | sudo chpasswd`;
+  }
+
+  if (input.sudoType && input.sudoType !== "none") {
+    const fileName = `/etc/sudoers.d/rackmap_${username}`;
+    execCmd += ` && ${buildSudoersWriteCommand(
+      buildSudoersRuleLine(username, input.sudoType, input.customCommands),
+      fileName
+    )}`;
+  }
+
   const { client, password } = await connectToServer(serverId, overridePassword);
 
   return new Promise((resolve, reject) => {
-    const flags: string[] = [];
-    if (input.createHome !== false) flags.push("-m");
-    if (input.shell) flags.push(`-s ${input.shell}`);
-    if (input.homeDir) flags.push(`-d "${input.homeDir}"`);
-    if (input.isSystemUser) flags.push("-r");
-    if (input.uid) flags.push(`-u ${input.uid}`);
-    if (input.gid) flags.push(`-g ${input.gid}`);
-    if (input.groups && input.groups.length > 0) {
-      const cleanGroups = input.groups.map((g) => g.trim()).filter(Boolean).join(",");
-      if (cleanGroups) flags.push(`-G ${cleanGroups}`);
-    }
-
-    let execCmd = `sudo useradd ${flags.join(" ")} ${username}`;
-    if (input.password) {
-      const safePwd = input.password.replace(/'/g, "'\\''");
-      execCmd += ` && echo '${username}:${safePwd}' | sudo chpasswd`;
-    }
-
-    if (input.sudoType && input.sudoType !== "none") {
-      const fileName = `/etc/sudoers.d/rackmap_${username}`;
-      let ruleLine = "";
-      if (input.sudoType === "all_nopasswd") {
-        ruleLine = `${username} ALL=(ALL:ALL) NOPASSWD:ALL`;
-      } else if (input.sudoType === "all_passwd") {
-        ruleLine = `${username} ALL=(ALL:ALL) ALL`;
-      } else if (input.sudoType === "custom") {
-        const cmds = input.customCommands && input.customCommands.length > 0 ? input.customCommands.join(", ") : "ALL";
-        ruleLine = `${username} ALL=(ALL:ALL) NOPASSWD: ${cmds}`;
-      }
-
-      const tmpFile = `/tmp/rackmap_sudo_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-      execCmd += ` && (echo "${ruleLine}" > ${tmpFile} && sudo visudo -cf ${tmpFile} && sudo mv ${tmpFile} ${fileName} && sudo chmod 0440 ${fileName})`;
-    }
-
     client.exec(execCmd, (err, stream) => {
       if (err) {
         client.end();
@@ -300,50 +383,45 @@ export async function updateOsUser(
   overridePassword?: string
 ): Promise<{ ok: boolean; message: string }> {
   const username = sanitizeUsername(rawUsername);
+  const safeUsername = escapeShellArg(username);
+
+  // Built and validated before the SSH session is opened: every value below is
+  // interpolated into a command that runs as root on the managed host.
+  const steps: string[] = [];
+
+  if (input.shell) {
+    steps.push(`sudo usermod -s ${shellSafeAbsolutePath(input.shell, "shell")} ${safeUsername}`);
+  }
+  if (input.homeDir) {
+    steps.push(`sudo usermod -d ${shellSafeAbsolutePath(input.homeDir, "home directory")} -m ${safeUsername}`);
+  }
+  if (input.groups !== undefined) {
+    const cleanGroups = validateGroupNames(input.groups).join(",");
+    steps.push(`sudo usermod -G ${escapeShellArg(cleanGroups)} ${safeUsername}`);
+  }
+  if (input.password) {
+    steps.push(`echo ${escapeShellArg(`${username}:${input.password}`)} | sudo chpasswd`);
+  }
+  if (input.isLocked === true) {
+    steps.push(`sudo usermod -L ${safeUsername}`);
+  } else if (input.isLocked === false) {
+    steps.push(`sudo usermod -U ${safeUsername}`);
+  }
+
+  if (input.sudoType !== undefined) {
+    const fileName = `/etc/sudoers.d/rackmap_${username}`;
+    if (input.sudoType === "none") {
+      steps.push(`sudo rm -f ${escapeShellArg(fileName)}`);
+    } else {
+      steps.push(
+        buildSudoersWriteCommand(buildSudoersRuleLine(username, input.sudoType, input.customCommands), fileName)
+      );
+    }
+  }
+
   const { client, password } = await connectToServer(serverId, overridePassword);
 
   return new Promise((resolve, reject) => {
-    const steps: string[] = [];
-
-    if (input.shell) {
-      steps.push(`sudo usermod -s ${input.shell} ${username}`);
-    }
-    if (input.homeDir) {
-      steps.push(`sudo usermod -d "${input.homeDir}" -m ${username}`);
-    }
-    if (input.groups !== undefined) {
-      const cleanGroups = input.groups.map((g) => g.trim()).filter(Boolean).join(",");
-      steps.push(`sudo usermod -G "${cleanGroups}" ${username}`);
-    }
-    if (input.password) {
-      const safePwd = input.password.replace(/'/g, "'\\''");
-      steps.push(`echo '${username}:${safePwd}' | sudo chpasswd`);
-    }
-    if (input.isLocked === true) {
-      steps.push(`sudo usermod -L ${username}`);
-    } else if (input.isLocked === false) {
-      steps.push(`sudo usermod -U ${username}`);
-    }
-
-    if (input.sudoType !== undefined) {
-      const fileName = `/etc/sudoers.d/rackmap_${username}`;
-      if (input.sudoType === "none") {
-        steps.push(`sudo rm -f ${fileName}`);
-      } else {
-        let ruleLine = "";
-        if (input.sudoType === "all_nopasswd") {
-          ruleLine = `${username} ALL=(ALL:ALL) NOPASSWD:ALL`;
-        } else if (input.sudoType === "all_passwd") {
-          ruleLine = `${username} ALL=(ALL:ALL) ALL`;
-        } else if (input.sudoType === "custom") {
-          const cmds = input.customCommands && input.customCommands.length > 0 ? input.customCommands.join(", ") : "ALL";
-          ruleLine = `${username} ALL=(ALL:ALL) NOPASSWD: ${cmds}`;
-        }
-        const tmpFile = `/tmp/rackmap_sudo_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-        steps.push(`(echo "${ruleLine}" > ${tmpFile} && sudo visudo -cf ${tmpFile} && sudo mv ${tmpFile} ${fileName} && sudo chmod 0440 ${fileName})`);
-      }
-    }
-
     if (steps.length === 0) {
       client.end();
       return resolve({ ok: true, message: "No changes requested" });
@@ -410,7 +488,9 @@ export async function deleteOsUser(
     if (input.removeHome !== false) flags.push("-r");
     if (input.force) flags.push("-f");
 
-    const execCmd = `sudo userdel ${flags.join(" ")} ${username} && sudo rm -f /etc/sudoers.d/rackmap_${username}`;
+    const execCmd = `sudo userdel ${flags.join(" ")} ${escapeShellArg(username)} && sudo rm -f ${escapeShellArg(
+      `/etc/sudoers.d/rackmap_${username}`
+    )}`;
 
     client.exec(execCmd, (err, stream) => {
       if (err) {

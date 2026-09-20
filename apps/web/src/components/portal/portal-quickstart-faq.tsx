@@ -63,8 +63,8 @@ spec:
       a: "Installing and maintaining daemons across heterogeneous Linux distributions (Ubuntu, Debian, RHEL, Rocky) creates continuous maintenance burdens, potential memory leaks, and attack surfaces. RackMap connects over secure, ephemeral SSH using native kernel utilities (lshw, dmidecode, atop, ip, ss) with absolute zero permanent background overhead on your managed nodes.",
     },
     {
-      q: "How does the Zero-Knowledge credential vault protect root passwords?",
-      a: "Server credentials (SSH private keys, passwords, and sudo passphrases) are encrypted client-side directly in your browser using the WebCrypto AES-256-GCM standard before transmission. The master passphrase is never sent across the network or stored in the database. Even if the database were compromised, attackers only obtain unreadable ciphertext blocks.",
+      q: "How does the credential vault protect root passwords?",
+      a: "Server credentials (passwords and sudo passphrases) are protected by envelope encryption. Your master passphrase derives a key-encryption key via PBKDF2 (100,000 iterations, SHA-512) which wraps a randomly generated data-encryption key; secrets are sealed with AES-256-GCM. The passphrase itself is never stored in the database — only a salt and a verifier — and the unwrapped key is held in server memory for the duration of an unlocked session. Encryption and decryption happen on the server, so the passphrase is sent over the connection when you unlock the vault: run RackMap behind TLS. If the database alone were compromised, an attacker obtains only ciphertext.",
     },
     {
       q: "How does Licencia licensing function in air-gapped or private networks?",
@@ -176,7 +176,7 @@ spec:
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="p-6 rounded-2xl border border-white/10 bg-slate-900/60 space-y-4">
               <p className="text-xs sm:text-sm text-slate-300 italic leading-relaxed">
-                &quot;We replaced heavy background monitoring daemons across 250+ bare-metal servers with RackMap. Zero memory footprint and our compliance team loves the client-side WebCrypto vault.&quot;
+                &quot;We replaced heavy background monitoring daemons across 250+ bare-metal servers with RackMap. Zero memory footprint and our compliance team loves the encrypted credential vault.&quot;
               </p>
               <div className="pt-2 border-t border-white/5">
                 <span className="font-bold text-white text-xs block">Alexandre Moreau</span>

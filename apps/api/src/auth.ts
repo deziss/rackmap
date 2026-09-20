@@ -6,23 +6,38 @@ import { env } from "./env.js";
 import { ac, roles } from "@inv/shared";
 import { writeAuditDirect } from "./lib/audit.js";
 
+// Better Auth otherwise infers the cookie "secure" flag from baseURL. Set it explicitly so an
+// https deployment always gets Secure session cookies, including when BETTER_AUTH_URL is left
+// at an internal http:// value behind a TLS-terminating proxy that serves an https WEB_ORIGIN.
+const useSecureCookies =
+  env.BETTER_AUTH_URL.startsWith("https://") || env.WEB_ORIGIN.startsWith("https://");
+
 export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "sqlite" }),
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
-  // "*" = wildcard (allows any origin) — safe for internal tools on private networks
-  trustedOrigins: env.TRUSTED_ORIGINS === "*" ? ["*"] : env.TRUSTED_ORIGINS.split(",").map((o) => o.trim()),
+  // TRUSTED_ORIGINS defaults to WEB_ORIGIN (see env.ts). "*" is an explicit opt-in wildcard that
+  // makes validateOrigin accept everything — env.ts warns loudly at boot when it is in effect.
+  trustedOrigins:
+    env.TRUSTED_ORIGINS === "*"
+      ? ["*"]
+      : env.TRUSTED_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean),
 
   emailAndPassword: {
     enabled: true,
-    // Self-signup enabled; admin plugin assigns "viewer" as default role
-    disableSignUp: false,
+    // Self-signup is off unless ALLOW_SELF_SIGNUP=true; admins create accounts instead.
+    // When it is on, the admin plugin assigns "viewer" as the default role.
+    disableSignUp: !env.ALLOW_SELF_SIGNUP,
     minPasswordLength: 8,
     autoSignIn: true,
   },
 
   session: {
     cookieCache: { enabled: true, maxAge: 5 * 60 },
+  },
+
+  advanced: {
+    useSecureCookies,
   },
 
   rateLimit: {

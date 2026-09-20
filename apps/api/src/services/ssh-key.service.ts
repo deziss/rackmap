@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
+import * as os from "node:os";
 import { prisma } from "../db.js";
 import { connectToServer, SshError } from "./ssh.service.js";
 import type { SshKeyInfo, AddSshKeyInput, SshKeyTestResult } from "@inv/shared";
@@ -13,9 +14,34 @@ function ensureDir(dir: string) {
   }
 }
 
-function computeFingerprint(keyData: string | Buffer): string {
+/**
+ * OpenSSH-style fingerprint of the PUBLIC key.
+ *
+ * Never hash private key bytes: the result is returned to clients, and a hash
+ * of private material is a secret-derived value that should not leave the host.
+ * Prefers the real OpenSSH fingerprint (SHA-256 over the public key blob) when
+ * a .pub file is available, and otherwise derives the public key from the
+ * private one and hashes its SPKI DER.
+ */
+function computeFingerprint(privateKeyPem: string | Buffer, publicKeyText?: string): string {
+  // Preferred: the authentic OpenSSH fingerprint, from the base64 blob in the .pub file.
+  if (publicKeyText) {
+    const blob = publicKeyText.trim().split(/\s+/)[1];
+    if (blob) {
+      try {
+        const hash = crypto.createHash("sha256").update(Buffer.from(blob, "base64")).digest("base64");
+        return `SHA256:${hash.replace(/=+$/, "")}`;
+      } catch {
+        // fall through to deriving from the private key
+      }
+    }
+  }
+
+  // Fallback: derive the public key, hash its SPKI DER. Not an OpenSSH
+  // fingerprint, but still public-key-derived and stable per key.
   try {
-    const hash = crypto.createHash("sha256").update(keyData).digest("base64");
+    const spki = crypto.createPublicKey(privateKeyPem).export({ type: "spki", format: "der" });
+    const hash = crypto.createHash("sha256").update(spki).digest("base64");
     return `SHA256:${hash.replace(/=+$/, "")}`;
   } catch {
     return "unknown";
@@ -40,7 +66,8 @@ export async function listSshKeys(): Promise<SshKeyInfo[]> {
     { path: "/data/id_rsa", name: "Host Default Key (RSA)" },
     { path: "/root/.ssh/id_ed25519", name: "Root ED25519 Key" },
     { path: "/root/.ssh/id_rsa", name: "Root RSA Key" },
-    { path: "/home/anshukushwaha/.ssh/id_ed25519", name: "Host System Key (anshukushwaha)" },
+    { path: path.join(os.homedir(), ".ssh", "id_ed25519"), name: "Host System Key (ED25519)" },
+    { path: path.join(os.homedir(), ".ssh", "id_rsa"), name: "Host System Key (RSA)" },
   ];
 
   const seenPaths = new Set<string>();
@@ -50,9 +77,9 @@ export async function listSshKeys(): Promise<SshKeyInfo[]> {
       try {
         const content = fs.readFileSync(item.path, "utf8");
         const keyType = detectKeyType(content);
-        const fp = computeFingerprint(content);
         const pubPath = `${item.path}.pub`;
         const publicKey = fs.existsSync(pubPath) ? fs.readFileSync(pubPath, "utf8").trim() : undefined;
+        const fp = computeFingerprint(content, publicKey);
 
         seenPaths.add(item.path);
         keys.push({
@@ -62,7 +89,6 @@ export async function listSshKeys(): Promise<SshKeyInfo[]> {
           fingerprint: fp,
           publicKey,
           source: "host",
-          path: item.path,
           isDefault: item.path.includes("id_ed25519"),
           boundServers: [],
         });
@@ -102,7 +128,6 @@ export async function listSshKeys(): Promise<SshKeyInfo[]> {
             keyType,
             fingerprint: fp,
             source: "custom",
-            path: keyPath,
             isDefault: false,
             boundServers: [],
           });
@@ -155,7 +180,6 @@ export async function addSshKey(input: AddSshKeyInput): Promise<SshKeyInfo> {
     keyType,
     fingerprint: fp,
     source: "custom",
-    path: keyPath,
     isDefault: false,
     boundServers: [],
   };

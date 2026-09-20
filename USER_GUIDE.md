@@ -30,10 +30,10 @@
 
 ### Product Landing & Pricing Portal (`/portal`)
 Before signing in or when exploring platform capabilities, visit the customer-facing **Product Portal** at `http://localhost:3123/portal`:
-- **Interactive Mock Console**: Test the Server Fleet overview, live ATOP Replay, client-side Zero-Knowledge decryption, and Remote Sudoers audits.
+- **Interactive Mock Console**: Test the Server Fleet overview, live ATOP Replay, credential vault unlocking, and Remote Sudoers audits.
 - **Licencia Plan Calculator**: Toggle between monthly and annual billing to compare Free Community, Pro ($39/mo or $31/mo billed annually), and Enterprise ($249/mo or $199/mo billed annually).
 - **One-Minute Quickstart**: Copyable Docker Compose production configuration.
-- **FAQ & Architectural Guides**: Deep-dives into agentless SSH, client WebCrypto AES-256-GCM vault security, and air-gapped activation.
+- **FAQ & Architectural Guides**: Deep-dives into agentless SSH, AES-256-GCM envelope vault security, and air-gapped activation.
 
 ### Signing In to the Console
 Open `http://localhost:3123/login` in your browser. Sign in with your email and password. First-time setup creates an admin account using the `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` values from `.env`.
@@ -490,7 +490,7 @@ RackMap employs two tiers of military-grade encryption to protect target server 
 | Encryption Tier | Configuration Location | Purpose | Accepted Formats |
 |---|---|---|---|
 | **Tier 1: At-Rest Encryption** | `.env` (`APP_ENCRYPTION_KEY` or `APP_ENCRYPTION_PASSPHRASE`) | Encrypts server passwords in the database at rest (AES-256-GCM, format `v1.<iv>.<tag>.<cipher>`) | 32-byte base64 string (`openssl rand -base64 32`) **OR** any human-readable passphrase (min 8 chars) |
-| **Tier 2: Zero-Knowledge Vault** | `.env` (`VAULT_PASSPHRASE`) **or** Web UI (`/security` & `/servers/:id`) | Master envelope encryption (PBKDF2/AES-256, format `v2.<iv>.<tag>.<cipher>`). Derives an in-memory KEK and ephemeral 256-bit DEK. | Arbitrary master passphrase string (min 8 chars) |
+| **Tier 2: Credential Vault** | `.env` (`VAULT_PASSPHRASE`) **or** Web UI (`/security` & `/servers/:id`) | Master envelope encryption (PBKDF2/AES-256, format `v2.<iv>.<tag>.<cipher>`). Derives an in-memory KEK and ephemeral 256-bit DEK. | Arbitrary master passphrase string (min 8 chars) |
 
 #### Setting Encryption in `.env`
 In your `.env` file (or `docker-compose.yml`):

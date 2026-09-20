@@ -33,7 +33,7 @@ export function PortalHero({ onOpenCheckout }: PortalHeroProps) {
 
           {/* Subtitle */}
           <p className="mt-6 max-w-2xl text-base sm:text-lg text-slate-400 leading-relaxed">
-            Discover bare-metal &amp; cloud topology, replay second-by-second ATOP kernel bottlenecks, audit remote sudoers, and safeguard root credentials with client-side WebCrypto AES-256-GCM. Pure agentless SSH.
+            Discover bare-metal &amp; cloud topology, replay second-by-second ATOP kernel bottlenecks, audit remote sudoers, and safeguard root credentials with an AES-256-GCM encrypted vault. Pure agentless SSH.
           </p>
 
           {/* Hero CTAs */}
@@ -73,7 +73,7 @@ export function PortalHero({ onOpenCheckout }: PortalHeroProps) {
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-              <span>Client WebCrypto AES-256-GCM</span>
+              <span>AES-256-GCM Vault</span>
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-emerald-400" />
@@ -97,7 +97,7 @@ export function PortalHero({ onOpenCheckout }: PortalHeroProps) {
             </div>
             <div className="p-3 text-center border-r border-white/5 last:border-0">
               <span className="block text-2xl font-mono font-extrabold text-emerald-400">256-Bit</span>
-              <span className="text-[11px] text-slate-400 uppercase tracking-wider font-medium">WebCrypto Vault</span>
+              <span className="text-[11px] text-slate-400 uppercase tracking-wider font-medium">Encrypted Vault</span>
             </div>
             <div className="p-3 text-center">
               <span className="block text-2xl font-mono font-extrabold text-purple-400">Ed25519</span>

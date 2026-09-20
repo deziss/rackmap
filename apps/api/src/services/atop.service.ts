@@ -1,4 +1,5 @@
 import { connectToServer, buildSudoCommand, SshError } from "./ssh.service.js";
+import { escapeShellArg } from "./shell-escape.js";
 import type {
   AtopQueryInput,
   AtopDatesResponse,
@@ -14,6 +15,27 @@ function formatTodayDate(): string {
   const m = String(now.getMonth() + 1).padStart(2, "0");
   const d = String(now.getDate()).padStart(2, "0");
   return `${y}${m}${d}`;
+}
+
+/**
+ * atop's `-b` / `-e` flags take a clock time (HH:MM or HH:MM:SS).
+ *
+ * The shared schemas already pin this format, but not every route validates with
+ * them (server.routes.ts uses an inline `z.object({ date, time })`), so the
+ * format is re-checked here — at the point of interpolation — and the result is
+ * single-quoted on top of that. Bad input is rejected loudly rather than dropped,
+ * so a caller can never silently get a different time window than it asked for.
+ *
+ * `date` needs no equivalent because callers strip it to digits before use.
+ */
+const ATOP_TIME_PATTERN = /^\d{1,2}:\d{2}(:\d{2})?$/;
+
+function shellSafeAtopTime(time: string): string {
+  const trimmed = time.trim();
+  if (!ATOP_TIME_PATTERN.test(trimmed)) {
+    throw new Error(`Invalid atop time "${time}": expected HH:MM or HH:MM:SS`);
+  }
+  return escapeShellArg(trimmed);
 }
 
 export async function getAtopDates(serverId: number, overridePassword?: string): Promise<AtopDatesResponse> {
@@ -276,14 +298,16 @@ export function parseAtopRawOutput(
 }
 
 export async function getAtopSnapshots(serverId: number, query: AtopQueryInput, overridePassword?: string): Promise<AtopSnapshotsResponse> {
+  // Validated before the SSH session is opened so invalid input never leaves a
+  // connection dangling.
+  const timeFlags = [
+    query.timeFrom ? `-b ${shellSafeAtopTime(query.timeFrom)}` : "",
+    query.timeTo ? `-e ${shellSafeAtopTime(query.timeTo)}` : "",
+  ].filter(Boolean).join(" ");
+
   const { client, password } = await connectToServer(serverId, overridePassword);
   const targetDate = query.date ? query.date.replace(/[^0-9]/g, "") : formatTodayDate();
   const filePath = `/var/log/atop/atop_${targetDate}`;
-
-  const timeFlags = [
-    query.timeFrom ? `-b ${query.timeFrom}` : "",
-    query.timeTo ? `-e ${query.timeTo}` : "",
-  ].filter(Boolean).join(" ");
 
   const atopCmd = `atop -r ${filePath} -P CPU,MEM,DSK,NET ${timeFlags}`;
   const sudoAtop = buildSudoCommand(atopCmd, password);
@@ -376,10 +400,13 @@ export async function getAtopTopProcesses(
   time?: string,
   overridePassword?: string
 ): Promise<AtopTopProcesses> {
+  // Validated before the SSH session is opened so invalid input never leaves a
+  // connection dangling.
+  const timeFlag = time ? `-b ${shellSafeAtopTime(time)}` : "";
+
   const { client, password } = await connectToServer(serverId, overridePassword);
   const targetDate = date.replace(/[^0-9]/g, "");
   const filePath = `/var/log/atop/atop_${targetDate}`;
-  const timeFlag = time ? `-b ${time}` : "";
 
   const command = `
 if [ ! -f "${filePath}" ]; then
@@ -427,12 +454,16 @@ export async function getAtopIntervalProcesses(
   time: string,
   overridePassword?: string
 ): Promise<AtopProcess[]> {
+  // Validated before the SSH session is opened so invalid input never leaves a
+  // connection dangling.
+  const safeTime = shellSafeAtopTime(time);
+
   const { client } = await connectToServer(serverId, overridePassword);
   const targetDate = date.replace(/[^0-9]/g, "");
   const filePath = `/var/log/atop/atop_${targetDate}`;
 
   // Use atop -r -b <time> -e <time> to get human-readable top processes
-  const command = `atop -r ${filePath} -b ${time} -e ${time} 2>/dev/null | sed -n '30,60p'`;
+  const command = `atop -r ${filePath} -b ${safeTime} -e ${safeTime} 2>/dev/null | sed -n '30,60p'`;
 
   return new Promise((resolve) => {
     let stdout = "";

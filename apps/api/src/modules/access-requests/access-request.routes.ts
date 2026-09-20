@@ -168,6 +168,14 @@ export const accessRequestRoutes = new Hono()
     const existing = await prisma.accessRequest.findUnique({ where: { id } });
     if (!existing) throw notFound("Access request");
     await prisma.accessRequest.delete({ where: { id } });
+    await writeAuditDirect({
+      ctx: getAuditCtx(c),
+      category: "security",
+      action: "access_request.delete",
+      entity: "AccessRequest",
+      entityId: String(id),
+      before: existing,
+    });
     return c.json({ ok: true });
   })
 

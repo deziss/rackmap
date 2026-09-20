@@ -21,7 +21,7 @@ export function PortalFooter({ onOpenCheckout }: PortalFooterProps) {
             Ready to Take Full Control of Your Linux Servers?
           </h2>
           <p className="mt-4 text-sm sm:text-base text-slate-300 max-w-2xl mx-auto leading-relaxed">
-            Manage your servers with zero agent overhead, kernel-level forensic telemetry, and total zero-knowledge cryptographic privacy.
+            Manage your servers with zero agent overhead, kernel-level forensic telemetry, and encrypted credential storage.
           </p>
 
           <div className="mt-9 flex flex-wrap items-center justify-center gap-4">
@@ -52,7 +52,7 @@ export function PortalFooter({ onOpenCheckout }: PortalFooterProps) {
             </div>
             <div>
               <span className="font-bold text-white text-sm">RackMap</span>
-              <p className="text-[11px] text-slate-400">Agentless Linux Server Inventory &amp; Zero-Knowledge Vault</p>
+              <p className="text-[11px] text-slate-400">Agentless Linux Server Inventory &amp; Encrypted Credential Vault</p>
             </div>
           </div>
 

@@ -201,7 +201,7 @@ export function PortalSandbox({ onOpenCheckout }: PortalSandboxProps) {
               }`}
             >
               <Lock className="h-3.5 w-3.5" />
-              Zero-Knowledge Vault
+              Credential Vault
             </button>
             <button
               type="button"
@@ -335,7 +335,7 @@ export function PortalSandbox({ onOpenCheckout }: PortalSandboxProps) {
                   </div>
                   <div className="p-2.5 rounded-lg bg-white/5 border border-white/5">
                     <span className="text-slate-400 text-[10px] block">SECURITY CREDENTIAL</span>
-                    <span className="text-white font-semibold">WebCrypto AES-256</span>
+                    <span className="text-white font-semibold">AES-256-GCM</span>
                     <span className="text-emerald-400 text-[10px] block">Key ID: #vlt-482a</span>
                   </div>
                 </div>
@@ -473,17 +473,17 @@ export function PortalSandbox({ onOpenCheckout }: PortalSandboxProps) {
           </div>
         )}
 
-        {/* Tab 3: Zero-Knowledge Vault */}
+        {/* Tab 3: Credential Vault */}
         {activeConsoleTab === "vault" && (
           <div className="p-4 sm:p-6 space-y-5">
             <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h4 className="text-sm font-semibold text-indigo-300 flex items-center gap-2">
                   <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                  Client-Side WebCrypto AES-256-GCM Envelope Encryption
+                  AES-256-GCM Envelope Encryption (PBKDF2 → KEK → DEK)
                 </h4>
                 <p className="text-xs text-slate-300 mt-1">
-                  Zero Knowledge Security: Credentials never travel over the wire in cleartext. Plaintext is only ever held in client RAM.
+                  The master passphrase is never stored in the database — only a salt and a verifier. The unwrapped key lives in server memory for the duration of an unlocked session and is never written to disk or logged.
                 </p>
               </div>
               <Button
@@ -503,7 +503,7 @@ export function PortalSandbox({ onOpenCheckout }: PortalSandboxProps) {
                   Type a Sample Root Password or SSH Private Key:
                 </label>
                 <span className="text-[11px] text-emerald-400 font-mono flex items-center gap-1">
-                  <Check className="h-3 w-3" /> WebCrypto Subtly Encrypts in Browser
+                  <Check className="h-3 w-3" /> Passphrase Never Persisted to the Database
                 </span>
               </div>
 
@@ -532,7 +532,7 @@ export function PortalSandbox({ onOpenCheckout }: PortalSandboxProps) {
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">In-Browser Memory State</span>
                     <Badge variant="outline" className={`text-[10px] ${vaultUnlocked ? "text-emerald-400 border-emerald-500/30" : "text-slate-500"}`}>
-                      {vaultUnlocked ? "Decrypted In Client RAM" : "Locked / Ciphertext"}
+                      {vaultUnlocked ? "Unlocked / Decrypted" : "Locked / Ciphertext"}
                     </Badge>
                   </div>
                   <div className="rounded-lg bg-slate-950 p-3 border border-white/5 font-mono text-xs flex items-center justify-between">
@@ -544,7 +544,7 @@ export function PortalSandbox({ onOpenCheckout }: PortalSandboxProps) {
                     <KeyRound className={`h-4 w-4 ${vaultUnlocked ? "text-emerald-400" : "text-slate-600"}`} />
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Even with complete root SQL access, database dumps expose zero cleartext passwords.
+                    Even with complete root SQL access, database dumps expose only ciphertext — never cleartext passwords.
                   </p>
                 </div>
               </div>

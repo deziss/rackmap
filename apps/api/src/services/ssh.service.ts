@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { Client } from "ssh2";
 import { prisma } from "../db.js";
@@ -36,6 +37,14 @@ export interface ConnectOptions {
  * If password is provided, uses `echo <password> | sudo -S -p '' <cmd>`
  * Otherwise falls back to passwordless `sudo -n <cmd> 2>/dev/null || <cmd>`.
  */
+/**
+ * Wrap a command so it runs under sudo, piping in the password when one is known.
+ *
+ * SECURITY: `cmd` is interpolated verbatim. Callers are responsible for escaping
+ * every request-derived value inside it — use `escapeShellArg` from
+ * ./shell-escape.js, or a stricter format-specific validator. Do not pass a
+ * string built by concatenating unvalidated input.
+ */
 export function buildSudoCommand(cmd: string, password?: string): string {
   if (password) {
     const escaped = password.replace(/'/g, "'\\''");
@@ -72,13 +81,14 @@ export async function connectToServer(
 
   // 1. Search for available SSH private keys on host or storage
   const keyCandidates: string[] = [
-    process.env.SSH_PRIVATE_KEY_PATH,
+    env.SSH_PRIVATE_KEY_PATH,
     "/data/id_ed25519",
     "/data/id_rsa",
     "/root/.ssh/id_ed25519",
     "/root/.ssh/id_rsa",
-    "/home/anshukushwaha/.ssh/id_ed25519",
-    "/home/anshukushwaha/.ssh/id_rsa",
+    // Home directory of whichever user the API runs as — resolved at runtime, never baked in.
+    path.join(os.homedir(), ".ssh", "id_ed25519"),
+    path.join(os.homedir(), ".ssh", "id_rsa"),
   ].filter(Boolean) as string[];
 
   // Include any custom uploaded keys in /data/ssh_keys

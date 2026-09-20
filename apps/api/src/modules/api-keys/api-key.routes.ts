@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { prisma } from "../../db.js";
 import { requireSession } from "../../middleware/session.js";
 import { notFound } from "../../lib/errors.js";
+import { getAuditCtx, writeAuditDirect } from "../../lib/audit.js";
 
 const apiKeyRoutes = new Hono();
 
@@ -37,6 +38,15 @@ apiKeyRoutes.post("/", requireSession, async (c) => {
     data: { id, name, key: hash, start, userId: user.id },
   });
 
+  await writeAuditDirect({
+    ctx: getAuditCtx(c),
+    category: "security",
+    action: "api_key.create",
+    entity: "ApiKey",
+    entityId: id,
+    after: { name, start },
+  });
+
   // Return raw key ONCE — caller must store it
   return c.json({ id, name, start, key: raw }, 201);
 });
@@ -48,6 +58,14 @@ apiKeyRoutes.delete("/:id", requireSession, async (c) => {
   const existing = await prisma.apiKey.findUnique({ where: { id } });
   if (!existing || existing.userId !== user.id || existing.deletedAt) throw notFound("ApiKey");
   await prisma.apiKey.update({ where: { id }, data: { deletedAt: new Date(), enabled: false } });
+  await writeAuditDirect({
+    ctx: getAuditCtx(c),
+    category: "security",
+    action: "api_key.revoke",
+    entity: "ApiKey",
+    entityId: id,
+    before: { name: existing.name, start: existing.start },
+  });
   return c.json({ ok: true });
 });
 

@@ -14,8 +14,17 @@ const EnvSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(16),
   BETTER_AUTH_URL: z.string().default("http://localhost:5173"),
   WEB_ORIGIN: z.string().default("http://localhost:5173"),
-  // Comma-separated allowed origins, or "*" to allow all (internal tool default)
-  TRUSTED_ORIGINS: z.string().default("*"),
+  // Comma-separated allowed origins for CORS and Better Auth origin validation.
+  // Left unset it resolves to WEB_ORIGIN (see below) — it must never silently mean
+  // "any origin". "*" is still accepted as an explicit opt-in for internal deployments
+  // on a trusted private network, and boots with a loud warning.
+  TRUSTED_ORIGINS: z.string().optional(),
+  // Allow anyone who can reach the API to create their own account (role: viewer).
+  // Off by default — an admin should be creating accounts instead.
+  ALLOW_SELF_SIGNUP: z
+    .string()
+    .default("false")
+    .transform((v) => v === "true"),
   SCHEDULER_ENABLED: z
     .string()
     .default("true")
@@ -51,7 +60,9 @@ const EnvSchema = z.object({
   ALERT_THRESHOLD_CPU: z.coerce.number().min(0).max(100).default(90),
   ALERT_THRESHOLD_RAM: z.coerce.number().min(0).max(100).default(95),
   ALERT_THRESHOLD_DISK: z.coerce.number().min(0).max(100).default(90),
-  // M13 — browser SSH terminal (off by default — RCE kill-switch)
+  // M13 — gates ONLY the browser SSH terminal websocket (ws/ssh.ws.ts), off by default.
+  // This is not a general remote-execution kill-switch: /os-users, /logs, /atop/*,
+  // /auto-discover and /auto-update still run remote commands over SSH when it is false.
   SSH_ENABLED: z
     .string()
     .default("false")
@@ -60,7 +71,12 @@ const EnvSchema = z.object({
   SSH_IDLE_TIMEOUT_MS: z.coerce.number().int().min(10_000).default(300_000),
   SSH_MAX_SESSION_MS: z.coerce.number().int().min(60_000).default(3_600_000),
   SSH_MAX_CONCURRENT: z.coerce.number().int().min(1).default(5),
+  // NOT IMPLEMENTED — declared but never read anywhere in the codebase. Host keys are
+  // currently always accepted regardless of this value; setting it has no effect.
+  // Real host-key verification is a later phase.
   SSH_HOST_POLICY: z.enum(["accept-any", "tofu"]).default("accept-any"),
+  // Absolute path to a private key tried first when opening SSH connections (optional).
+  SSH_PRIVATE_KEY_PATH: z.string().optional(),
   // Licencia Licensing & Subscription
   LICENCIA_URL: z.string().optional(),
   LICENCIA_API_KEY: z.string().optional(),
@@ -83,4 +99,20 @@ if (!parsed.success) {
   process.exit(1);
 }
 
-export const env = parsed.data;
+// An unset TRUSTED_ORIGINS falls back to WEB_ORIGIN rather than "*", so a deployment that
+// never configured CORS is locked to its own web origin instead of reflecting every caller.
+const trustedOriginsRaw = (parsed.data.TRUSTED_ORIGINS ?? "").trim();
+const resolvedTrustedOrigins = trustedOriginsRaw.length > 0 ? trustedOriginsRaw : parsed.data.WEB_ORIGIN;
+
+if (resolvedTrustedOrigins === "*") {
+  console.warn(
+    '[security] TRUSTED_ORIGINS="*" is in effect: CORS reflects ANY origin back with ' +
+      "credentials:true and Better Auth origin validation is disabled. Any site a signed-in " +
+      "user visits can drive this API with their session cookie (CSRF), and the browser will " +
+      "hand it the responses. Only acceptable on a trusted private network — set " +
+      "TRUSTED_ORIGINS to an explicit comma-separated origin list for anything reachable " +
+      "from an untrusted network.",
+  );
+}
+
+export const env = { ...parsed.data, TRUSTED_ORIGINS: resolvedTrustedOrigins };

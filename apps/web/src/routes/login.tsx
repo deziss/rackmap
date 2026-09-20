@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,27 @@ export const Route = createFileRoute("/login")({
 function LoginPage() {
   const router = useRouter();
   const [mode, setMode] = useState<"signin" | "register">("signin");
+  // Self-registration is opt-in (ALLOW_SELF_SIGNUP). Ask the server before
+  // offering a form that would only fail.
+  const [allowSelfSignup, setAllowSelfSignup] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/v1/public/config", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((cfg) => {
+        if (!cancelled && cfg && typeof cfg.allowSelfSignup === "boolean") {
+          setAllowSelfSignup(cfg.allowSelfSignup);
+          if (!cfg.allowSelfSignup) setMode("signin");
+        }
+      })
+      .catch(() => {
+        /* keep registration hidden when the flag cannot be read */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -55,7 +76,7 @@ function LoginPage() {
     }
   }
 
-  const isRegister = mode === "register";
+  const isRegister = mode === "register" && allowSelfSignup;
 
   return (
     <div className="mesh-bg relative flex min-h-screen items-center justify-center p-4 bg-background">
@@ -169,7 +190,7 @@ function LoginPage() {
                 Sign in
               </button>
             </>
-          ) : (
+          ) : allowSelfSignup ? (
             <>
               Don&apos;t have an account?{" "}
               <button
@@ -180,6 +201,8 @@ function LoginPage() {
                 Register
               </button>
             </>
+          ) : (
+            <>Accounts are created by an administrator.</>
           )}
         </p>
 

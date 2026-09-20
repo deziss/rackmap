@@ -56,7 +56,7 @@ function VaultConfigurationSection() {
 
   const [passphrase, setPassphrase] = useState("");
   const [showPass, setShowPass] = useState(false);
-  const [persistToEnv, setPersistToEnv] = useState(true);
+  const [persistToEnv, setPersistToEnv] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Reset mode state

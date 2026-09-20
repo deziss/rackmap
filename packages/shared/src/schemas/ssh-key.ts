@@ -7,7 +7,8 @@ export const SshKeyInfo = z.object({
   fingerprint: z.string(),
   publicKey: z.string().optional(),
   source: z.enum(["host", "custom"]),
-  path: z.string(),
+  /** Server-side only. Never populated in API responses — an on-disk private key path is not something clients need. */
+  path: z.string().optional(),
   isDefault: z.boolean().default(false),
   boundServers: z.array(
     z.object({
