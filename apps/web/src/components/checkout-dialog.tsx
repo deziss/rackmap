@@ -71,6 +71,27 @@ export function CheckoutDialog({
 
   // Auth tab: "signup" | "signin"
   const [authTab, setAuthTab] = useState<"signup" | "signin">("signup");
+  // Self-registration is opt-in (ALLOW_SELF_SIGNUP). When it is off, checkout
+  // has to start from an existing account instead of offering a form that fails.
+  const [allowSelfSignup, setAllowSelfSignup] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/v1/public/config", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((cfg) => {
+        if (!cancelled && cfg && typeof cfg.allowSelfSignup === "boolean") {
+          setAllowSelfSignup(cfg.allowSelfSignup);
+          if (!cfg.allowSelfSignup) setAuthTab("signin");
+        }
+      })
+      .catch(() => {
+        /* leave the default alone if the flag cannot be read */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [authName, setAuthName] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -301,18 +322,22 @@ export function CheckoutDialog({
         {step === "auth" && (
           <div className="p-6 space-y-5">
             {/* Tabs for Sign Up vs Sign In */}
-            <div className="grid grid-cols-2 rounded-xl bg-slate-900 p-1 border border-white/10 text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => setAuthTab("signup")}
-                className={`py-2 rounded-lg transition-all ${
-                  authTab === "signup"
-                    ? "bg-blue-600 text-white shadow-md shadow-blue-600/20"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                Create Account (Sign Up)
-              </button>
+            <div
+              className={`grid ${allowSelfSignup ? "grid-cols-2" : "grid-cols-1"} rounded-xl bg-slate-900 p-1 border border-white/10 text-xs font-semibold`}
+            >
+              {allowSelfSignup && (
+                <button
+                  type="button"
+                  onClick={() => setAuthTab("signup")}
+                  className={`py-2 rounded-lg transition-all ${
+                    authTab === "signup"
+                      ? "bg-blue-600 text-white shadow-md shadow-blue-600/20"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Create Account (Sign Up)
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setAuthTab("signin")}
@@ -342,8 +367,8 @@ export function CheckoutDialog({
             </div>
 
             {/* Form */}
-            <form onSubmit={authTab === "signup" ? handleSignUp : handleSignIn} className="space-y-4 text-xs">
-              {authTab === "signup" && (
+            <form onSubmit={authTab === "signup" && allowSelfSignup ? handleSignUp : handleSignIn} className="space-y-4 text-xs">
+              {authTab === "signup" && allowSelfSignup && (
                 <div className="space-y-1.5">
                   <Label htmlFor="authName" className="text-slate-300">Full Name</Label>
                   <Input

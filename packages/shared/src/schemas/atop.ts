@@ -65,10 +65,25 @@ export const AtopIntervalSnapshot = z.object({
 });
 export type AtopIntervalSnapshot = z.infer<typeof AtopIntervalSnapshot>;
 
+/**
+ * atop's `-b` / `-e` flags accept a clock time only (HH:MM or HH:MM:SS).
+ * These values are interpolated into a shell command that runs on the managed
+ * host, so the format is pinned here rather than left as a free-form string:
+ * nothing matching this pattern can carry a shell metacharacter.
+ * The same rule is re-applied at the point of interpolation in
+ * apps/api/src/services/atop.service.ts.
+ */
+export const ATOP_TIME_PATTERN = /^\d{1,2}:\d{2}(:\d{2})?$/;
+
+const AtopTime = z
+  .string()
+  .trim()
+  .regex(ATOP_TIME_PATTERN, "Time must be in HH:MM or HH:MM:SS format");
+
 export const AtopQueryInput = z.object({
   date: z.string().trim().optional(),
-  timeFrom: z.string().trim().optional(),
-  timeTo: z.string().trim().optional(),
+  timeFrom: AtopTime.optional(),
+  timeTo: AtopTime.optional(),
   metricFilter: z.enum(["all", "cpu", "mem", "dsk", "net"]).default("all"),
   cpuThreshold: z.coerce.number().optional().default(70),
   memThreshold: z.coerce.number().optional().default(80),
@@ -78,9 +93,15 @@ export type AtopQueryInput = z.infer<typeof AtopQueryInput>;
 
 export const AtopTopProcessesInput = z.object({
   date: z.string().trim(),
-  time: z.string().trim().optional(),
+  time: AtopTime.optional(),
 });
 export type AtopTopProcessesInput = z.infer<typeof AtopTopProcessesInput>;
+
+export const AtopIntervalProcessesInput = z.object({
+  date: z.string().trim(),
+  time: AtopTime,
+});
+export type AtopIntervalProcessesInput = z.infer<typeof AtopIntervalProcessesInput>;
 
 export const AtopTopProcessesResponse = z.object({
   date: z.string(),

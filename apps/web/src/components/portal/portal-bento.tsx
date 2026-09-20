@@ -26,7 +26,7 @@ export function PortalBento() {
               Enterprise Linux Telemetry Without The SaaS Agent Tax
             </h2>
             <p className="mt-4 text-sm sm:text-base text-slate-400 leading-relaxed">
-              Traditional monitoring platforms burden production nodes with heavy daemons, open root ports, and unencrypted cleartext passwords. RackMap replaces all three with zero-footprint SSH and WebCrypto encryption.
+              Traditional monitoring platforms burden production nodes with heavy daemons, open root ports, and unencrypted cleartext passwords. RackMap replaces all three with zero-footprint SSH and AES-256-GCM envelope encryption.
             </p>
           </div>
 
@@ -57,7 +57,7 @@ export function PortalBento() {
               </div>
             </div>
 
-            {/* Bento Card 2: Zero Knowledge Vault (Spans 1 col) */}
+            {/* Bento Card 2: Credential Vault (Spans 1 col) */}
             <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-7 hover:border-emerald-500/40 hover:bg-slate-900/80 transition-all duration-300 group flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-4">
@@ -65,11 +65,11 @@ export function PortalBento() {
                     <ShieldCheck className="h-6 w-6" />
                   </div>
                   <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 text-[11px] font-mono">
-                    WebCrypto API
+                    AES-256-GCM
                   </Badge>
                 </div>
                 <h3 className="text-lg font-bold text-white mb-2">
-                  Client-Side Zero-Knowledge Vault
+                  Encrypted Credential Vault
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
                   Passwords and SSH private keys are encrypted directly in the client browser with AES-256-GCM. The API and database only store ciphertext.
@@ -210,7 +210,7 @@ export function PortalBento() {
               Zero-Trust Architecture
             </Badge>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-              How Telemetry Flows Without Cleartext Exposure
+              How Telemetry Flows Without Cleartext Storage
             </h2>
           </div>
 
@@ -236,8 +236,8 @@ export function PortalBento() {
               },
               {
                 step: "04",
-                title: "Browser WebCrypto",
-                desc: "Decryption happens exclusively on the client device using browser WebCrypto AES-256-GCM. Plaintext never traverses the wire.",
+                title: "Envelope Encryption",
+desc: "Credentials are sealed with AES-256-GCM under a key derived from your master passphrase via PBKDF2. The passphrase is never stored in the database and the unwrapped key never leaves server memory.",
                 icon: ShieldCheck,
               },
             ].map((p, idx) => {

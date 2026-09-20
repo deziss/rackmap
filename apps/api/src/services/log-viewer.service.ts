@@ -1,9 +1,6 @@
 import { connectToServer, buildSudoCommand, SshError } from "./ssh.service.js";
+import { escapeShellArg } from "./shell-escape.js";
 import type { LogQueryInput, LogResponse, LogEntry } from "@inv/shared";
-
-function escapeShellArg(arg: string): string {
-  return `'${arg.replace(/'/g, "'\\''")}'`;
-}
 
 function parseLogLine(raw: string, defaultSource: string): LogEntry {
   const line = raw.trim();
@@ -61,7 +58,9 @@ export async function queryServerLogs(serverId: number, query: LogQueryInput, ov
   if (query.source === "journalctl") {
     const args: string[] = ["journalctl", "--no-pager", `-n ${lines}`, "--output=short-iso"];
     if (query.unit) {
-      const sanitizedUnit = query.unit.trim().replace(/[^a-zA-Z0-9_.-@]/g, "");
+      // The hyphen is escaped on purpose: `.-@` inside a character class is the
+      // range 0x2E-0x40, which silently allowed `/ : ; < = > ? @` through.
+      const sanitizedUnit = query.unit.trim().replace(/[^a-zA-Z0-9_.\-@]/g, "");
       if (sanitizedUnit) args.push(`-u ${escapeShellArg(sanitizedUnit)}`);
     }
     if (query.priority) {

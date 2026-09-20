@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { requireSession } from "../../middleware/session.js";
 import { requirePermission } from "../../middleware/require-permission.js";
-import { getAuditCtx } from "../../lib/audit.js";
+import { getAuditCtx, writeAuditDirect } from "../../lib/audit.js";
 import { importServers, exportServers, exportServersJson } from "./import.service.js";
 
 const importRoutes = new Hono();
@@ -45,6 +45,15 @@ importRoutes.get("/export.xlsx", requireSession, async (c) => {
     status: c.req.query("status"),
   };
 
+
+  // A bulk inventory pull (hostnames, IPs, ports, usernames) — record who took it.
+  await writeAuditDirect({
+    ctx: getAuditCtx(c),
+    category: "data",
+    action: "server.export",
+    entity: "Server",
+    after: { format: "xlsx", filters },
+  });
   const buf = await exportServers(filters);
   return new Response(buf, {
     headers: {
@@ -66,6 +75,15 @@ importRoutes.get("/export.json", requireSession, async (c) => {
     status: c.req.query("status"),
   };
 
+
+  // A bulk inventory pull (hostnames, IPs, ports, usernames) — record who took it.
+  await writeAuditDirect({
+    ctx: getAuditCtx(c),
+    category: "data",
+    action: "server.export",
+    entity: "Server",
+    after: { format: "json", filters },
+  });
   const json = await exportServersJson(filters);
   return new Response(json, {
     headers: {

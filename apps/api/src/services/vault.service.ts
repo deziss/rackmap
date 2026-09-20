@@ -116,20 +116,39 @@ export async function unlockVaultGlobal(passphrase: string, persistToEnv: boolea
   });
 
   if (persistToEnv) {
+    // This file also holds BETTER_AUTH_SECRET and APP_ENCRYPTION_KEY, so the write is done
+    // atomically (temp file in the same directory + rename) and the result is 0600 — never
+    // the world-readable 0644 an in-place rewrite would have left behind.
+    const envPath = path.resolve(process.cwd(), ".env");
+    const tmpPath = path.join(path.dirname(envPath), `.env.vault-${process.pid}-${Date.now()}.tmp`);
     try {
-      const envPath = path.resolve(process.cwd(), ".env");
-      if (fs.existsSync(envPath)) {
-        let envContent = fs.readFileSync(envPath, "utf8");
-        if (envContent.includes("VAULT_PASSPHRASE=")) {
-          envContent = envContent.replace(/VAULT_PASSPHRASE=.*/g, `VAULT_PASSPHRASE=${passphrase}`);
-        } else {
-          envContent += `\nVAULT_PASSPHRASE=${passphrase}\n`;
-        }
-        fs.writeFileSync(envPath, envContent, "utf8");
+      let envContent = fs.readFileSync(envPath, "utf8");
+      // Anchored per-line match: a commented-out "#VAULT_PASSPHRASE=" line and any
+      // "SOMETHING_VAULT_PASSPHRASE=" variable must be left untouched.
+      const assignment = /^VAULT_PASSPHRASE=.*$/m;
+      if (assignment.test(envContent)) {
+        envContent = envContent.replace(assignment, `VAULT_PASSPHRASE=${passphrase}`);
+      } else {
+        if (envContent.length > 0 && !envContent.endsWith("\n")) envContent += "\n";
+        envContent += `VAULT_PASSPHRASE=${passphrase}\n`;
       }
+      fs.writeFileSync(tmpPath, envContent, { encoding: "utf8", mode: 0o600 });
+      fs.renameSync(tmpPath, envPath);
+      fs.chmodSync(envPath, 0o600);
       process.env.VAULT_PASSPHRASE = passphrase;
-    } catch {
-      // ignore write error
+    } catch (err) {
+      try {
+        fs.rmSync(tmpPath, { force: true });
+      } catch {
+        // temp file already gone
+      }
+      const reason = err instanceof Error ? err.message : String(err);
+      console.error(`[Vault] Failed to persist VAULT_PASSPHRASE to ${envPath}: ${reason}`);
+      // Surface it: silently swallowing this left the operator believing the passphrase
+      // would survive a restart. The vault itself is unlocked in memory either way.
+      throw new Error(
+        `Vault unlocked, but persisting the passphrase to .env failed: ${reason}`,
+      );
     }
   }
 

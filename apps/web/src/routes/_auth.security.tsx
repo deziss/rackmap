@@ -420,7 +420,7 @@ function VaultManagementSection() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Zero-knowledge envelope encryption for target server SSH credentials. The master passphrase derives an AES-256 KEK in-memory and is never stored unencrypted.
+        Envelope encryption for target server SSH credentials. The master passphrase derives an AES-256 KEK in server memory and is never stored in the database — only a salt and a verifier are persisted.
       </p>
 
       {isUnlocked && (

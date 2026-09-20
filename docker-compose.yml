@@ -28,7 +28,8 @@ services:
       BACKUP_DIR: /backups
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@example.com}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-changeme123}
-      # SSH terminal kill-switch — set SSH_ENABLED=true to enable (admin-only RCE feature)
+      # Browser SSH terminal — set SSH_ENABLED=true to enable (admin-only).
+      # Gates only the interactive terminal; other features still exec over SSH.
       SSH_ENABLED: ${SSH_ENABLED:-false}
       SSH_CONNECT_TIMEOUT_MS: ${SSH_CONNECT_TIMEOUT_MS:-10000}
       SSH_IDLE_TIMEOUT_MS: ${SSH_IDLE_TIMEOUT_MS:-300000}

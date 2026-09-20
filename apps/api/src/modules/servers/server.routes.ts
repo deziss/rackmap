@@ -25,7 +25,7 @@ import { queryServerLogs } from "../../services/log-viewer.service.js";
 import { getAtopDates, getAtopSnapshots, getAtopIntervalProcesses, getAtopTopProcesses } from "../../services/atop.service.js";
 import { getAutoUpdateStatus, updateAutoUpdateStatus } from "../../services/auto-update.service.js";
 import { testServerSshKey } from "../../services/ssh-key.service.js";
-import { SudoPermissionInput, CreateOsUserInput, UpdateOsUserInput, DeleteOsUserInput, LogQueryInput, AtopQueryInput, AtopTopProcessesInput, AutoUpdateActionInput } from "@inv/shared";
+import { SudoPermissionInput, CreateOsUserInput, UpdateOsUserInput, DeleteOsUserInput, LogQueryInput, AtopQueryInput, AtopTopProcessesInput, AtopIntervalProcessesInput, AutoUpdateActionInput } from "@inv/shared";
 import { sshErrorToHttp } from "../../services/ssh.service.js";
 import { env } from "../../env.js";
 import { prisma } from "../../db.js";
@@ -262,6 +262,15 @@ export const serverRoutes = new Hono()
 
       if (calculatedStorage) {
         await prisma.server.update({ where: { id }, data: { disk: calculatedStorage } });
+        await writeAuditDirect({
+          ctx: getAuditCtx(c),
+          category: "data",
+          action: "server.recalculate_storage",
+          entity: "Server",
+          entityId: String(id),
+          before: { disk: server.disk },
+          after: { disk: calculatedStorage },
+        });
       }
 
       const updated = await getServer(id);
@@ -448,7 +457,7 @@ export const serverRoutes = new Hono()
     "/:id/atop/interval-processes",
     requirePermission({ server: ["atop"] }),
     zValidator("param", idParamSchema),
-    zValidator("json", z.object({ date: z.string(), time: z.string() })),
+    zValidator("json", AtopIntervalProcessesInput),
     async (c) => {
       const { id } = c.req.valid("param");
       const { date, time } = c.req.valid("json");
@@ -486,6 +495,7 @@ export const serverRoutes = new Hono()
   // GET /servers/:id/auto-update — check unattended-upgrades status & log snippet
   .get(
     "/:id/auto-update",
+    requirePermission({ server: ["update"] }),
     zValidator("param", idParamSchema),
     async (c) => {
       const { id } = c.req.valid("param");
@@ -513,9 +523,18 @@ export const serverRoutes = new Hono()
       try {
         const sshPass = c.req.header("x-ssh-password") || undefined;
         const res = await updateAutoUpdateStatus(id, input, sshPass);
+        await writeAuditDirect({
+          ctx: getAuditCtx(c),
+          category: "data",
+          action: "server.auto_update_change",
+          entity: "Server",
+          entityId: String(id),
+          after: { action: input.action },
+        });
         return c.json(res);
       } catch (err: any) {
-        return c.json({ error: { code: "AUTO_UPDATE_ERROR", message: err.message } }, 400);
+        // `err.message` here can carry remote shell stderr — keep it out of the response.
+        return c.json({ error: { code: "AUTO_UPDATE_ERROR", message: "Failed to apply auto-update configuration" } }, 400);
       }
     },
   )
@@ -535,6 +554,7 @@ export const serverRoutes = new Hono()
   // GET /servers/:id/alert-channels — check configured alert notification dispatchers
   .get(
     "/:id/alert-channels",
+    requirePermission({ server: ["update"] }),
     zValidator("param", idParamSchema),
     async (c) => {
       return c.json({

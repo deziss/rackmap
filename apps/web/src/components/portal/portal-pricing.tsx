@@ -22,7 +22,7 @@ export function PortalPricing({ billingCycle, setBillingCycle, onOpenCheckout }:
       features: [
         "10 Linux nodes maximum",
         "Agentless SSH discovery & telemetry",
-        "Zero-Knowledge WebCrypto Vault (AES-256)",
+        "AES-256-GCM Credential Vault",
         "Live system status & TCP ping probes",
         "Standard metrics (CPU, RAM, Disk, Net)",
         "Single-user or team viewer access",
@@ -95,7 +95,7 @@ export function PortalPricing({ billingCycle, setBillingCycle, onOpenCheckout }:
       items: [
         { feature: "Managed Server Nodes", free: "Up to 10", pro: "Up to 100", ent: "Unlimited" },
         { feature: "Agentless SSH Architecture", free: true, pro: true, ent: true },
-        { feature: "Zero-Knowledge AES-256-GCM Vault", free: true, pro: true, ent: true },
+        { feature: "AES-256-GCM Credential Vault", free: true, pro: true, ent: true },
         { feature: "Multi-User Access & RBAC", free: "3 Users", pro: "15 Users", ent: "Unlimited" },
         { feature: "Self-Hosted Docker Deployment", free: true, pro: true, ent: true },
       ],

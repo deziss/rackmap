@@ -34,7 +34,7 @@ In scope:
 
 - Authentication and session handling (Better Auth integration, WebSocket upgrade checks)
 - RBAC bypass and privilege escalation between the admin / editor / viewer roles
-- Credential handling — at-rest encryption, the zero-knowledge vault, password reveal, access requests
+- Credential handling — at-rest encryption, the credential vault, password reveal, access requests
 - SSH command construction and the browser terminal (including command injection)
 - SQL/ORM injection, XSS, CSRF, SSRF, and path traversal
 - Audit-log tampering or omission
@@ -52,7 +52,7 @@ RackMap is self-hosted, so deployment configuration is part of your security pos
 
 - [ ] Change `SEED_ADMIN_PASSWORD` immediately after first login
 - [ ] Set a strong, unique `APP_ENCRYPTION_KEY` and `BETTER_AUTH_SECRET` — never reuse the examples
-- [ ] Keep `SSH_ENABLED=false` unless the browser terminal is actually needed
+- [ ] Keep `SSH_ENABLED=false` unless the browser terminal is actually needed (note: this gates only the interactive terminal — metrics, discovery, logs, ATOP and OS-user management still run commands over SSH)
 - [ ] Set `TRUSTED_ORIGINS` / `WEB_ORIGIN` explicitly rather than leaving CORS open
 - [ ] Terminate TLS at a reverse proxy; do not expose the container port directly to the internet
 - [ ] Restrict network access to the RackMap host — it holds credentials for your entire fleet

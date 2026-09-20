@@ -3,10 +3,24 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../../db.js";
 import { requireSession } from "../../middleware/session.js";
+import { requirePermission } from "../../middleware/require-permission.js";
+import { writeAudit } from "../../lib/audit.js";
 import { SslStatusCreateInput, SslStatusUpdateInput, SslStatusListQuery } from "@inv/shared";
 import { scanAllDomains, fetchSslCert } from "../health/ssl-checker.js";
 
 const sslRoutes = new Hono().use(requireSession);
+
+/** Audit context from the request. SSL mutations reach the network and the DB, so they are recorded. */
+function auditCtx(c: any) {
+  const user = c.get("user");
+  return { actorId: user?.id, actorEmail: user?.email, ip: c.req.header("x-forwarded-for") ?? c.req.header("x-real-ip") ?? null };
+}
+
+/** Parses a positive integer route param, or null when malformed (NaN previously reached Prisma). */
+function intParam(c: any, name: string): number | null {
+  const n = Number.parseInt(c.req.param(name), 10);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
 
 // List SSL Statuses
 sslRoutes.get("/", zValidator("query", SslStatusListQuery), async (c) => {
@@ -137,17 +151,19 @@ sslRoutes.get("/", zValidator("query", SslStatusListQuery), async (c) => {
 });
 
 // Trigger Scan
-sslRoutes.post("/scan", async (c) => {
+sslRoutes.post("/scan", requirePermission({ server: ["check"] }), async (c) => {
   // In a real app this might be a background job. We'll await it for now.
   await scanAllDomains(true);
+  await writeAudit({ ctx: auditCtx(c), category: "data", action: "ssl.scan_all", entity: "SslStatus" });
   return c.json({ success: true, message: "Scan completed." });
 });
 
 // Scan a single specific domain (force)
-sslRoutes.post("/:id/scan", async (c) => {
-  const id = parseInt(c.req.param("id"), 10);
+sslRoutes.post("/:id/scan", requirePermission({ server: ["check"] }), async (c) => {
+  const id = intParam(c, "id");
+  if (id === null) return c.json({ error: { code: "BAD_REQUEST", message: "Invalid id" } }, 400);
   const ssl = await prisma.sslStatus.findUnique({ where: { id } });
-  if (!ssl) return c.json({ error: "Not found" }, 404);
+  if (!ssl) return c.json({ error: { code: "NOT_FOUND", message: "Not found" } }, 404);
 
   try {
     const cert = await fetchSslCert(ssl.domain);
@@ -182,12 +198,12 @@ sslRoutes.post("/:id/scan", async (c) => {
       where: { id: ssl.id },
       data: { status: "error", lastError: e.message, lastScannedAt: new Date() }
     });
-    return c.json({ error: e.message }, 500);
+    return c.json({ error: { code: "SCAN_FAILED", message: "Certificate scan failed" } }, 500);
   }
 });
 
 // Create manual domain entry
-sslRoutes.post("/", zValidator("json", SslStatusCreateInput), async (c) => {
+sslRoutes.post("/", requirePermission({ server: ["create"] }), zValidator("json", SslStatusCreateInput), async (c) => {
   const data = c.req.valid("json");
   let normalizedDomain = data.domain.trim().toLowerCase();
   normalizedDomain = normalizedDomain.replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
@@ -199,9 +215,13 @@ sslRoutes.post("/", zValidator("json", SslStatusCreateInput), async (c) => {
         where: { id: existing.id },
         data: { ...data, domain: normalizedDomain, deletedAt: null, isManual: true }
       });
+      await writeAudit({
+        ctx: auditCtx(c), category: "data", action: "ssl.restore", entity: "SslStatus",
+        entityId: String(existing.id), before: existing, after: restored,
+      });
       return c.json(restored, 200);
     }
-    return c.json({ error: "Domain already tracked" }, 409);
+    return c.json({ error: { code: "CONFLICT", message: "Domain already tracked" } }, 409);
   }
 
   const ssl = await prisma.sslStatus.create({
@@ -210,6 +230,11 @@ sslRoutes.post("/", zValidator("json", SslStatusCreateInput), async (c) => {
       domain: normalizedDomain,
       isManual: true,
     }
+  });
+
+  await writeAudit({
+    ctx: auditCtx(c), category: "data", action: "ssl.create", entity: "SslStatus",
+    entityId: String(ssl.id), after: ssl,
   });
 
   // Automatically attempt initial scan
@@ -245,29 +270,49 @@ sslRoutes.post("/", zValidator("json", SslStatusCreateInput), async (c) => {
 });
 
 // Update
-sslRoutes.patch("/:id", zValidator("json", SslStatusUpdateInput), async (c) => {
-  const id = parseInt(c.req.param("id"), 10);
+sslRoutes.patch("/:id", requirePermission({ server: ["update"] }), zValidator("json", SslStatusUpdateInput), async (c) => {
+  const id = intParam(c, "id");
+  if (id === null) return c.json({ error: { code: "BAD_REQUEST", message: "Invalid id" } }, 400);
   const data = c.req.valid("json");
+
+  const before = await prisma.sslStatus.findUnique({ where: { id } });
+  if (!before) return c.json({ error: { code: "NOT_FOUND", message: "Not found" } }, 404);
 
   const ssl = await prisma.sslStatus.update({
     where: { id },
     data
   });
 
+  await writeAudit({
+    ctx: auditCtx(c), category: "data", action: "ssl.update", entity: "SslStatus",
+    entityId: String(id), before, after: ssl,
+  });
+
   return c.json(ssl);
 });
 
 // Delete (soft delete)
-sslRoutes.delete("/:id", async (c) => {
-  const id = parseInt(c.req.param("id"), 10);
+sslRoutes.delete("/:id", requirePermission({ server: ["delete"] }), async (c) => {
+  const id = intParam(c, "id");
+  if (id === null) return c.json({ error: { code: "BAD_REQUEST", message: "Invalid id" } }, 400);
+  const before = await prisma.sslStatus.findUnique({ where: { id } });
+  if (!before) return c.json({ error: { code: "NOT_FOUND", message: "Not found" } }, 404);
   await prisma.sslStatus.update({ where: { id }, data: { deletedAt: new Date() } });
+  await writeAudit({
+    ctx: auditCtx(c), category: "data", action: "ssl.delete", entity: "SslStatus",
+    entityId: String(id), before,
+  });
   return c.json({ success: true });
 });
 
 // Restore
-sslRoutes.post("/:id/restore", async (c) => {
-  const id = parseInt(c.req.param("id"), 10);
+sslRoutes.post("/:id/restore", requirePermission({ server: ["restore"] }), async (c) => {
+  const id = intParam(c, "id");
+  if (id === null) return c.json({ error: { code: "BAD_REQUEST", message: "Invalid id" } }, 400);
   await prisma.sslStatus.update({ where: { id }, data: { deletedAt: null } });
+  await writeAudit({
+    ctx: auditCtx(c), category: "data", action: "ssl.restore", entity: "SslStatus", entityId: String(id),
+  });
   return c.json({ success: true });
 });
 

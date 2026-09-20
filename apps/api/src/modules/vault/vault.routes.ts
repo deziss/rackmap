@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { requireSession } from "../../middleware/session.js";
 import { requirePermission } from "../../middleware/require-permission.js";
+import { can } from "../../lib/permissions.js";
 import { writeAudit } from "../../lib/audit.js";
 import { VaultInitInput, VaultUnlockInput, VaultResetInput } from "@inv/shared";
 import {
@@ -84,11 +85,21 @@ export const vaultRoutes = new Hono()
   // POST /vault/unlock-global (admin only)
   .post(
     "/unlock-global",
-    requirePermission({ server: ["update"] }),
+    requirePermission({ vault: ["unlockGlobal"] }),
     zValidator("json", z.object({ passphrase: z.string().min(1), persistToEnv: z.boolean().optional() })),
     async (c) => {
       const { passphrase, persistToEnv } = c.req.valid("json");
       const user = c.get("user");
+
+      // Persisting writes the master passphrase to .env in plaintext, so it
+      // needs its own permission rather than riding along with the unlock.
+      if (persistToEnv && !can(user?.role ?? "viewer", "vault", "persist")) {
+        return c.json(
+          { error: { code: "FORBIDDEN", message: "Not permitted to persist the vault passphrase to disk" } },
+          403,
+        );
+      }
+
       try {
         const result = await unlockVaultGlobal(passphrase, !!persistToEnv);
         await writeAudit({
@@ -96,6 +107,7 @@ export const vaultRoutes = new Hono()
           category: "security",
           action: "vault.unlock_global",
           entity: "vault",
+          after: { persistedToEnv: !!persistToEnv },
         });
         return c.json(result);
       } catch (err: any) {
@@ -107,7 +119,7 @@ export const vaultRoutes = new Hono()
   // POST /vault/lock-global (admin only)
   .post(
     "/lock-global",
-    requirePermission({ server: ["update"] }),
+    requirePermission({ vault: ["unlockGlobal"] }),
     async (c) => {
       const user = c.get("user");
       const result = lockVaultGlobal();

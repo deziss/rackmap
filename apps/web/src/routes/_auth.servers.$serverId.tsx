@@ -611,6 +611,7 @@ function ServerDetailPage() {
         <OverviewTab
           server={server}
           hw={hw}
+          canManage={canAdmin}
           onAddCustomKey={() => setAddSshKeyOpen(true)}
           onOpenPasswordModal={() => setServerPasswordDialogOpen(true)}
         />
@@ -737,11 +738,14 @@ function ServerDetailPage() {
 function OverviewTab({
   server,
   hw,
+  canManage,
   onAddCustomKey,
   onOpenPasswordModal,
 }: {
   server: any;
   hw: ServerHardwareInfo | null;
+  /** editor+ — the SSH key, auto-update and alert-channel endpoints require server:update. */
+  canManage: boolean;
   onAddCustomKey: () => void;
   onOpenPasswordModal: () => void;
 }) {
@@ -1070,14 +1074,16 @@ function OverviewTab({
         </Card>
       )}
 
-      {/* SSH Key Access & Host Key Discovery */}
-      <SshKeyAccessCard server={server} onAddCustomKey={onAddCustomKey} onOpenPasswordModal={onOpenPasswordModal} />
+      {/* SSH Key Access & Host Key Discovery — editor+ only */}
+      {canManage && (
+        <SshKeyAccessCard server={server} onAddCustomKey={onAddCustomKey} onOpenPasswordModal={onOpenPasswordModal} />
+      )}
 
-      {/* Automated System Updates (Unattended-Upgrades) */}
-      <AutoUpdateCard serverId={server.id} />
+      {/* Automated System Updates (Unattended-Upgrades) — editor+ only */}
+      {canManage && <AutoUpdateCard serverId={server.id} />}
 
-      {/* Alert Channels & Live Notification Dispatcher (CloudScope Feature) */}
-      <AlertChannelsCard serverId={server.id} />
+      {/* Alert Channels & Live Notification Dispatcher (CloudScope Feature) — editor+ only */}
+      {canManage && <AlertChannelsCard serverId={server.id} />}
     </div>
   );
 }
@@ -1285,7 +1291,7 @@ function SshKeyAccessCard({
                     )}
                   </div>
                   <div className="text-[11px] text-muted-foreground font-mono truncate max-w-md">
-                    {k.fingerprint} {k.path && `· ${k.path}`}
+                    {k.fingerprint}
                   </div>
                 </div>
 

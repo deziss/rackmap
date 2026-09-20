@@ -177,7 +177,7 @@ export function VaultUnlockDialog({ open, onOpenChange, onSuccess }: VaultUnlock
               <DialogDescription className="text-xs text-muted-foreground mt-0.5">
                 {mode === "reset"
                   ? "Re-initialize the master vault key with a new passphrase."
-                  : "Zero-knowledge PBKDF2/AES-256 envelope encryption for server credentials."}
+                  : "PBKDF2/AES-256 envelope encryption for server credentials."}
               </DialogDescription>
             </div>
           </div>

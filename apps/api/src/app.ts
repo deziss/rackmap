@@ -6,6 +6,7 @@ import { auth } from "./auth.js";
 import { onError } from "./lib/errors.js";
 import { prisma } from "./db.js";
 import { writeAuditDirect } from "./lib/audit.js";
+import { publicRoutes } from "./modules/public/public.routes.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
 import { meRoutes } from "./modules/me/me.routes.js";
 import { lookupRoutes } from "./modules/lookups/lookup.routes.js";
@@ -29,9 +30,14 @@ export function createApp() {
   const app = new Hono();
 
   app.use(logger());
-  // Reflect origin to support any IP/hostname when TRUSTED_ORIGINS=* (internal tool default).
-  // With credentials:true, CORS requires an exact origin echo — can't use literal "*".
-  const trustedList = env.TRUSTED_ORIGINS === "*" ? null : env.TRUSTED_ORIGINS.split(",").map((o) => o.trim());
+  // TRUSTED_ORIGINS defaults to WEB_ORIGIN (see env.ts), so an unconfigured deployment is
+  // locked to its own web origin. "*" is an explicit opt-in that reflects any IP/hostname back
+  // — with credentials:true CORS can't send a literal "*", so the caller's origin is echoed.
+  // env.ts emits a boot warning whenever that wildcard is active.
+  const trustedList =
+    env.TRUSTED_ORIGINS === "*"
+      ? null
+      : env.TRUSTED_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean);
   app.use(
     cors({
       origin: trustedList ? trustedList : (origin) => origin,
@@ -100,6 +106,9 @@ export function createApp() {
 
   // Health (no auth)
   app.route("/health", healthRoutes);
+
+  // Unauthenticated: what the login screen needs before a session exists.
+  app.route("/api/v1/public", publicRoutes);
 
   // Authenticated app routes
   app.route("/api/v1/me", meRoutes);
