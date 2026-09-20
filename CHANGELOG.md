@@ -49,7 +49,10 @@ Completes the remediation started in 0.6.1 and makes RackMap usable as a source 
 - `X-Forwarded-For` is only honoured when `TRUST_PROXY=true`. It previously set the audit-log IP and the
   rate-limit bucket unconditionally, so both were attacker-controlled.
 - Bans and role changes take effect on the next request; authenticated routes no longer read a cached session.
-- Containers run as a non-root user, ship production dependencies only, and install from a frozen lockfile.
+- Containers run as a non-root user and install from a frozen lockfile. They still carry devDependencies:
+  `pnpm deploy --prod` prunes correctly, but under pnpm's isolated layout the generated Prisma client becomes
+  unreachable from the pruned tree, and the Prisma CLI needed for `migrate deploy` is itself a devDependency.
+  A larger image beats a broken one; tracked as follow-up.
 - Seeding is idempotent: it skips entirely once any user exists, gates demo accounts and sample servers behind
   `SEED_DEMO_DATA`, and refuses to create the first admin with a published default password in production.
 - Password reveal now consults the RBAC source of truth instead of comparing role strings inline.

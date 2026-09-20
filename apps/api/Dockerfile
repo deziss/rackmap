@@ -22,24 +22,31 @@ RUN pnpm --filter @inv/api build
 # Generate Prisma client
 RUN pnpm --filter @inv/api exec prisma generate
 
-# Prune dev dependencies so the runtime image does not ship tsup, tsx, vitest
-# and typescript. Prisma's CLI is a devDependency but is needed at start for
-# `migrate deploy`, so it is reinstalled explicitly below.
-RUN pnpm --filter @inv/api --prod deploy /app/pruned
+# NOTE: the runtime image still carries devDependencies.
+#
+# `pnpm deploy --prod` prunes them correctly, but under pnpm's isolated
+# node_modules layout the generated Prisma client ends up unreachable from the
+# pruned tree (`Cannot find module '.prisma/client/default'`), and the Prisma
+# CLI — needed at start for `migrate deploy` — is itself a devDependency.
+# Shipping a slightly larger image is preferable to shipping a broken one, so
+# the full dependency tree is copied below. Revisit when Prisma's pnpm story
+# improves.
 
 # ── runtime ───────────────────────────────────────────────────────────────────
 FROM node:24-alpine AS runtime
 RUN corepack enable pnpm
 WORKDIR /app
 
-COPY --from=builder /app/pruned/node_modules ./node_modules
-COPY --from=builder /app/pruned/package.json ./package.json
-COPY --from=builder /app/apps/api/dist ./dist
-COPY --from=builder /app/apps/api/prisma ./prisma
-# The generated Prisma client lives in the builder's node_modules.
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/pnpm-workspace.yaml ./
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
+COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
+
+WORKDIR /app/apps/api
 
 # /data holds the SQLite database and any SSH keys the operator drops in, so it
 # must be writable by the unprivileged user the process runs as.
@@ -60,4 +67,4 @@ USER node
 # ensure-baseline adopts databases created by the old `db push` image into the
 # migration history first, so an upgrade does not abort on "table already
 # exists". Seeding is idempotent and self-limiting (see seed.ts).
-CMD ["sh", "-c", "node prisma/ensure-baseline.mjs && node_modules/.bin/prisma migrate deploy && node dist/seed.js && node dist/index.js"]
+CMD ["sh", "-c", "node prisma/ensure-baseline.mjs && pnpm exec prisma migrate deploy && node dist/seed.js && node dist/index.js"]

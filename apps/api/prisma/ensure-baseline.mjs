@@ -20,6 +20,11 @@ import { PrismaClient } from "@prisma/client";
 
 const BASELINE = "20260921000000_baseline";
 
+/** Resolved at call time so this works in both the repo and the container. */
+function prismaCli() {
+  return ["exec", "prisma"];
+}
+
 /** Inspect the database, then release the connection before shelling out. */
 async function needsBaseline() {
   const prisma = new PrismaClient();
@@ -63,11 +68,11 @@ async function main() {
   // aborts rather than dropping anything, which is exactly the guarantee we
   // want here. The old image passed --accept-data-loss; this deliberately does
   // not.
-  execFileSync("node_modules/.bin/prisma", ["db", "push", "--skip-generate"], {
+  execFileSync("pnpm", [...prismaCli(), "db", "push", "--skip-generate"], {
     stdio: "inherit",
   });
 
-  execFileSync("node_modules/.bin/prisma", ["migrate", "resolve", "--applied", BASELINE], {
+  execFileSync("pnpm", [...prismaCli(), "migrate", "resolve", "--applied", BASELINE], {
     stdio: "inherit",
   });
 }
