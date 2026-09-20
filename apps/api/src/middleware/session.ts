@@ -22,9 +22,24 @@ type UserWithAdminFields = {
   role?: string | null;
 };
 
-/** Require valid, non-banned session. Returns 401 if absent, 403 if banned. */
+/**
+ * Require a valid, non-banned caller. Returns 401 if absent, 403 if banned.
+ *
+ * If an earlier middleware already established the caller (currently
+ * `apiKeyAuth`, mounted globally on /api/v1/*), this yields to it rather than
+ * demanding a cookie session — that is what lets a Bearer API key satisfy the
+ * same route guards as a browser session.
+ */
 export async function requireSession(c: Context, next: Next) {
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  if (c.get("user")) return next();
+
+  const session = await auth.api.getSession({
+    headers: c.req.raw.headers,
+    // Ban and role changes delete DB sessions but cannot invalidate an already
+    // issued cookie cache entry. Read through to the database so a ban takes
+    // effect on the next request instead of up to cookieCache.maxAge later.
+    query: { disableCookieCache: true },
+  });
   if (!session) {
     return c.json({ error: { code: "UNAUTHORIZED", message: "Authentication required" } }, 401);
   }
@@ -43,11 +58,5 @@ export async function requireSession(c: Context, next: Next) {
   return next();
 }
 
-/** Extract caller IP (supports X-Forwarded-For). */
-export function getClientIp(c: Context): string {
-  return (
-    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
-    c.req.header("x-real-ip") ??
-    "unknown"
-  );
-}
+/** Re-exported for existing importers; the implementation lives in lib/client-ip.ts. */
+export { getClientIp } from "../lib/client-ip.js";

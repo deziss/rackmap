@@ -3,7 +3,9 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { requireSession } from "../../middleware/session.js";
 import { requirePermission } from "../../middleware/require-permission.js";
+import { revealPasswordResourceLimit, revealPasswordUserLimit } from "../../middleware/rate-limit.js";
 import { getAuditCtx } from "../../lib/audit.js";
+import { can } from "../../lib/permissions.js";
 import { ServiceCreateInput, ServiceUpdateInput, ServiceListQuery } from "@inv/shared";
 import {
   listServices,
@@ -78,15 +80,26 @@ export const serviceRoutes = new Hono()
     },
   )
 
+  // POST /services/:id/reveal-password — server:revealPassword OR approved AccessRequest
+  //
+  // Rate limited: 5 per service and 20 overall per user per 5 minutes. The
+  // per-user ceiling is the same middleware instance the server route uses, so
+  // one budget covers both kinds of stored credential rather than two.
   .post(
     "/:id/reveal-password",
     zValidator("param", idParamSchema),
+    revealPasswordResourceLimit,
+    revealPasswordUserLimit,
     async (c) => {
       const user = c.get("user") as { id?: string; role?: string } | undefined;
       if (!user?.id) return c.json({ error: { code: "UNAUTHORIZED", message: "Unauthorized" } }, 401);
       const { id } = c.req.valid("param");
 
-      const hasDirectPerm = user.role === "admin" || user.role === "editor";
+      // Ask the RBAC single source of truth rather than hardcoding role names.
+      // Services reuse the `server` permission set, as the rest of this file does
+      // (see the POST / comment); a dedicated `service:revealPassword` would be
+      // a shared-package change and is out of scope here.
+      const hasDirectPerm = can(user.role ?? "viewer", "server", "revealPassword");
       if (!hasDirectPerm) {
         // Check for valid approved AccessRequest
         const req = await prisma.accessRequest.findFirst({

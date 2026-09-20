@@ -20,8 +20,34 @@ const { hashPassword } = await import(
 async function main() {
   await prisma.$queryRawUnsafe("PRAGMA journal_mode=WAL");
 
+  // This runs on every container start. Re-seeding a live installation would
+  // resurrect deleted demo accounts and reset roles out from under the
+  // operator, so bail out as soon as the instance has been set up.
+  const userCount = await prisma.user.count();
+  if (userCount > 0) {
+    console.log(`Seed skipped — ${userCount} user(s) already exist.`);
+    return;
+  }
+
+  // Demo accounts and sample servers are for local development only. They are
+  // fixed, publicly documented credentials; creating them on a production
+  // instance hands anyone who read the repo a working login.
+  const isProduction = (process.env["NODE_ENV"] ?? "development") === "production";
+  const seedDemoData = process.env["SEED_DEMO_DATA"] === "true" || !isProduction;
+
   const email = process.env["SEED_ADMIN_EMAIL"] ?? "admin@inventory.local";
   const password = process.env["SEED_ADMIN_PASSWORD"] ?? "Admin123!";
+
+  // Refuse to create the very first admin with a credential that is published
+  // in this repository. Only reached on a genuinely empty database, so this
+  // cannot lock an existing installation out.
+  const WEAK_DEFAULTS = new Set(["Admin123!", "changeme123", "Change-Me-Now-123!", "admin", "password"]);
+  if (isProduction && (WEAK_DEFAULTS.has(password) || password.length < 12)) {
+    throw new Error(
+      "Refusing to seed the initial admin with a weak or default password. " +
+        "Set SEED_ADMIN_PASSWORD to a strong value (12+ characters) and start again.",
+    );
+  }
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (!existing) {
@@ -52,11 +78,11 @@ async function main() {
     console.log("Admin user already exists:", email);
   }
 
-  // Seed test users for editor and viewer roles
-  const testUsers: Array<{ email: string; name: string; role: string; password: string }> = [
+  // Seed test users for editor and viewer roles (development only)
+  const testUsers: Array<{ email: string; name: string; role: string; password: string }> = seedDemoData ? [
     { email: "editor@inventory.local", name: "Editor", role: "editor", password: "Editor123!" },
     { email: "viewer@inventory.local", name: "Viewer", role: "viewer", password: "Viewer123!" },
-  ];
+  ] : [];
   for (const u of testUsers) {
     const ex = await prisma.user.findUnique({ where: { email: u.email } });
     if (!ex) {
@@ -98,7 +124,7 @@ async function main() {
     { hostname: "gpu02.nuvo.ai", ip: "192.168.1.102", username: "ubuntu", password: "sample-pass-2", sshPort: 2222, cpu: "Intel Xeon Gold 6248", ram: "256GB", gpuCount: 4, remark: "Secondary node — SSH port 2222", domain: "nuvo.ai", environment: "cloud", cloudProviderId: cloudProvider?.id },
   ];
 
-  for (const { password: p, ...rest } of sampleServers) {
+  for (const { password: p, ...rest } of (seedDemoData ? sampleServers : [])) {
     const exists = await prisma.server.findFirst({ where: { hostname: rest.hostname } });
     if (!exists) {
       await prisma.server.create({
@@ -110,4 +136,11 @@ async function main() {
   console.log("Seed complete");
 }
 
-main().catch(console.error).finally(() => prisma.$disconnect());
+main()
+  .catch((err) => {
+    // Exit non-zero so the container start chain stops here rather than booting
+    // an app against a half-initialised database.
+    console.error("Seed failed:", err);
+    process.exitCode = 1;
+  })
+  .finally(() => prisma.$disconnect());

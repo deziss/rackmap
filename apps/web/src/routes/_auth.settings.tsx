@@ -63,6 +63,10 @@ function VaultConfigurationSection() {
   const [showReset, setShowReset] = useState(false);
   const [newPassphrase, setNewPassphrase] = useState("");
   const [confirmPassphrase, setConfirmPassphrase] = useState("");
+  const [currentPassphrase, setCurrentPassphrase] = useState("");
+  // Re-keying preserves stored credentials; destroying does not. Default to the
+  // safe path and make the destructive one a deliberate choice.
+  const [forceDestroy, setForceDestroy] = useState(false);
 
   const isUnlocked = !!vaultStatus?.isUnlocked;
   const isGlobal = !!vaultStatus?.isGlobalUnlocked;
@@ -109,13 +113,27 @@ function VaultConfigurationSection() {
       toast.error("Passphrases do not match");
       return;
     }
+    if (!forceDestroy && !currentPassphrase) {
+      toast.error("Enter the current passphrase, or choose to destroy and re-key");
+      return;
+    }
     setLoading(true);
     try {
-      await resetVault(newPassphrase);
-      toast.success("Master vault reset and unlocked with new passphrase!");
+      const res = await resetVault(
+        forceDestroy
+          ? { newPassphrase, forceDestroy: true }
+          : { newPassphrase, currentPassphrase },
+      );
+      toast.success(
+        res.mode === "destroyed"
+          ? "Vault re-keyed. Credentials encrypted under the old passphrase must be re-entered."
+          : "Master passphrase changed. Existing credentials were preserved.",
+      );
       setShowReset(false);
       setNewPassphrase("");
       setConfirmPassphrase("");
+      setCurrentPassphrase("");
+      setForceDestroy(false);
       qc.invalidateQueries({ queryKey: vaultKeys.status });
     } catch (err: any) {
       toast.error(err.message || "Failed to reset vault");
@@ -243,12 +261,23 @@ function VaultConfigurationSection() {
         <div className="mt-4 p-4 border border-destructive/30 rounded-lg bg-destructive/5 space-y-3">
           <div className="flex items-center gap-2 text-destructive font-semibold text-xs">
             <ShieldAlert className="h-4 w-4" />
-            <span>Reset Master Vault Passphrase</span>
+            <span>Change Master Vault Passphrase</span>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Warning: Resetting creates a new Master Key. Existing stored passwords may need to be re-entered if encrypted under a previous forgotten passphrase.
+            {forceDestroy
+              ? "This mints a brand-new master key. Every credential encrypted under the old passphrase becomes permanently unreadable and must be re-entered. Only use this if the current passphrase is lost."
+              : "Enter the current passphrase to re-key in place. Stored credentials are preserved."}
           </p>
           <form onSubmit={handleResetVault} className="space-y-2.5">
+            {!forceDestroy && (
+              <Input
+                type="password"
+                placeholder="Current Master Passphrase"
+                value={currentPassphrase}
+                onChange={(e) => setCurrentPassphrase(e.target.value)}
+                className="text-xs font-mono bg-background/50"
+              />
+            )}
             <Input
               type="password"
               placeholder="New Master Passphrase (min 8 chars)"
@@ -263,9 +292,18 @@ function VaultConfigurationSection() {
               onChange={(e) => setConfirmPassphrase(e.target.value)}
               className="text-xs font-mono bg-background/50"
             />
+            <label className="flex items-center gap-2 pt-1 text-[11px] text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={forceDestroy}
+                onChange={(e) => setForceDestroy(e.target.checked)}
+                className="accent-destructive"
+              />
+              <span>I have lost the current passphrase — destroy and re-key</span>
+            </label>
             <div className="flex items-center gap-2 pt-1">
               <Button type="submit" size="sm" variant="destructive" className="h-7 text-xs" disabled={loading || !newPassphrase}>
-                Confirm Vault Reset
+                {forceDestroy ? "Destroy & Re-key Vault" : "Change Passphrase"}
               </Button>
               <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowReset(false)}>
                 Cancel

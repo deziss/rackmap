@@ -514,13 +514,25 @@ If `VAULT_PASSPHRASE` is left unset in `.env`:
 2. In the Web UI, click the **"Vault: Locked"** badge on the **Security** page or the header of any **Server Detail** page (`/servers/:id`).
 3. Enter your master passphrase. The session remains authorized for 30 minutes before auto-locking.
 
-#### Resetting or Re-Keying the Vault
-If an administrator forgets the master vault passphrase or needs to rotate keys:
-1. Open the **Credential Vault** modal on `/security` or `/servers/:id`.
-2. Click **"Forgot passphrase? Reset vault"** (if locked) or **"Manage / Reset Passphrase" → "Reset / Re-key"** (if unlocked).
-3. Enter and confirm the new master passphrase (minimum 8 characters).
-4. Click **"Reset Master Vault"**. The system generates a fresh salt, KEK, and DEK.
-*(Note: Any server passwords encrypted under a previous lost passphrase will need to be re-entered).*
+#### Changing or Recovering the Master Passphrase
+Two different operations live behind the same dialog. Only one of them loses data.
+
+**Rotating the passphrase (safe, the normal case)**
+1. Open the **Credential Vault** modal on `/security` or `/servers/:id`, or go to **Settings → Credential Vault**.
+2. Click **"Change Passphrase"**.
+3. Enter the **current** passphrase, then the new one twice (minimum 8 characters).
+4. The data-encryption key is re-wrapped under the new passphrase. **Every stored credential keeps working** — nothing needs re-entering.
+
+**Recovering a forgotten passphrase (destructive)**
+1. In the same dialog, tick **"I have lost the current passphrase — destroy and re-key"**.
+2. Confirm as prompted.
+3. A brand-new data-encryption key is generated.
+
+> ⚠️ The destructive path is irreversible. Every server and service password encrypted under the old passphrase
+> becomes permanently unreadable and must be re-entered by hand. Only use it when the passphrase is genuinely lost.
+
+A request that supplies neither the current passphrase nor the explicit destroy flag is rejected — the API will
+not guess which one you meant.
 
 ---
 

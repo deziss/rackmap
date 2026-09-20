@@ -6,8 +6,14 @@ import { prisma } from "../db.js";
 import { env } from "../env.js";
 import { decryptPasswordWithVault } from "./vault.service.js";
 import { resolveTargetHost } from "../lib/target-resolver.js";
+import { createHostVerifier, type HostKeyVerdict } from "./ssh-host-key.service.js";
 
-export type SshErrorKind = "not_found" | "no_credentials" | "unreachable" | "auth_failed";
+export type SshErrorKind =
+  | "not_found"
+  | "no_credentials"
+  | "unreachable"
+  | "auth_failed"
+  | "host_key_changed";
 
 export class SshError extends Error {
   readonly kind: SshErrorKind;
@@ -64,7 +70,14 @@ export function buildSudoCommand(cmd: string, password?: string): string {
 export async function connectToServer(
   serverId: number,
   overridePasswordOrOptions?: string | ConnectOptions,
-): Promise<{ client: Client; target: SshTarget; password?: string; authMethodUsed?: "key" | "password" }> {
+): Promise<{
+  client: Client;
+  target: SshTarget;
+  password?: string;
+  authMethodUsed?: "key" | "password";
+  /** Host-key verification outcome for this connection (see ssh-host-key.service.ts). */
+  hostKey?: HostKeyVerdict;
+}> {
   const opts: ConnectOptions =
     typeof overridePasswordOrOptions === "string"
       ? { overridePassword: overridePasswordOrOptions, preferredAuth: "password" }
@@ -172,6 +185,11 @@ export async function connectToServer(
     const client = new Client();
     let settled = false;
     let authMethodUsed: "key" | "password" = "key";
+    // Set when host-key verification refuses the endpoint. ssh2 reports a refused
+    // key as a generic 'handshake' error ("Host denied (verification failed)"),
+    // which would otherwise surface as a plain "unreachable" and hide the reason.
+    let hostKeyFailure: SshError | null = null;
+    let hostKeyVerdict: HostKeyVerdict | null = null;
 
     const settleReject = (err: SshError) => {
       if (settled) return;
@@ -185,7 +203,25 @@ export async function connectToServer(
       port: server.sshPort,
       username: server.username,
       readyTimeout: env.SSH_CONNECT_TIMEOUT_MS,
-      hostVerifier: () => true,
+      // Host-key verification runs during key exchange, i.e. BEFORE any
+      // authentication method is offered. A refused key therefore aborts the
+      // connection without the password (or the keyboard-interactive answers,
+      // which echo that same password once per prompt) ever leaving this process.
+      hostVerifier: createHostVerifier({
+        host: connectHost,
+        port: server.sshPort,
+        serverId: server.id,
+        policy: env.SSH_HOST_POLICY,
+        onVerdict: (verdict) => {
+          hostKeyVerdict = verdict;
+          if (!verdict.accepted) {
+            hostKeyFailure = new SshError(
+              "host_key_changed",
+              verdict.message ?? `SSH host key verification failed for ${connectHost}:${server.sshPort}`,
+            );
+          }
+        },
+      }),
     };
 
     // Determine authentication strategy
@@ -242,9 +278,15 @@ export async function connectToServer(
       .on("ready", () => {
         if (settled) return;
         settled = true;
-        resolve({ client, target, password, authMethodUsed });
+        resolve({ client, target, password, authMethodUsed, hostKey: hostKeyVerdict ?? undefined });
       })
       .on("error", (err: Error & { level?: string }) => {
+        // A refused host key always wins: report the fingerprint change rather
+        // than ssh2's generic handshake failure.
+        if (hostKeyFailure) {
+          settleReject(hostKeyFailure);
+          return;
+        }
         const kind: SshErrorKind =
           err.level === "client-authentication" ? "auth_failed" : "unreachable";
         const message =
@@ -267,6 +309,11 @@ export function sshErrorToHttp(err: unknown): { status: 404 | 409 | 503; message
         return { status: 409, message: err.message || "Server has no usable SSH credentials" };
       case "auth_failed":
         return { status: 503, message: err.message || "SSH authentication failed" };
+      case "host_key_changed":
+        // 409, not 503: this is a conflict between the pinned key and the key the
+        // endpoint presented. It is operator-actionable and must NOT be retried
+        // blindly the way a transient "unreachable" would be.
+        return { status: 409, message: err.message || "SSH host key verification failed" };
       case "unreachable":
         return { status: 503, message: "Server is unreachable over SSH" };
     }

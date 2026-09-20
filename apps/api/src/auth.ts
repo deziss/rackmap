@@ -33,11 +33,25 @@ export const auth = betterAuth({
   },
 
   session: {
-    cookieCache: { enabled: true, maxAge: 5 * 60 },
+    // The cookie cache lets Better Auth reconstruct a session from a signed
+    // cookie without a DB read. Banning a user deletes their DB sessions but
+    // cannot invalidate an already-issued cache entry, so the window here is
+    // how long a ban or role downgrade could go unnoticed on paths that use
+    // the cache. requireSession passes disableCookieCache, so authenticated
+    // API routes always read through; this window applies to Better Auth's own
+    // endpoints only. Kept short regardless.
+    cookieCache: { enabled: true, maxAge: 60 },
   },
 
   advanced: {
     useSecureCookies,
+    ipAddress: {
+      // Better Auth keys its rate limiter on the client IP. By default it reads
+      // X-Forwarded-For with no proxy-trust check, so rotating that header gives
+      // an attacker an unlimited sign-in bucket. Only honour forwarding headers
+      // when the operator has declared there is a trusted proxy in front.
+      ipAddressHeaders: env.TRUST_PROXY ? ["x-forwarded-for", "x-real-ip"] : [],
+    },
   },
 
   rateLimit: {

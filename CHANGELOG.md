@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-09-21
+
+Completes the remediation started in 0.6.1 and makes RackMap usable as a source of truth for automation.
+**Read "Action required" before upgrading** — the container now runs real migrations, and one default changed.
+
+### Added
+- **API keys that actually authenticate.** `Authorization: Bearer sk_...` works on every `/api/v1` route. The
+  middleware existed since 0.5 but was never mounted, so keys authenticated nothing. Keys now carry a role
+  ceiling (`scopeRole`, defaulting to `viewer`) and an optional expiry. A key can never exceed its creator's
+  role, and it is re-capped at request time against the owner's *current* role — demoting or banning a user
+  immediately demotes their keys.
+- **SSH host-key verification.** Keys are pinned on first contact and compared on every connection, during key
+  exchange and therefore *before* any credential is offered. `SSH_HOST_POLICY=tofu` refuses a changed key;
+  the `accept-any` default pins and warns loudly so an existing fleet can populate the store without an outage.
+  A mismatch never overwrites the stored key.
+- **Prometheus exporter** at `/api/v1/metrics`: server, service and certificate counts by status, per-host
+  up/down and probe latency, probe staleness, GPU counts, and days remaining on every tracked certificate.
+- **Ansible dynamic inventory** — [`contrib/rackmap-inventory.py`](contrib/rackmap-inventory.py), grouping hosts
+  by environment, provider, location, type, owning team, tag, probe status and GPU presence.
+- **Brute-force protection** on password reveal (5 per record, 20 per user per 5 minutes) and the SSH credential
+  test (10 per host, 30 per user). The SSH terminal now caps password attempts per socket instead of allowing
+  unlimited retries for an hour.
+- Live terminals re-check authorization every `SSH_REAUTH_INTERVAL_MS` and close on ban, role downgrade,
+  session revocation or access-request expiry. Previously authorization was checked once at connect.
+- `TRUST_PROXY`, `ALLOW_SELF_SIGNUP`, `SSH_REAUTH_INTERVAL_MS` and `SSH_PRIVATE_KEY_PATH` are now documented,
+  validated settings.
+
+### Changed
+- **Vault passphrase rotation no longer destroys data.** `POST /api/v1/vault/reset` takes
+  `{ currentPassphrase, newPassphrase }` and re-wraps the existing key, preserving every stored credential.
+  The old behaviour — mint a new key and orphan everything — is now only reachable via an explicit
+  `forceDestroy: true`, and the UI puts it behind a separate checkbox.
+- **New encryption envelope.** Secrets are now sealed as `v3.` with a random per-secret salt and a scrypt-derived
+  key, replacing an unsalted single-round SHA-256 derivation. Existing `v1.` data still decrypts unchanged —
+  **no migration or re-encryption is required** — and the derived key is cached so the SSH path does not pay the
+  KDF cost per connection.
+- **Migration history squashed to a single baseline.** The previous history was missing seven tables, so the
+  Docker path (`db push`) and the systemd path (`migrate deploy`) built *different schemas*. Containers now run
+  `migrate deploy`, and existing databases are adopted into the migration history automatically on first start.
+- `X-Forwarded-For` is only honoured when `TRUST_PROXY=true`. It previously set the audit-log IP and the
+  rate-limit bucket unconditionally, so both were attacker-controlled.
+- Bans and role changes take effect on the next request; authenticated routes no longer read a cached session.
+- Containers run as a non-root user, ship production dependencies only, and install from a frozen lockfile.
+- Seeding is idempotent: it skips entirely once any user exists, gates demo accounts and sample servers behind
+  `SEED_DEMO_DATA`, and refuses to create the first admin with a published default password in production.
+- Password reveal now consults the RBAC source of truth instead of comparing role strings inline.
+
+### Fixed
+- Soft-deleted servers were still being SSH-polled every five minutes.
+- A failure in the server sweep also skipped the service sweep and the history prune for that tick; the three
+  jobs are now isolated.
+- Metrics-check failures were swallowed entirely, so a server whose credentials had rotated silently stopped
+  being checked with nothing in the logs.
+- A WebSocket that never reached a shell had no maximum-duration cap at all, and its idle timer was reset by any
+  inbound traffic, so a credential-less socket could be held open indefinitely.
+- Locking your own vault session no longer stops every background job.
+- The test database is reset once per run, so results no longer depend on what a previous run left behind.
+
+### Action required on upgrade
+1. **Docker containers now run `prisma migrate deploy`.** Databases created by earlier images are adopted into
+   the migration history automatically on first start — no manual step. Take a backup first regardless.
+2. **`TRUST_PROXY` defaults to `false`.** Behind a reverse proxy, set `TRUST_PROXY=true` or every audit entry
+   records the proxy's address. The bundled `docker-compose.yml` sets it for you.
+3. **Existing API keys have no `scopeRole`** and therefore inherit their owner's role. Re-mint any key used for
+   automation with `scopeRole: "viewer"`.
+4. Fleets wanting strict host-key checking should run on `accept-any` until every host has been contacted, then
+   switch to `tofu`. See the README.
+
 ## [0.6.1] — 2026-09-21
 
 **Security release. Upgrading is recommended for all deployments.** Several defaults were insecure and several
@@ -53,8 +121,8 @@ of a working deployment if you do not set the matching environment variables.
 - `SSH_ENABLED` was documented as an RCE kill-switch. It gates only the browser SSH terminal — metrics,
   discovery, log viewing, ATOP and OS user management still execute commands over SSH when it is `false`.
   Corrected everywhere it appears.
-- `SSH_HOST_POLICY` is declared but never read, so setting it has no effect. It is now marked as not implemented;
-  real host-key verification is planned for the next release.
+- `SSH_HOST_POLICY` is declared but never read, so setting it has no effect. It is now marked as not implemented.
+  (Implemented in 0.7.0.)
 - Malformed numeric route parameters on SSL endpoints returned a server error instead of a 400.
 
 ### Breaking defaults
@@ -158,7 +226,8 @@ First release prepared for public distribution. No breaking changes to the API o
 - CPU/RAM column handling and GPU field synchronization on update
 - Background polling hardened against invalid ports
 
-[Unreleased]: https://github.com/deziss/rackmap/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/deziss/rackmap/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/deziss/rackmap/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/deziss/rackmap/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/deziss/rackmap/releases/tag/v0.6.0
 [0.5.0]: https://github.com/deziss/rackmap/compare/v0.4.0...v0.5.0

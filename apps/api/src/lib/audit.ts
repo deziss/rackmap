@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db.js";
 import type { AuditAction, AuditCategory } from "@inv/shared";
+import { getClientIp } from "./client-ip.js";
 
 /** Fields that must never appear in audit JSON */
 const REDACTED_FIELDS = new Set(["passwordEnc", "password"]);
@@ -81,6 +82,6 @@ export function getAuditCtx(c: { req: { header: (k: string) => string | undefine
   return {
     actorId: user?.id ?? null,
     actorEmail: user?.email ?? null,
-    ip: c.req.header("x-forwarded-for") ?? c.req.header("x-real-ip") ?? null,
+    ip: getClientIp(c as unknown as Parameters<typeof getClientIp>[0]),
   };
 }

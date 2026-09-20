@@ -1,11 +1,11 @@
 {
   "name": "@inv/api",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsup",
+    "build": "tsup && tsup prisma/seed.ts --format esm --target node22 --out-dir dist --no-clean --sourcemap",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

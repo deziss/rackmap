@@ -207,11 +207,23 @@ export function lockVaultGlobal() {
   });
 }
 
-export function resetVault(passphrase: string) {
-  return apiFetch<{ ok: boolean }>("/api/v1/vault/reset", {
-    method: "POST",
-    body: JSON.stringify({ passphrase }),
-  });
+/**
+ * Change the master vault passphrase.
+ *
+ * Supplying `currentPassphrase` re-keys in place and preserves every stored
+ * credential. `forceDestroy` is the recovery path for a forgotten passphrase:
+ * it mints a brand-new data-encryption key, which permanently orphans anything
+ * encrypted under the old one.
+ */
+export function resetVault(args: {
+  newPassphrase: string;
+  currentPassphrase?: string;
+  forceDestroy?: true;
+}) {
+  return apiFetch<{ ok: boolean; mode: "initialized" | "rekeyed" | "destroyed" }>(
+    "/api/v1/vault/reset",
+    { method: "POST", body: JSON.stringify(args) },
+  );
 }
 
 export const serviceKeys = {

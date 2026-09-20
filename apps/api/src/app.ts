@@ -6,6 +6,9 @@ import { auth } from "./auth.js";
 import { onError } from "./lib/errors.js";
 import { prisma } from "./db.js";
 import { writeAuditDirect } from "./lib/audit.js";
+import { withVaultSession } from "./lib/vault-context.js";
+import { apiKeyAuth } from "./modules/api-keys/api-key.routes.js";
+import { metricsExportRoutes } from "./modules/metrics-export/metrics-export.routes.js";
 import { publicRoutes } from "./modules/public/public.routes.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
 import { meRoutes } from "./modules/me/me.routes.js";
@@ -30,6 +33,10 @@ export function createApp() {
   const app = new Hono();
 
   app.use(logger());
+  // Make the caller's vault session token available to code far from the
+  // request, so an operator who unlocked only their own session can still open
+  // SSH connections. See lib/vault-context.ts.
+  app.use(withVaultSession);
   // TRUSTED_ORIGINS defaults to WEB_ORIGIN (see env.ts), so an unconfigured deployment is
   // locked to its own web origin. "*" is an explicit opt-in that reflects any IP/hostname back
   // — with credentials:true CORS can't send a literal "*", so the caller's origin is echoed.
@@ -110,7 +117,14 @@ export function createApp() {
   // Unauthenticated: what the login screen needs before a session exists.
   app.route("/api/v1/public", publicRoutes);
 
+  // Accept `Authorization: Bearer sk_...` anywhere under /api/v1. This only
+  // ATTACHES a user when a valid key is presented; `requireSession` on each
+  // route group still decides whether authentication is required, so public
+  // routes stay public and cookie traffic is unchanged.
+  app.use("/api/v1/*", apiKeyAuth);
+
   // Authenticated app routes
+  app.route("/api/v1/metrics", metricsExportRoutes);
   app.route("/api/v1/me", meRoutes);
   app.route("/api/v1/lookups", lookupRoutes);
   // importRoutes must be before serverRoutes — /export.xlsx and /export.json are

@@ -16,6 +16,8 @@ interface AlertState {
 
 const state = new Map<number, AlertState>();
 let running = false;
+/** Last failure message per server, so a persistent fault is logged once, not every interval. */
+const lastFailureReason = new Map<number, string>();
 let timer: ReturnType<typeof setInterval> | null = null;
 
 async function checkServer(server: { id: number; hostname: string; ip: string }) {
@@ -93,15 +95,33 @@ async function checkServer(server: { id: number; hostname: string; ip: string })
 
     state.set(server.id, next);
   } catch (err) {
-    // Suppress SSH errors; connection issues are handled by the status ping check
+    // SSH failures are expected when a host is simply down — the TCP status
+    // probe already reports that, so this does not alert. But swallowing the
+    // error entirely meant a server whose credentials had rotated silently
+    // stopped being checked forever, with nothing in the logs. Record it at a
+    // low volume instead: once per server per run, not per failure.
+    const message = err instanceof Error ? err.message : String(err);
+    if (lastFailureReason.get(server.id) !== message) {
+      lastFailureReason.set(server.id, message);
+      console.warn(`[alert] metrics check failed for ${server.hostname} (${server.ip}): ${message}`);
+    }
+    return;
   }
+
+  // Recovered — allow the next failure to be logged again.
+  lastFailureReason.delete(server.id);
 }
 
 export async function runMetricsAlerts() {
   if (running || !env.METRICS_ALERT_ENABLED) return;
   running = true;
   try {
-    const servers = await prisma.server.findMany({ select: { id: true, hostname: true, ip: true } });
+    // `deletedAt: null` matters: without it, soft-deleted servers were still
+    // being SSH-polled every interval, long after an operator removed them.
+    const servers = await prisma.server.findMany({
+      where: { deletedAt: null },
+      select: { id: true, hostname: true, ip: true },
+    });
     const limit = pLimit(env.PING_CONCURRENCY);
     await Promise.allSettled(servers.map((s) => limit(() => checkServer(s))));
   } catch (err) {
