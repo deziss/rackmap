@@ -9,6 +9,15 @@ import { writeAuditDirect } from "./lib/audit.js";
 // Better Auth otherwise infers the cookie "secure" flag from baseURL. Set it explicitly so an
 // https deployment always gets Secure session cookies, including when BETTER_AUTH_URL is left
 // at an internal http:// value behind a TLS-terminating proxy that serves an https WEB_ORIGIN.
+/**
+ * CIDRs treated as proxies when resolving the client IP. Defaults to loopback
+ * plus the RFC1918 ranges, which is where a reverse proxy sits in every
+ * deployment shape this project ships.
+ */
+const trustedProxyCidrs = (env.TRUSTED_PROXY_CIDRS.trim()
+  ? env.TRUSTED_PROXY_CIDRS.split(",").map((c) => c.trim()).filter(Boolean)
+  : ["127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]);
+
 const useSecureCookies =
   env.BETTER_AUTH_URL.startsWith("https://") || env.WEB_ORIGIN.startsWith("https://");
 
@@ -51,6 +60,12 @@ export const auth = betterAuth({
       // an attacker an unlimited sign-in bucket. Only honour forwarding headers
       // when the operator has declared there is a trusted proxy in front.
       ipAddressHeaders: env.TRUST_PROXY ? ["x-forwarded-for", "x-real-ip"] : [],
+      // Without this, Better Auth returns null for any X-Forwarded-For carrying
+      // more than one value rather than guessing which hop is the client — and
+      // the rate limiter then falls back to one shared bucket for every caller.
+      // Defaulting to the private ranges covers the bundled nginx and the usual
+      // ingress/LB case; override for a CDN whose egress is public.
+      ...(env.TRUST_PROXY ? { trustedProxies: trustedProxyCidrs } : {}),
     },
   },
 

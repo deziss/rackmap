@@ -88,6 +88,11 @@ export async function importServices(
               port,
               domain,
               username,
+              // No lazy re-encryption here, deliberately. Every row of a service import is an
+              // insert — nothing is looked up or updated — so there is no stored blob to
+              // upgrade and the value written is already the current envelope. Calling the
+              // upgrade helper would add a second ~27ms scrypt derivation per row on top of
+              // the one encryptSecret already pays, for a guaranteed null.
               passwordEnc: password ? encryptSecret(password) : null,
               documentLink,
               project,

@@ -120,6 +120,11 @@ export async function importServers(
               hostname,
               ip,
               username: username || "root",
+              // No lazy re-encryption here, deliberately. This loop only ever inserts: a row
+              // whose hostname already exists is skipped above, so there is no stored blob to
+              // upgrade, and what is written is already the current envelope. Calling the
+              // upgrade helper would add a second ~27ms scrypt derivation per row on top of
+              // the one encryptSecret already pays, for a guaranteed null.
               passwordEnc: password ? encryptSecret(password) : null,
               sshPort,
               cpu,

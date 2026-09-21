@@ -1,7 +1,11 @@
 import { runCheck } from "../../services/status.service.js";
 import { prisma } from "../../db.js";
 import { encryptSecret, decryptSecret } from "../../lib/crypto.js";
-import { encryptPasswordWithVault, decryptPasswordWithVault } from "../../services/vault.service.js";
+import {
+  encryptPasswordWithVault,
+  decryptPasswordWithVault,
+  reencryptPasswordForStorage,
+} from "../../services/vault.service.js";
 import { notFound, conflict } from "../../lib/errors.js";
 import { writeAudit, redact, type AuditCtx } from "../../lib/audit.js";
 import type { ServerCreateInput, ServerUpdateInput, ServerListQuery, ServerDto } from "@inv/shared";
@@ -183,6 +187,8 @@ export async function createServer(input: ServerCreateInput, ctx: AuditCtx = {},
     const s = await tx.server.create({
       data: {
         ...data,
+        // Nothing to upgrade on create: there is no stored row yet, and what we write here is
+        // already the current envelope (vault v2 when unlocked, otherwise crypto.ts v3).
         passwordEnc: password ? encryptPasswordWithVault(password, sessionToken) : null,
         updatedByEmail: ctx.actorEmail ?? null,
         tags: tagIds?.length
@@ -222,6 +228,24 @@ export async function updateServer(id: number, input: ServerUpdateInput, ctx: Au
     password === null ? null :
     encryptPasswordWithVault(password, sessionToken);
 
+  /**
+   * Lazy envelope upgrade. The row is being written anyway, so a credential still sitting in
+   * the legacy unsalted v1 envelope is moved onto the current one for free.
+   *
+   * Only considered when this request is not itself writing the column — a supplied password
+   * (or an explicit clear) always wins, so a re-encrypted old value can never clobber a new
+   * one. reencryptPasswordForStorage returns null for a vault-wrapped "v2." blob, for a value
+   * already on the current envelope, and for anything that fails to decrypt; null means
+   * "leave the column alone", so a failed upgrade never costs a stored credential.
+   *
+   * Deliberately silent: this is background housekeeping, not an event worth a log line.
+   */
+  const upgradedPasswordEnc =
+    passwordEnc === undefined && existing.passwordEnc
+      ? reencryptPasswordForStorage(existing.passwordEnc)
+      : null;
+  const passwordEncWrite = passwordEnc !== undefined ? passwordEnc : (upgradedPasswordEnc ?? undefined);
+
   const updated = await prisma.$transaction(async (tx) => {
     const newGpuCount = data.gpuCount !== undefined ? data.gpuCount : existing.gpuCount;
     const newGpuTypeId = data.gpuTypeId !== undefined ? data.gpuTypeId : existing.gpuTypeId;
@@ -244,7 +268,7 @@ export async function updateServer(id: number, input: ServerUpdateInput, ctx: Au
 
     const s = await tx.server.update({
       where: { id },
-      data: { ...data, ...(passwordEnc !== undefined ? { passwordEnc } : {}), updatedByEmail: ctx.actorEmail ?? null },
+      data: { ...data, ...(passwordEncWrite !== undefined ? { passwordEnc: passwordEncWrite } : {}), updatedByEmail: ctx.actorEmail ?? null },
       select: serverSelect,
     });
 

@@ -94,6 +94,17 @@ model TwoFactor {
   secret      String
   backupCodes String
 
+  /// Set false while a factor is being enrolled but not yet confirmed.
+  /// Declared by the better-auth twoFactor plugin; it defaults this to true.
+  verified                Boolean?  @default(true)
+  /// Consecutive failed TOTP verifications. better-auth 1.6.21+ enables an
+  /// account lockout BY DEFAULT (10 attempts, 15 minutes) and writes these two
+  /// columns on every verification attempt — without them, verifying a second
+  /// factor fails at runtime.
+  failedVerificationCount Int?      @default(0)
+  /// Set when the lockout trips; verification is refused until it passes.
+  lockedUntil             DateTime?
+
   @@map("twoFactor")
 }
 
@@ -537,4 +548,43 @@ model SshHostKey {
   @@index([serverId])
   @@index([fingerprint])
   @@map("ssh_host_key")
+}
+
+// ─── Background job leases (multi-replica scheduler) ─────────────────────────
+/// One row per background job. A replica may run that job only while it holds the
+/// row's lease: `holder` equal to its own instance id and `expiresAt` in the future.
+/// Without this, the only thing keeping two API replicas from double-probing every
+/// server and firing every notification twice was `instances: 1` in the PM2 config.
+///
+/// Acquisition is deliberately a single conditional statement rather than a read
+/// followed by a write:
+///   * taking an expired lease is `UPDATE ... WHERE name = ? AND expires_at <= now`,
+///     so the database evaluates the expiry under the row's write lock — the first
+///     replica pushes `expires_at` into the future and the second's predicate then
+///     matches nothing;
+///   * the very first acquisition (no row yet) races on the `name` unique index,
+///     where exactly one INSERT can win and the loser sees a unique violation.
+///
+/// Rows are rewritten in place and never deleted, so the table holds exactly one row
+/// per job name. Every query is keyed by `name`, which the unique index covers;
+/// there is deliberately no index on `expiresAt` because nothing ever filters on it
+/// alone.
+model SchedulerLock {
+  id          Int      @id @default(autoincrement())
+  /// Job identity, e.g. "scheduler:tick", "alert:metrics", "backup:nightly".
+  name        String   @unique
+  /// Instance id of the process holding — or last to hold — the lease: host:pid:rand.
+  holder      String
+  /// When the current holder took the lease.
+  acquiredAt  DateTime @default(now())
+  /// Last renewal. Renewed on a timer while the job runs, so a long sweep does not
+  /// lose the lease mid-run; it stops the moment the holder's process dies.
+  heartbeatAt DateTime @default(now())
+  /// Lease deadline. Any replica may take the lease once this is in the past, which
+  /// is what makes a holder killed mid-job recoverable with no operator action.
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("scheduler_lock")
 }

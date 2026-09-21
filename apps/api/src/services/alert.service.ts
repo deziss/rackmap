@@ -3,7 +3,15 @@ import { env } from "../env.js";
 import { fetchMetrics } from "./metrics.service.js";
 import { formatStorageBytes } from "./discovery.service.js";
 import { notifyMetricAlert } from "./notify.service.js";
+import { withJobLock } from "./job-lock.service.js";
 import pLimit from "p-limit";
+
+/**
+ * Its own lease, separate from the ping scheduler's: this sweep runs on its own
+ * 5-minute timer and is an independent workload, so it is fine — preferable,
+ * even — for one replica to own the ping sweep while another owns this one.
+ */
+const LOCK_NAME = "alert:metrics";
 
 // Keep state in memory to avoid alert spam
 interface AlertState {
@@ -116,14 +124,20 @@ export async function runMetricsAlerts() {
   if (running || !env.METRICS_ALERT_ENABLED) return;
   running = true;
   try {
-    // `deletedAt: null` matters: without it, soft-deleted servers were still
-    // being SSH-polled every interval, long after an operator removed them.
-    const servers = await prisma.server.findMany({
-      where: { deletedAt: null },
-      select: { id: true, hostname: true, ip: true },
+    // `running` only guards overlap inside this process. Across replicas the
+    // database lease decides who sweeps; the others skip this round quietly.
+    // A full sweep can take 30-45s against a large fleet, longer than any
+    // sensible TTL — withJobLock renews the lease while it runs.
+    await withJobLock(LOCK_NAME, env.JOB_LOCK_TTL_MS, async () => {
+      // `deletedAt: null` matters: without it, soft-deleted servers were still
+      // being SSH-polled every interval, long after an operator removed them.
+      const servers = await prisma.server.findMany({
+        where: { deletedAt: null },
+        select: { id: true, hostname: true, ip: true },
+      });
+      const limit = pLimit(env.PING_CONCURRENCY);
+      await Promise.allSettled(servers.map((s) => limit(() => checkServer(s))));
     });
-    const limit = pLimit(env.PING_CONCURRENCY);
-    await Promise.allSettled(servers.map((s) => limit(() => checkServer(s))));
   } catch (err) {
     console.error("[alert] run error:", err);
   } finally {

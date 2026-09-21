@@ -16,9 +16,25 @@
  * message.
  */
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 
-const BASELINE = "20260921000000_baseline";
+/**
+ * Every migration directory, in lexical (chronological) order. `db push` below
+ * brings the database to the CURRENT schema — i.e. the state after all of them
+ * — so every one must be recorded, not just the first. Recording only the
+ * baseline left later migrations pending, and they then failed trying to create
+ * tables `db push` had already made, which aborted container start.
+ */
+function allMigrations() {
+  const dir = path.join(process.cwd(), "prisma", "migrations");
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && fs.existsSync(path.join(dir, e.name, "migration.sql")))
+    .map((e) => e.name)
+    .sort();
+}
 
 /** Resolved at call time so this works in both the repo and the container. */
 function prismaCli() {
@@ -55,8 +71,8 @@ async function main() {
   if (!(await needsBaseline())) return;
 
   console.log(
-    `[baseline] Existing schema found with no migration history. Reconciling it ` +
-      `with the current schema, then recording ${BASELINE} as applied.`,
+    "[baseline] Existing schema found with no migration history. Reconciling it " +
+      "with the current schema, then recording the migration history as applied.",
   );
 
   // Marking the baseline applied asserts the database already matches it. That
@@ -72,9 +88,11 @@ async function main() {
     stdio: "inherit",
   });
 
-  execFileSync("pnpm", [...prismaCli(), "migrate", "resolve", "--applied", BASELINE], {
-    stdio: "inherit",
-  });
+  for (const migration of allMigrations()) {
+    execFileSync("pnpm", [...prismaCli(), "migrate", "resolve", "--applied", migration], {
+      stdio: "inherit",
+    });
+  }
 }
 
 main().catch((err) => {

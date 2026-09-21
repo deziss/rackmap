@@ -1,6 +1,7 @@
 import { runServiceCheck } from "../../services/service-status.service.js";
 import { prisma } from "../../db.js";
 import { encryptSecret, decryptSecret } from "../../lib/crypto.js";
+import { reencryptPasswordForStorage } from "../../services/vault.service.js";
 import { notFound, conflict } from "../../lib/errors.js";
 import { writeAudit, redact, type AuditCtx } from "../../lib/audit.js";
 import type { ServiceCreateInput, ServiceUpdateInput, ServiceListQuery } from "@inv/shared";
@@ -120,6 +121,8 @@ export async function createService(input: ServiceCreateInput, ctx: AuditCtx = {
     const s = await tx.service.create({
       data: {
         ...data,
+        // Nothing to upgrade on create: there is no stored row yet and encryptSecret already
+        // emits the current envelope for both columns.
         passwordEnc: password ? encryptSecret(password) : null,
         authTokenEnc: authToken ? encryptSecret(authToken) : null,
         tags: tagIds?.length
@@ -151,12 +154,46 @@ export async function updateService(id: number, input: ServiceUpdateInput, ctx: 
   const existing = await prisma.service.findUnique({ where: { id } });
   if (!existing || existing.deletedAt) throw notFound("Service");
 
-  const { password, tagIds, ...data } = input;
+  // authToken must be destructured out alongside password: the column is
+  // `authTokenEnc`, so leaving it in `data` sends Prisma an unknown `authToken`
+  // field and the update throws. Updating a service's auth token was therefore
+  // impossible, even though ServiceUpdateInput accepts one.
+  const { password, authToken, tagIds, ...data } = input;
 
   const passwordEnc =
     password === undefined ? undefined :
     password === null ? null :
     encryptSecret(password);
+
+  const authTokenEnc =
+    authToken === undefined ? undefined :
+    authToken === null ? null :
+    encryptSecret(authToken);
+
+  /**
+   * Lazy envelope upgrade for the two encrypted columns on this row. The row is being written
+   * anyway, so a credential still in the legacy unsalted v1 envelope is moved onto the current
+   * one for free.
+   *
+   * Each column is only considered when this request is not itself writing it, so a supplied
+   * value (or an explicit clear) always wins over a re-encrypted old one.
+   * reencryptPasswordForStorage returns null for a vault-wrapped "v2." blob, for a value
+   * already on the current envelope, and for anything that fails to decrypt; null means "leave
+   * the column alone", so a failed upgrade never costs a stored credential.
+   *
+   * Deliberately silent: this is background housekeeping, not an event worth a log line.
+   */
+  const upgradedPasswordEnc =
+    passwordEnc === undefined && existing.passwordEnc
+      ? reencryptPasswordForStorage(existing.passwordEnc)
+      : null;
+  const passwordEncWrite = passwordEnc !== undefined ? passwordEnc : (upgradedPasswordEnc ?? undefined);
+  const upgradedAuthTokenEnc =
+    authTokenEnc === undefined && existing.authTokenEnc
+      ? reencryptPasswordForStorage(existing.authTokenEnc)
+      : null;
+  const authTokenEncWrite =
+    authTokenEnc !== undefined ? authTokenEnc : (upgradedAuthTokenEnc ?? undefined);
 
   const updated = await prisma.$transaction(async (tx) => {
     if (tagIds !== undefined) {
@@ -170,7 +207,11 @@ export async function updateService(id: number, input: ServiceUpdateInput, ctx: 
 
     const s = await tx.service.update({
       where: { id },
-      data: { ...data, ...(passwordEnc !== undefined ? { passwordEnc } : {}) },
+      data: {
+        ...data,
+        ...(passwordEncWrite !== undefined ? { passwordEnc: passwordEncWrite } : {}),
+        ...(authTokenEncWrite !== undefined ? { authTokenEnc: authTokenEncWrite } : {}),
+      },
       select: serviceSelect,
     });
 
