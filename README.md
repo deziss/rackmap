@@ -267,16 +267,22 @@ existing fleet can populate the store without an outage. `tofu` refuses.
    manual connection test, otherwise they are simply absent from the store.
 2. Review what was pinned, and compare against the hosts themselves:
    ```bash
-   sqlite3 /data/inventory.db "SELECT host, port, key_type, fingerprint FROM ssh_host_key ORDER BY first_seen_at;"
+   curl -H "Authorization: Bearer sk_..." https://rackmap.example.com/api/v1/ssh-host-keys
    ssh <host> 'for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf $f; done'
    ```
    Fingerprints are standard OpenSSH `SHA256:` values, so they compare directly.
+
+   Each entry carries `sharedWithOtherEndpoints`. Expected for a cluster built from one image, worth
+   investigating otherwise — it means one key is answering for several addresses. Narrow it down with
+   `?fingerprint=SHA256:...`.
 3. Resolve anything unexpected, then set `SSH_HOST_POLICY=tofu` and restart.
 
-After a legitimate rebuild or reimage, delete the pinned row so the next connection re-pins it:
+After a legitimate rebuild or reimage, forget the pin so the next connection re-pins it. Admin only,
+and audited with the fingerprint being discarded:
 
 ```bash
-sqlite3 /data/inventory.db "DELETE FROM ssh_host_key WHERE host='10.0.0.5' AND port=22;"
+curl -X DELETE -H "Authorization: Bearer sk_..." \
+  https://rackmap.example.com/api/v1/ssh-host-keys/<id>
 ```
 
 A mismatch never overwrites the stored key — self-healing would erase the evidence.
@@ -452,6 +458,10 @@ POST   /api/v1/servers/:id/logs                  Query journalctl/syslog by prio
 GET    /api/v1/servers/:id/atop/dates            List historical ATOP activity dates
 GET    /api/v1/servers/:id/atop/snapshots        Query ATOP interval snapshots
 GET    /api/v1/servers/:id/atop/top-processes    Top CPU/memory/disk processes per interval
+
+# SSH host keys
+GET    /api/v1/ssh-host-keys              Review pinned host keys (editor+); ?serverId= / ?fingerprint=
+DELETE /api/v1/ssh-host-keys/:id          Forget a pin so the next connection re-pins (admin, audited)
 
 # Lookup tables (admin)
 GET|POST|PATCH|DELETE /api/v1/lookups/{cloud-providers,gpu-types,allocated-to,locations,server-types}

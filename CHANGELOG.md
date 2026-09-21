@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-09-21
+
+Closes out the three items left open by 0.7.0, and fixes two problems found while doing it.
+
+### Added
+- **Multi-replica support.** Background jobs now take a database-backed lease before running, so the
+  scheduler, the metrics alert sweep and the nightly backup execute on exactly one replica. Previously the
+  only thing preventing double-probing and duplicate notifications was `instances: 1` in the PM2 config —
+  `docker compose up --scale api=2` broke it immediately. A holder killed mid-job recovers automatically
+  once the lease expires (`JOB_LOCK_TTL_MS`, default 120s); the lease is renewed on a heartbeat so a long
+  sweep cannot lose it mid-run.
+- **Host-key administration** — `GET /api/v1/ssh-host-keys` (editor+) and `DELETE /api/v1/ssh-host-keys/:id`
+  (admin, audited). Migrating to `SSH_HOST_POLICY=tofu` previously meant reading the pin store with
+  `sqlite3`, and every legitimate reimage meant deleting a row by hand. The listing also flags a
+  fingerprint presented by more than one endpoint.
+- `TRUSTED_PROXY_CIDRS` for deployments behind more than one proxy hop.
+
+### Changed
+- **Legacy credentials are upgraded opportunistically.** A secret still sealed in the pre-0.7 `v1` envelope
+  is re-encrypted to `v3` when its row is written for another reason — never on read, never over a value the
+  request is itself supplying, and never for a vault-wrapped `v2` blob. A failed upgrade leaves the stored
+  credential untouched.
+- Dependency updates clearing 24 of 27 Dependabot alerts: `hono` 4.12.25 → 4.13.8 (six advisories),
+  `better-auth` 1.6.18 → 1.6.22 (high), `nodemailer` 9.0.1 → 9.1.1 (high), `@hono/node-server` → 1.19.17,
+  and transitively `nanoid` → 3.3.19, `postcss` → 8.5.28, `browserslist` → 4.29.0.
+- nginx: the 24-hour read timeout is now scoped to the SSH WebSocket path instead of applying to every API
+  request, `Connection: upgrade` is only sent when the client asks for it (it was breaking keep-alive on
+  every ordinary request), and `client_max_body_size` is raised to 25 MB so XLSX inventory imports are not
+  silently rejected at nginx's 1 MB default.
+- Compose: the API healthcheck targets `/health/ready` instead of `/health/live`, which returned a literal
+  `ok` and could never fail; added a `start_period` so first-boot migrations do not exhaust the retries; the
+  web container has a healthcheck; both have log rotation; Postgres binds to loopback rather than every
+  interface.
+
+### Fixed
+- **2FA verification would have failed at runtime.** better-auth 1.6.21 added an account lockout that is
+  enabled by default and writes `failedVerificationCount`, `lockedUntil` and `verified` on every
+  verification. The `TwoFactor` model had none of those columns. Added, with a migration.
+- **Container start would have aborted on upgrade.** The 0.7.0 schema-adoption step reconciles a
+  pre-existing database with `db push` — which creates every table, including ones belonging to later
+  migrations — but then recorded only the baseline as applied. `migrate deploy` then failed trying to create
+  a table that already existed, and the container's start chain never reached the application. Adoption now
+  records the full migration history.
+- **A service's auth token could never be updated.** `updateService` did not destructure `authToken`, so it
+  reached Prisma as an unknown field and the update threw, despite the schema accepting it.
+- **Rate limiting collapsed to a single shared bucket behind multiple proxies.** better-auth 1.6.21 refuses
+  to guess which hop is the client and returns no IP for a multi-value `X-Forwarded-For`, after which every
+  caller shares one rate-limit key. `trustedProxies` now defaults to loopback plus the RFC1918 ranges.
+- The test suite was tripping better-auth's own sign-in limiter — 15 logins in one shared process against a
+  cap of 10 per minute — so suites intermittently failed to collect with 429, hitting a different victim
+  each run. Sessions are now memoized per role.
+
+### Still open
+- `deepmerge-ts` (high) is pinned exactly by `@prisma/config@6.19.3`; reaching the fixed version needs a
+  Prisma major upgrade.
+- `vitest` 3 → 4 (medium, devDependency) removes `poolOptions`, which this project relies on to keep every
+  spec in one process against a shared SQLite test database. Deferred rather than destabilise the suite.
+
 ## [0.7.0] — 2026-09-21
 
 Completes the remediation started in 0.6.1 and makes RackMap usable as a source of truth for automation.
@@ -229,7 +287,8 @@ First release prepared for public distribution. No breaking changes to the API o
 - CPU/RAM column handling and GPU field synchronization on update
 - Background polling hardened against invalid ports
 
-[Unreleased]: https://github.com/deziss/rackmap/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/deziss/rackmap/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/deziss/rackmap/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/deziss/rackmap/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/deziss/rackmap/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/deziss/rackmap/releases/tag/v0.6.0

@@ -97,5 +97,6 @@ export const AUDIT_ACTIONS = [
   "server.ssh_auth_failed",
   "security.rate_limited",
   "vault.reset_destructive",
+  "ssh_host_key.forget",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

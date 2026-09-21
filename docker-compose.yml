@@ -60,10 +60,19 @@ services:
     networks:
       - internal
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health/live"]
+      # /health/live returns a literal ok and can never fail while the process
+      # is up, which makes it useless as a healthcheck. /health/ready actually
+      # touches the database.
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health/ready"]
       interval: 30s
       timeout: 5s
       retries: 3
+      # First boot runs migrations and the seed; without this the retries are
+      # spent before the app has had a chance to start.
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options: { max-size: "10m", max-file: "3" }
 
 
   # Optional PostgreSQL container — run with: docker compose --profile postgres up -d
@@ -80,8 +89,11 @@ services:
       - pgdata:/var/lib/postgresql/data
     networks:
       - internal
+    # Bound to loopback: the API reaches Postgres over the internal network, so
+    # publishing it on every interface only widens exposure. Override
+    # POSTGRES_BIND if you genuinely need remote access.
     ports:
-      - "5432:5432"
+      - "${POSTGRES_BIND:-127.0.0.1}:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rackmap} -d ${POSTGRES_DB:-rackmap}"]
       interval: 10s
@@ -103,6 +115,15 @@ services:
         condition: service_healthy
     networks:
       - internal
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options: { max-size: "10m", max-file: "3" }
 
 volumes:
   sqlite_data:

@@ -9,6 +9,7 @@ import { writeAuditDirect } from "./lib/audit.js";
 import { withVaultSession } from "./lib/vault-context.js";
 import { apiKeyAuth } from "./modules/api-keys/api-key.routes.js";
 import { metricsExportRoutes } from "./modules/metrics-export/metrics-export.routes.js";
+import { sshHostKeyRoutes } from "./modules/ssh-host-keys/ssh-host-key.routes.js";
 import { publicRoutes } from "./modules/public/public.routes.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
 import { meRoutes } from "./modules/me/me.routes.js";
@@ -145,6 +146,7 @@ export function createApp() {
   app.route("/api/v1/ssl", sslRoutes);
   app.route("/api/v1/vault", vaultRoutes);
   app.route("/api/v1/ssh-keys", sshKeyRoutes);
+  app.route("/api/v1/ssh-host-keys", sshHostKeyRoutes);
   app.route("/api/v1/license", licenseRoutes);
   app.route("/api/v1/checkout", checkoutRoutes);
 

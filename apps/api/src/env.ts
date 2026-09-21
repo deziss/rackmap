@@ -27,6 +27,19 @@ const EnvSchema = z.object({
     .string()
     .default("false")
     .transform((v) => v === "true"),
+  // Comma-separated CIDRs of the proxies in front of RackMap, ordered any way.
+  // Only consulted when TRUST_PROXY is on.
+  //
+  // This matters more than it looks: Better Auth resolves the client IP by
+  // walking X-Forwarded-For from the right and returning the first address that
+  // is NOT a known proxy. With no trusted proxies configured it refuses to
+  // guess and returns null for any header carrying more than one value — and
+  // the rate limiter then buckets every caller together under a single shared
+  // key, which turns normal traffic into a fleet-wide 429.
+  //
+  // One hop (the bundled nginx) produces a single-value header and works
+  // either way. Two or more hops (an ingress, a CDN, a corporate LB) need this.
+  TRUSTED_PROXY_CIDRS: z.string().default(""),
   // Allow anyone who can reach the API to create their own account (role: viewer).
   // Off by default — an admin should be creating accounts instead.
   ALLOW_SELF_SIGNUP: z
@@ -42,6 +55,13 @@ const EnvSchema = z.object({
   PING_CONCURRENCY: z.coerce.number().int().min(1).max(100).default(10),
   STATUS_RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
   STATUS_FLIP_THRESHOLD: z.coerce.number().int().min(1).default(2),
+  // How long a background job's database lease stays valid before another replica
+  // may take it (services/job-lock.service.ts). The holder renews it every TTL/3
+  // while the job is running, so in practice it only ever expires when that process
+  // dies — which is the point: a replica killed mid-sweep must not hold the job
+  // forever. Lower = faster failover to another replica, higher = more tolerance for
+  // a holder that is merely slow. Must comfortably exceed one renewal round-trip.
+  JOB_LOCK_TTL_MS: z.coerce.number().int().min(10_000).default(120_000),
   NOTIFY_WEBHOOK_URL: z.string().optional(),
   NOTIFY_TELEGRAM_BOT_TOKEN: z.string().optional(),
   NOTIFY_TELEGRAM_CHAT_ID: z.string().optional(),
