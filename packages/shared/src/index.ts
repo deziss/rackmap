@@ -26,3 +26,8 @@ export * from "./schemas/heartbeat.js";
 export * from "./schemas/runbook.js";
 export * from "./cron.js";
 export * from "./cron-heartbeat.js";
+export * from "./schemas/systemd.js";
+export * from "./schemas/patch.js";
+export * from "./schemas/drift.js";
+export * from "./schemas/access-grant.js";
+export * from "./schemas/prometheus.js";

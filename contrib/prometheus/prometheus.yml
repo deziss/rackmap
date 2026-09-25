@@ -1,0 +1,89 @@
+# Example Prometheus configuration for RackMap.
+#
+# Two jobs:
+#   rackmap  scrapes RackMap's own exporter (/api/v1/metrics): fleet up/down,
+#            probe latency, TLS expiry, heartbeats, runbook runs, alert
+#            deliveries, patch status, open drift and active access grants.
+#   node     discovers every server in RackMap (/api/v1/prometheus/sd) and
+#            scrapes node_exporter on it, so adding a server to RackMap is all
+#            it takes to start monitoring it.
+#
+# Both authenticate with a RackMap API key scoped to `viewer` (see
+# contrib/README.md). Put the raw `sk_...` key, and nothing else, in the file
+# below, owned by the prometheus user and mode 0400.
+#
+# `authorization.credentials_file` is the current spelling; Prometheus older
+# than 2.26 only understands `bearer_token_file: /etc/prometheus/rackmap.key`.
+
+global:
+  scrape_interval: 60s
+  evaluation_interval: 60s
+
+scrape_configs:
+  - job_name: rackmap
+    scheme: https
+    metrics_path: /api/v1/metrics
+    # RackMap's exporter runs a handful of aggregate queries per scrape; there
+    # is nothing to gain from scraping it more often than the probe interval.
+    scrape_interval: 60s
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/rackmap.key
+    static_configs:
+      - targets: ["rackmap.example.com"]
+
+  - job_name: node
+    http_sd_configs:
+      # Query parameters (all optional):
+      #   port=9100            exporter port (default: PROMETHEUS_SD_DEFAULT_PORT)
+      #   address=ip|hostname  what to put in the target address (default ip)
+      #   environment=cloud    one environment
+      #   location=dc1         location id or name
+      #   tag=monitored        repeatable; a server must carry every tag
+      #   status=up|down|unknown
+      #   excludeDown=true     skip servers RackMap currently probes as down
+      - url: https://rackmap.example.com/api/v1/prometheus/sd?port=9100&excludeDown=true
+        refresh_interval: 5m
+        authorization:
+          type: Bearer
+          credentials_file: /etc/prometheus/rackmap.key
+    relabel_configs:
+      # Optional: scrape only servers tagged "monitored" in RackMap. rackmap_tags
+      # is the sorted tag list wrapped in commas (",db,monitored,web,"), so one
+      # tag is matched with ".*,<tag>,.*". (Or filter server-side with &tag=.)
+      # - source_labels: [rackmap_tags]
+      #   regex: ".*,monitored,.*"
+      #   action: keep
+
+      # Show the RackMap hostname as the instance instead of ip:port.
+      - source_labels: [rackmap_hostname]
+        regex: "(.+)"
+        target_label: instance
+
+      # Keep the stable, low-cardinality inventory labels on every series.
+      # server_id joins node_exporter series with RackMap's own per-server
+      # series, e.g. rackmap_patch_security_updates{server_id="12"}.
+      - action: labelmap
+        regex: rackmap_(server_id|environment|location|server_type)
+        replacement: $1
+
+      # Drop the rest. rackmap_status in particular changes with every probe
+      # result and would split each series in two.
+      - action: labeldrop
+        regex: rackmap_.*
+
+# A few starting points for alerting rules (put these in a rule file):
+#
+#   - alert: RackMapServerDown
+#     expr: rackmap_server_up == 0
+#     for: 5m
+#   - alert: RackMapHeartbeatMissed
+#     expr: rackmap_heartbeat_up == 0
+#     for: 10m
+#   - alert: RackMapSecurityUpdatesPending
+#     expr: rackmap_patch_security_updates > 0
+#     for: 7d
+#   - alert: RackMapCriticalDrift
+#     expr: sum by (server) (rackmap_drift_open_events{severity="critical"}) > 0
+#   - alert: RackMapCertificateExpiring
+#     expr: rackmap_ssl_days_remaining < 14

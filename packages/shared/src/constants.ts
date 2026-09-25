@@ -122,6 +122,14 @@ export const AUDIT_ACTIONS = [
   "runbook.run_scheduled",
   "runbook.run_finished",
   "status_history.prune",
+  "server.systemd_action",
+  "server.patch_scan",
+  "server.patch_apply",
+  "drift.acknowledge",
+  "drift.baseline",
+  "access_grant.create",
+  "access_grant.extend",
+  "access_grant.revoke",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -144,6 +152,11 @@ export const ALERT_EVENT_TYPES = [
   "runbook_succeeded",
   "runbook_approval",
   "ssl_expiring",
+  "patch_available",
+  "reboot_required",
+  "drift_detected",
+  "access_expired",
+  "access_revoke_failed",
   "system",
   "test",
 ] as const;

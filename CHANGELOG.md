@@ -31,6 +31,17 @@ left unfinished.
   metadata addresses unless allowed. `NOTIFY_WEBHOOK_URL` / `NOTIFY_TELEGRAM_*` keep working and appear as
   read-only channels (the webhook body is unchanged).
 - SSL certificates are scanned daily (`SSL_SCAN_CRON`) and alert at 30, 14, 7, and 1 days before expiry.
+- **systemd Services tab** — list units, view details and the journal, and start/stop/restart/reload/enable/disable
+  them. Protected units (SSH, networking, D-Bus, Docker, `systemd-*`, targets, mounts) need an admin; aliases are
+  resolved on the host so a protected unit cannot be acted on under another name.
+- **Patch management** — nightly fleet scan of pending and security updates, reboot-required hosts, and kernels for
+  apt/dnf/yum/zypper (`PATCH_SCAN_CRON`), with a fleet page, per-server card, and admin-only apply.
+- **Drift detection** — nightly configuration snapshots (`DRIFT_SCAN_CRON`) compared with an accepted baseline, with
+  severity-ranked events, acknowledgement, and `drift_detected` alerts.
+- **Time-boxed access grants** — temporary OS accounts and SSH keys revoked automatically at expiry, with host-side
+  expiry as a backstop and alerts when a revoke keeps failing.
+- **Prometheus service discovery** (`GET /api/v1/prometheus/sd`), new exporter series (heartbeats, runbooks, alert
+  deliveries, patches, drift, access grants), and an example scrape config plus Grafana dashboard in `contrib/`.
 - Scheduled PostgreSQL backups with `pg_dump` (`BACKUP_CRON`, `BACKUP_KEEP`); `/health/ready` reports the
   last backup.
 - **Status probe history stores far less.** A row is written only when a server's status changes, or once

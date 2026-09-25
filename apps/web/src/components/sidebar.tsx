@@ -29,6 +29,9 @@ import {
   Sparkles,
   HeartPulse,
   PlayCircle,
+  PackageCheck,
+  GitCompareArrows,
+  TimerReset,
 } from "lucide-react";
 
 interface User {
@@ -57,7 +60,10 @@ type NavPath =
   | "/settings"
   | "/portal"
   | "/heartbeats"
-  | "/runbooks";
+  | "/runbooks"
+  | "/patches"
+  | "/drift"
+  | "/access-grants";
 
 interface NavItem {
   to: NavPath;
@@ -91,6 +97,9 @@ const navSections: NavSection[] = [
     items: [
       { to: "/runbooks", label: "Runbooks", icon: PlayCircle, roles: ["admin", "editor"] },
       { to: "/heartbeats", label: "Heartbeats", icon: HeartPulse },
+      { to: "/patches", label: "Patches", icon: PackageCheck, roles: ["admin", "editor"] },
+      { to: "/drift", label: "Drift", icon: GitCompareArrows, roles: ["admin", "editor"] },
+      { to: "/access-grants", label: "Access Grants", icon: TimerReset, roles: ["admin", "editor"] },
     ],
   },
   {

@@ -44,6 +44,9 @@ model User {
   runbookRunsApproved    RunbookRun[]            @relation("RunApprover")
   runbookRunsRejected    RunbookRun[]            @relation("RunRejecter")
   runbookRunsCancelled   RunbookRun[]            @relation("RunCanceller")
+  accessGrantsCreated    AccessGrant[]           @relation("GrantCreator")
+  accessGrantsRevoked    AccessGrant[]           @relation("GrantRevoker")
+  driftEventsAcked       DriftEvent[]
 
   @@map("user")
 }
@@ -270,6 +273,10 @@ model Server {
   sslStatuses        SslStatus[]
   heartbeats         Heartbeat[]
   runbookHostResults RunbookHostResult[]
+  patchStatus        ServerPatchStatus?
+  snapshots          ServerSnapshot[]
+  driftEvents        DriftEvent[]
+  accessGrants       AccessGrant[]
 
   @@index([cloudProviderId])
   @@index([gpuTypeId])
@@ -874,4 +881,108 @@ model RunbookHostResult {
   @@unique([runId, serverId])
   @@index([runId, status])
   @@map("runbook_host_result")
+}
+
+// ─── Patch management ────────────────────────────────────────────────────────
+
+/// Latest package-update scan per server (one row per server, replaced on each scan).
+model ServerPatchStatus {
+  id              Int       @id @default(autoincrement())
+  serverId        Int       @unique
+  server          Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  /// "apt" | "dnf" | "yum" | "zypper" | "unknown"
+  packageManager  String?
+  upgradableCount Int       @default(0)
+  securityCount   Int       @default(0)
+  rebootRequired  Boolean   @default(false)
+  kernelRunning   String?
+  kernelLatest    String?
+  osPretty        String?
+  /// [{name, current, available, security}] — capped list for display
+  packages        Json      @default("[]")
+  /// "ok" | "error" | "unsupported"
+  status          String    @default("ok")
+  error           String?
+  scannedAt       DateTime  @default(now())
+  lastAppliedAt   DateTime?
+  updatedAt       DateTime  @updatedAt
+
+  @@index([securityCount])
+  @@index([rebootRequired])
+  @@map("server_patch_status")
+}
+
+// ─── Drift detection ─────────────────────────────────────────────────────────
+
+/// Point-in-time configuration snapshot of a host (users, sudoers, crontabs,
+/// listening ports, enabled units, authorized keys). The newest `isBaseline`
+/// row is what later snapshots are compared against.
+model ServerSnapshot {
+  id         Int      @id @default(autoincrement())
+  serverId   Int
+  server     Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  /// {users[], sudoers[], crontabs{}, ports[], units[], authorizedKeys{}}
+  data       Json
+  /// sha256 of the canonical JSON — equal hashes mean no drift
+  hash       String
+  isBaseline Boolean  @default(false)
+  takenAt    DateTime @default(now())
+
+  @@index([serverId, takenAt])
+  @@map("server_snapshot")
+}
+
+model DriftEvent {
+  id               Int       @id @default(autoincrement())
+  serverId         Int
+  server           Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  /// "users" | "groups" | "sudoers" | "crontabs" | "ports" | "units" | "authorized_keys"
+  category         String
+  /// "info" | "warning" | "critical"
+  severity         String    @default("warning")
+  summary          String
+  /// {added[], removed[], changed[]}
+  changes          Json
+  snapshotId       Int?
+  detectedAt       DateTime  @default(now())
+  acknowledgedAt   DateTime?
+  acknowledgedById String?
+  acknowledgedBy   User?     @relation(fields: [acknowledgedById], references: [id], onDelete: SetNull)
+
+  @@index([serverId, detectedAt])
+  @@index([acknowledgedAt])
+  @@map("drift_event")
+}
+
+// ─── Time-boxed access ───────────────────────────────────────────────────────
+
+/// A temporary OS account or SSH key that RackMap removes (or locks) on expiry.
+model AccessGrant {
+  id             Int       @id @default(autoincrement())
+  serverId       Int
+  server         Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  /// "os_user" | "ssh_key"
+  kind           String
+  username       String
+  /// SHA256 fingerprint of the granted public key (kind ssh_key)
+  keyFingerprint String?
+  /// What happens on expiry: "lock" | "delete" (os_user), "remove" (ssh_key)
+  onExpiry       String    @default("lock")
+  reason         String?
+  expiresAt      DateTime
+  /// "active" | "revoked" | "failed" | "expired_pending"
+  status         String    @default("active")
+  attempts       Int       @default(0)
+  lastError      String?
+  revokedAt      DateTime?
+  createdById    String?
+  createdBy      User?     @relation("GrantCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  revokedById    String?
+  revokedBy      User?     @relation("GrantRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status, expiresAt])
+  @@index([serverId])
+  @@map("access_grant")
 }

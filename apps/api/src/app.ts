@@ -31,6 +31,13 @@ import { sshKeyRoutes } from "./modules/ssh-keys/ssh-key.routes.js";
 import { licenseRoutes } from "./modules/license/license.routes.js";
 import { checkoutRoutes } from "./modules/checkout/checkout.routes.js";
 import { statusHistoryRoutes } from "./modules/status-history/status-history.routes.js";
+import { systemdRoutes } from "./modules/systemd/systemd.routes.js";
+import { patchRoutes } from "./modules/patches/patch.routes.js";
+import { serverPatchRoutes } from "./modules/patches/server-patch.routes.js";
+import { driftRoutes } from "./modules/drift/drift.routes.js";
+import { serverDriftRoutes } from "./modules/drift/server-drift.routes.js";
+import { accessGrantRoutes } from "./modules/access-grants/access-grant.routes.js";
+import { prometheusSdRoutes } from "./modules/prometheus/prometheus-sd.routes.js";
 import { cronRoutes } from "./modules/cron/cron.routes.js";
 import { alertChannelRoutes } from "./modules/alert-channels/alert-channel.routes.js";
 import { alertEventRoutes } from "./modules/alert-channels/alert-event.routes.js";
@@ -150,6 +157,9 @@ export function createApp() {
   app.route("/api/v1/servers", serverRoutes);
   app.route("/api/v1/servers", cronRoutes);
   app.route("/api/v1/servers", cronMonitorRoutes);
+  app.route("/api/v1/servers", systemdRoutes);
+  app.route("/api/v1/servers", serverPatchRoutes);
+  app.route("/api/v1/servers", serverDriftRoutes);
 
   // Same for services
   app.route("/api/v1/services", serviceImportRoutes);
@@ -168,6 +178,10 @@ export function createApp() {
   app.route("/api/v1/license", licenseRoutes);
   app.route("/api/v1/checkout", checkoutRoutes);
   app.route("/api/v1/status-history", statusHistoryRoutes);
+  app.route("/api/v1/patches", patchRoutes);
+  app.route("/api/v1/drift", driftRoutes);
+  app.route("/api/v1/access-grants", accessGrantRoutes);
+  app.route("/api/v1/prometheus", prometheusSdRoutes);
   app.route("/api/v1/alert-channels", alertChannelRoutes);
   app.route("/api/v1/alert-events", alertEventRoutes);
   app.route("/api/v1/heartbeats", heartbeatRoutes);

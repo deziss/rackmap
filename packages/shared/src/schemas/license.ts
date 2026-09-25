@@ -12,6 +12,10 @@ export const LicenseFeatureSchema = z.enum([
   "unlimited_servers",
   "remote_cron",
   "runbooks",
+  "service_manager",
+  "patch_management",
+  "drift_detection",
+  "access_expiry",
 ]);
 export type LicenseFeature = z.infer<typeof LicenseFeatureSchema>;
 

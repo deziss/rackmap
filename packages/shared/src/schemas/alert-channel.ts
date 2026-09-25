@@ -60,6 +60,11 @@ export const ALERT_EVENT_LABELS: Record<AlertEventType, string> = {
   runbook_succeeded: "Runbook succeeded",
   runbook_approval: "Runbook awaiting approval",
   ssl_expiring: "SSL certificate expiring",
+  patch_available: "Security updates available",
+  reboot_required: "Reboot required",
+  drift_detected: "Configuration drift detected",
+  access_expired: "Temporary access expired",
+  access_revoke_failed: "Temporary access revoke failed",
   system: "System notices",
   test: "Test alerts",
 };
@@ -70,7 +75,8 @@ export const ALERT_EVENT_GROUPS: { label: string; events: AlertEventType[] }[] =
   { label: "Metrics & certificates", events: ["metric_alert", "ssl_expiring"] },
   { label: "Cron heartbeats", events: ["heartbeat_late", "heartbeat_fail", "heartbeat_recover"] },
   { label: "Runbooks", events: ["runbook_failed", "runbook_succeeded", "runbook_approval"] },
-  { label: "Access & system", events: ["access_request", "system", "test"] },
+  { label: "Patching & drift", events: ["patch_available", "reboot_required", "drift_detected"] },
+  { label: "Access & system", events: ["access_request", "access_expired", "access_revoke_failed", "system", "test"] },
 ];
 
 const CHAT_DEFAULT_EVENTS: AlertEventType[] = [

@@ -233,6 +233,24 @@ function buildPrivilegedUserGuard(username: string): string {
   ].join("\n");
 }
 
+/**
+ * Refuse when any requested supplementary group is root-equivalent on THIS
+ * host even though it is not on the static PRIVILEGED_OS_GROUPS list: gid 0,
+ * or a group that sudoers grants rules to (`%deploy ALL=(ALL) ALL`, also inside
+ * a `%a,%b` list). Runs as root, before any change is made. Group names are
+ * already validated (no quotes, backslashes or whitespace) and passed escaped.
+ */
+function buildPrivilegedGroupsGuard(groups: string[]): string {
+  if (groups.length === 0) return ":";
+  const refuse = `{ echo ${PRIVILEGED_MARKER} >&2; exit ${PRIVILEGED_EXIT}; }`;
+  return [
+    `for g in ${groups.map(escapeShellArg).join(" ")}; do`,
+    `  [ "$(getent group "$g" 2>/dev/null | cut -d: -f3)" = 0 ] && ${refuse}`,
+    `  if cat /etc/sudoers /etc/sudoers.d/* 2>/dev/null | awk -v g="%$g" '{ sub(/#.*/, ""); n = split($1, a, ","); for (i = 1; i <= n; i++) if (a[i] == g) found = 1 } END { exit !found }'; then ${refuse}; fi`,
+    `done`,
+  ].join("\n");
+}
+
 /** Refuse when a numeric primary gid resolves to a privileged group (e.g. `-g 27` = sudo on Debian). */
 function buildPrivilegedGidGuard(gid: string): string {
   return [
@@ -467,6 +485,7 @@ export async function createOsUser(
     if (!opts.allowPrivileged) guards.push(buildPrivilegedGidGuard(gid));
   }
   if (input.groups && input.groups.length > 0) {
+    if (!opts.allowPrivileged) guards.push(buildPrivilegedGroupsGuard(validateGroupNames(input.groups)));
     const cleanGroups = validateGroupNames(input.groups).join(",");
     if (cleanGroups) flags.push(`-G ${escapeShellArg(cleanGroups)}`);
   }
@@ -550,8 +569,12 @@ export async function updateOsUser(
   }
 
   // Without server:sudo, any change to an account that is already
-  // root-equivalent (new password, shell, lock state…) is refused on the host.
+  // root-equivalent (new password, shell, lock state…) is refused on the host,
+  // and so is adding it to a group that sudoers makes root-equivalent.
   const guards = opts.allowPrivileged ? [] : [buildPrivilegedUserGuard(username)];
+  if (!opts.allowPrivileged && input.groups !== undefined) {
+    guards.push(buildPrivilegedGroupsGuard(validateGroupNames(input.groups)));
+  }
   await runRootScript(serverId, buildRootScript(steps, guards), overridePassword, `Failed to update user ${username}`);
 
   // Never audit the password itself.

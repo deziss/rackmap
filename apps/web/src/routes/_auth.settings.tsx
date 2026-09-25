@@ -631,6 +631,10 @@ function LicensingConfigurationSection({ onUpgradeClick }: { onUpgradeClick?: ()
             { key: "multi_channel_alerts", label: "Multi-Channel Alerting" },
             { key: "remote_cron", label: "Remote Cron Job Editor" },
             { key: "runbooks", label: "Runbooks & Fleet Exec" },
+            { key: "service_manager", label: "systemd Service Manager" },
+            { key: "patch_management", label: "Fleet Patch Management" },
+            { key: "drift_detection", label: "Drift Detection" },
+            { key: "access_expiry", label: "Time-boxed Access" },
           ].map((feat) => {
             const isEnabled = !isFree && !!license?.features?.[feat.key];
             return (

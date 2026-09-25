@@ -21,11 +21,15 @@
 15. [Cron Jobs](#cron-jobs)
 16. [Heartbeats](#heartbeats)
 17. [Runbooks](#runbooks)
-18. [Alert Channels & Notifications](#alert-channels--notifications)
-19. [Security Settings](#security-settings)
-20. [Database (PostgreSQL)](#database-postgresql)
-21. [Roles & Permissions](#roles--permissions)
-22. [FAQ / Troubleshooting](#faq--troubleshooting)
+18. [Services (systemd)](#services-systemd)
+19. [Patches](#patches)
+20. [Drift](#drift)
+21. [Access Grants](#access-grants)
+22. [Alert Channels & Notifications](#alert-channels--notifications)
+23. [Security Settings](#security-settings)
+24. [Database (PostgreSQL)](#database-postgresql)
+25. [Roles & Permissions](#roles--permissions)
+26. [FAQ / Troubleshooting](#faq--troubleshooting)
 
 ---
 
@@ -509,6 +513,41 @@ A heartbeat expects a check-in on a schedule and alerts when one is missed, late
   `RACKMAP_SERVER_ID`, and `RACKMAP_HOSTNAME`. They are never pasted into the script text.
 
 ---
+
+## Services (systemd)
+
+Open a server and choose the **Services** tab (editor+). It lists the host's services, timers and sockets with their
+state and whether they start at boot; filter by name or state, open a unit for its details and journal (20–2000 lines,
+time filters), and start, stop, restart, reload, enable or disable it (Pro). Every action runs as root and is audited.
+Editors cannot stop, restart or disable protected units — SSH, networking, D-Bus, Docker, `systemd-*`, targets and
+mounts — and admins get an extra warning before doing so. Hosts without systemd show as unsupported.
+
+## Patches
+
+**Patches** (sidebar → Automation) lists every server's pending updates, security updates, reboot-required flag and
+running vs newest kernel. apt, dnf, yum and zypper are supported. A fleet scan runs nightly (`PATCH_SCAN_CRON`,
+`PATCH_SCAN_CONCURRENCY` hosts at a time); **Scan all** or a server's **Scan** runs one now. **Apply** (admin) installs
+security-only or all updates as root and never reboots — on apt, security-only uses `unattended-upgrades` and is refused
+if it is not installed. The server page shows the same status in a card. New security updates and reboot-required
+hosts raise `patch_available` / `reboot_required` alerts.
+
+## Drift
+
+RackMap snapshots every server nightly (`DRIFT_SCAN_CRON`): accounts, privileged group members, sudoers rules, crontab
+hashes, listening ports, enabled units and authorized SSH keys. The first snapshot becomes the baseline; later scans
+record each changed category as a drift event, and a new root key, sudoers rule, uid-0 account or privileged member is
+**critical**. The same unresolved drift is not re-reported every night. **Drift** (sidebar) lists open events; editors
+can scan and acknowledge, and only admins can **accept a snapshot as the new baseline**. Without sudo, categories that
+need root are marked "not checked", never "removed".
+
+## Access Grants
+
+Give someone a **temporary account** (OS Users tab → *Temporary User*) or a **temporary SSH key** for an existing
+account (the *Key* button on a user row), with a duration preset or a custom expiry (up to 90 days). At expiry RackMap
+locks or deletes the account, or removes the key from `authorized_keys`; the host enforces the expiry as well (`chage`,
+and `expiry-time` on OpenSSH 8.2+), so access ends even if RackMap is down. **Access Grants** (sidebar) lists every
+grant with a countdown; the creator or an admin can extend or revoke it. If a revoke fails five times the grant is
+marked failed and a critical alert fires. Granting access to root or a privileged account needs an admin.
 
 ## Alert Channels & Notifications
 
