@@ -45,7 +45,9 @@ import { SudoPermissionDialog } from "@/components/sudo-permission-dialog";
 import { PaginationBar } from "@/components/pagination-bar";
 import { CreateOsUserDialog, EditOsUserDialog, DeleteOsUserDialog } from "@/components/os-user-dialogs";
 import { CronTab } from "@/components/cron/cron-tab";
+import { applyCronMonitorChange } from "@/lib/heartbeats-api";
 import { ServerAlertChannelsCard } from "@/components/alerts/server-alert-channels-card";
+import { ServerHeartbeatsCard } from "@/components/heartbeats/server-heartbeats-card";
 import { AtopProcessModal } from "@/components/atop-process-modal";
 import { AddSshKeyDialog } from "@/components/add-ssh-key-dialog";
 import { RequestAccessButton } from "@/components/request-access-button";
@@ -652,7 +654,9 @@ function ServerDetailPage() {
       )}
 
       {/* Tab: Cron Jobs */}
-      {activeTab === "cron" && <CronTab serverId={id} />}
+      {activeTab === "cron" && (
+        <CronTab serverId={id} onMonitorRequest={(req) => applyCronMonitorChange(id, req)} />
+      )}
 
       {/* Tab 6: Web Terminal */}
       {activeTab === "terminal" && (
@@ -1095,6 +1099,9 @@ function OverviewTab({
 
       {/* Alert channels routed to this server — editor+ only (test sends need alertChannel:manage) */}
       {canManage && <ServerAlertChannelsCard serverId={server.id} />}
+
+      {/* Heartbeat monitors linked to this server */}
+      <ServerHeartbeatsCard serverId={server.id} />
     </div>
   );
 }

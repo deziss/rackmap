@@ -11,6 +11,7 @@ import { startAlertScheduler, stopAlertScheduler } from "./services/alert.servic
 import { startAlertDispatcher, stopAlertDispatcher } from "./services/alerting/dispatcher.js";
 import { syncEnvAlertChannels } from "./services/alert-channel.service.js";
 import { startSslDailyScan, stopSslDailyScan } from "./services/ssl-daily-scan.js";
+import { startHeartbeatScheduler, stopHeartbeatScheduler } from "./services/heartbeat.service.js";
 import { autoInitVaultFromEnv } from "./services/vault.service.js";
 import { autoInitLicenseFromEnv } from "./services/license.service.js";
 import type { Server } from "node:http";
@@ -41,6 +42,7 @@ async function main() {
     scheduleBackup();
     startAlertDispatcher();
     startSslDailyScan();
+    startHeartbeatScheduler();
   });
 
   injectWebSocket(server as unknown as Server);
@@ -56,6 +58,7 @@ async function main() {
     stopAlertScheduler();
     stopAlertDispatcher();
     stopSslDailyScan();
+    stopHeartbeatScheduler();
     (server as unknown as Server).close();
     await prisma.$disconnect().catch(() => {});
     process.exit(0);
