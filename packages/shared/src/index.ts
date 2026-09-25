@@ -23,5 +23,6 @@ export * from "./schemas/license.js";
 export * from "./schemas/cron.js";
 export * from "./schemas/alert-channel.js";
 export * from "./schemas/heartbeat.js";
+export * from "./schemas/runbook.js";
 export * from "./cron.js";
 export * from "./cron-heartbeat.js";

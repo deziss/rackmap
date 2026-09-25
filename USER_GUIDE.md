@@ -18,11 +18,14 @@
 12. [Audit Log](#audit-log)
 13. [User Management](#user-management)
 14. [Access Requests](#access-requests)
-15. [Notifications](#notifications)
-16. [Security Settings](#security-settings)
-17. [Database Options (SQLite & PostgreSQL)](#database-options-sqlite--postgresql)
-18. [Roles & Permissions](#roles--permissions)
-19. [FAQ / Troubleshooting](#faq--troubleshooting)
+15. [Cron Jobs](#cron-jobs)
+16. [Heartbeats](#heartbeats)
+17. [Runbooks](#runbooks)
+18. [Alert Channels & Notifications](#alert-channels--notifications)
+19. [Security Settings](#security-settings)
+20. [Database (PostgreSQL)](#database-postgresql)
+21. [Roles & Permissions](#roles--permissions)
+22. [FAQ / Troubleshooting](#faq--troubleshooting)
 
 ---
 
@@ -441,20 +444,97 @@ Approved access automatically expires. All actions taken during the approved win
 
 ---
 
-## Notifications
+## Cron Jobs
 
-The system sends alerts when a server changes status (up → down or down → up).
+Open a server and choose the **Cron Jobs** tab (editor+, Pro license to save or run).
 
-**Webhook:**
-- Set `NOTIFY_WEBHOOK_URL` in `.env`
-- Receives a POST with JSON body: `{ hostname, ip, status, previousStatus, latencyMs, checkedAt }`
+- **Targets** — the selector lists every user crontab found on the host, `/etc/crontab`, each file in
+  `/etc/cron.d`, and systemd timers (read-only). Files in `/etc/cron.d` whose names contain a dot are shown with a
+  warning: cron ignores them.
+- **Reading an entry** — each row shows the schedule, a plain-English description, the next three run times in the
+  host's time zone, the command, and its label. A *monitored* badge marks entries watched by a heartbeat.
+- **Adding or editing** — pick a preset (every 5 minutes, hourly, daily at a time, weekly, monthly, at boot) or
+  type the five fields; the description and next runs update as you type. Only syntax that standard cron
+  understands is accepted (`L`, `W`, `#`, and `?` are rejected).
+- **Raw mode** edits the whole file as text.
+- **Saving** shows a line diff first. If someone changed the file on the host since you opened it, the save is
+  refused — reload, then re-apply your change. The previous version is kept on the host in
+  `/var/backups/rackmap-cron` (last 10 per file).
+- **Run now** runs one entry immediately as its user (60-second limit) and shows the exit code and output.
+- **Who can edit what** — editors can edit ordinary users' crontabs. Root's crontab, `/etc/crontab`,
+  `/etc/cron.d`, and users who are root-equivalent on the host (members of sudo, wheel, admin, docker, lxd,
+  disk, root, adm, or shadow, or with a sudoers rule) need an admin.
 
-**Telegram:**
-- Set `NOTIFY_TELEGRAM_BOT_TOKEN` and `NOTIFY_TELEGRAM_CHAT_ID`
-- Get a bot token from [@BotFather](https://t.me/botfather)
-- Add the bot to your group/channel and get the chat ID
+---
 
-Both can be active simultaneously. Notifications fire after `STATUS_FLIP_THRESHOLD` consecutive failures (default 2) to avoid alert storms on transient blips.
+## Heartbeats
+
+A heartbeat expects a check-in on a schedule and alerts when one is missed, late, or reports failure.
+
+- **From a cron job** — in the cron entry dialog, switch on **Monitor this job**, choose a grace period, and save.
+  RackMap wraps the command so the host calls `PUBLIC_BASE_URL/api/v1/ping/<token>/<exit code>` after each run
+  (optionally `…/start` before it, to measure duration). The host needs `curl` or `wget` and must be able to reach
+  `PUBLIC_BASE_URL`. Turning monitoring off restores the original command.
+- **By hand** — **Heartbeats → New** gives you a URL for anything else: a script, a systemd `OnFailure=` unit, a
+  Kubernetes CronJob. The detail page shows copy-paste snippets.
+- **Statuses** — *new* (waiting for the first check-in), *up*, *late* (past the expected time, within the grace
+  period), *down* (grace period passed, or the job reported a non-zero exit code), *paused*.
+- **Rotating the token** invalidates the old URL. For cron-created heartbeats RackMap can rewrite the crontab line
+  for you.
+- Deleting a heartbeat that came from a crontab leaves the wrapped line on the host; its check-ins will then
+  return 404. Turn monitoring off first.
+
+---
+
+## Runbooks
+
+**Runbooks** (sidebar → Automation) are saved scripts you run on many servers at once.
+
+- **Authoring (admin)** — write the script (bash or sh), declare parameters (name, type, default, required,
+  allowed pattern, or a list of choices; *secret* values are masked in output), choose whether it runs as the SSH
+  user or root, and set a timeout, concurrency, and a failure limit that stops the run early.
+- **Targets** — select by tag, environment, location, and/or individual servers, with exclusions. Filters combine
+  with AND across fields and OR within a field. An empty selection is refused rather than meaning "every server".
+- **Running** — **Run** shows the resolved server list with warnings (host down, vault locked, no credentials)
+  before anything starts. A **dry run** only checks connectivity and sudo. Root runs, runs on more than 10 hosts,
+  and runs touching `production` ask you to type `RUN` to confirm.
+- **Approvals** — runbooks marked *requires approval*, and any root run requested by an editor, wait for an admin.
+  The approver must be a different person from the requester. Pending approvals show as a badge in the sidebar.
+- **Watching a run** — the run page lists every host with its status, exit code, and output, updating while the
+  run is in progress. You can cancel a run or rerun only the failed hosts.
+- **Schedules** — a runbook can run on a cron schedule (not combined with approval). Scheduled runs happen in the
+  background, so password-only hosts need the vault unlocked globally or `VAULT_PASSPHRASE` set; otherwise those
+  hosts fail with *vault locked* and admins get one alert per day.
+- Parameters are passed to the script as environment variables (`$VERSION`, …), plus `RACKMAP_RUN_ID`,
+  `RACKMAP_SERVER_ID`, and `RACKMAP_HOSTNAME`. They are never pasted into the script text.
+
+---
+
+## Alert Channels & Notifications
+
+Admins manage channels under **Settings → Alerts**; editors can view them.
+
+- **Types** — Slack, Microsoft Teams (Workflows webhook), Discord, PagerDuty (Events API v2), Telegram, email, and
+  generic webhooks. The Free tier allows one channel of type Slack, Discord, Telegram, email, or webhook; a Pro
+  license (`multi_channel_alerts`) adds unlimited channels, Teams, PagerDuty, filters, and custom templates.
+- **Events** — each channel subscribes to the events it wants: server/service down and up, metric alerts, access
+  requests, heartbeat late/failed/recovered, runbook failed/succeeded/awaiting approval, SSL expiring, and system
+  notices. Filters can limit a channel to specific servers, tags, environments, or a minimum severity.
+- **Delivery** — every alert is queued and retried with backoff (up to six attempts). Open a channel's delivery log
+  to see each attempt. **Send test** posts a clearly labelled test message and never pages anyone for real.
+- **PagerDuty** incidents are opened on failure and resolved automatically on recovery.
+- **Webhooks** carry `X-Rackmap-Event`, `X-Rackmap-Delivery` (stable across retries — use it to deduplicate),
+  `X-Rackmap-Timestamp`, and, when a signing secret is set, `X-Rackmap-Signature: sha256=<HMAC-SHA256 of
+  "<timestamp>.<raw body>">`.
+- **Safety** — webhook URLs must be `https` and resolve to public addresses unless an admin allows private or
+  plain-`http` targets with `ALERT_OUTBOUND_ALLOW_PRIVATE`, `ALERT_OUTBOUND_ALLOW_HTTP`, or
+  `ALERT_OUTBOUND_ALLOWLIST`. Cloud metadata and link-local addresses are always refused.
+- **Legacy settings** — `NOTIFY_WEBHOOK_URL` and `NOTIFY_TELEGRAM_BOT_TOKEN` / `NOTIFY_TELEGRAM_CHAT_ID` still work
+  and appear as read-only channels. The webhook keeps its original body, for example
+  `{"event":"status_flip","type":"server","serverId":…,"hostname":…,"ip":…,"port":…,"from":"up","to":"down","ts":…}`.
+- **Email** preferences per user (Settings → Notifications) still apply in addition to channels. Status alerts fire
+  after `STATUS_FLIP_THRESHOLD` consecutive failures (default 2) to avoid alert storms on transient blips.
+- SSL certificates are scanned daily (`SSL_SCAN_CRON`) and alert 30, 14, 7, and 1 days before expiry.
 
 ---
 
@@ -465,7 +545,7 @@ Navigate to **Security** via the bottom sidebar or visit `/security`.
 ### Are Server Passwords Actually Encrypted or Just Gated?
 
 **Server passwords are truly AES-256-GCM encrypted, not just gated or masked:**
-1. **At-Rest Database Encryption**: In SQLite / PostgreSQL (`inventory.db`), the `passwordEnc` column never contains plaintext passwords. It stores encrypted payloads in the format:
+1. **At-Rest Database Encryption**: In the database, the `passwordEnc` column never contains plaintext passwords. It stores encrypted payloads in the format:
    - `v2.<iv_hex>.<auth_tag_hex>.<cipher_hex>` (when using the Master Credential Vault DEK)
    - `v1.<iv_hex>.<auth_tag_hex>.<cipher_hex>` (when using the At-Rest Application Key)
 2. **Authenticated Encryption with Associated Data (AEAD)**: Every encrypted password generates a cryptographically random 12-byte initialization vector (IV) and a 16-byte authentication tag ensuring integrity and preventing tampering.
@@ -549,14 +629,12 @@ not guess which one you meant.
 
 ---
 
-## Database Options (SQLite & PostgreSQL)
+## Database (PostgreSQL)
 
-RackMap supports both **SQLite** and **PostgreSQL**:
-- **SQLite (Default)**: Zero external setup. Database file stored at `/data/inventory.db` in Docker or `./dev.db` locally.
-- **PostgreSQL**: Ideal for production deployments with heavy concurrency.
-  1. Set `DATABASE_URL="postgresql://user:pass@host:5432/rackmap"` in `.env`.
-  2. Change `provider = "postgresql"` in `apps/api/prisma/schema.prisma`.
-  3. Start with Docker profile: `docker compose --profile postgres up -d`.
+RackMap stores its data in **PostgreSQL 18**. Docker Compose runs the database for you; set `POSTGRES_PASSWORD` in
+`.env` before the first start. To use an existing server instead, set `DOCKER_DATABASE_URL` (Compose) or
+`DATABASE_URL` (bare metal). Upgrading an older SQLite installation is covered in [MIGRATION.md](MIGRATION.md).
+Scheduled `pg_dump` backups are controlled by `BACKUP_DIR`, `BACKUP_CRON`, and `BACKUP_KEEP`.
 
 ---
 

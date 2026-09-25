@@ -37,6 +37,8 @@ import { alertEventRoutes } from "./modules/alert-channels/alert-event.routes.js
 import { heartbeatPingRoutes } from "./modules/heartbeats/heartbeat-ping.routes.js";
 import { heartbeatRoutes } from "./modules/heartbeats/heartbeat.routes.js";
 import { cronMonitorRoutes } from "./modules/heartbeats/cron-monitor.routes.js";
+import { runbookRoutes } from "./modules/runbooks/runbook.routes.js";
+import { runbookRunRoutes } from "./modules/runbooks/runbook-run.routes.js";
 
 export function createApp() {
   const app = new Hono();
@@ -169,6 +171,8 @@ export function createApp() {
   app.route("/api/v1/alert-channels", alertChannelRoutes);
   app.route("/api/v1/alert-events", alertEventRoutes);
   app.route("/api/v1/heartbeats", heartbeatRoutes);
+  app.route("/api/v1/runbooks", runbookRoutes);
+  app.route("/api/v1/runbook-runs", runbookRunRoutes);
 
   app.onError(onError);
 

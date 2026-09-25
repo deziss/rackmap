@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Automation for day-to-day operations work, fixes for OS-user management, and the pieces the PostgreSQL move
+left unfinished.
+
+### Added
+- **Cron job editor** on each server page (editor+). Lists user crontabs from the spool directory,
+  `/etc/crontab`, `/etc/cron.d/*`, and systemd timers (read-only). Schedule builder with a plain-English
+  description and the next run times in the host's time zone, raw editor, diff preview, and "run now".
+  Saves are compare-and-set on the file's hash (409 if it changed on the host) and back the previous
+  version up to `/var/backups/rackmap-cron` on the host. Root, system files, and users that are
+  root-equivalent on the host (sudo/wheel/docker/… membership or a sudoers rule) need admin.
+- **Cron heartbeat monitoring.** "Monitor this job" wraps a crontab entry so the host checks in at
+  `PUBLIC_BASE_URL/api/v1/ping/<token>` with the job's exit code; missed, late, and failing runs raise
+  alerts and recover automatically. Heartbeats can also be created by hand for any job that can call a URL.
+- **Runbooks.** Saved, parameterised scripts run against servers chosen by tag, environment, location, or
+  name, with target preview, dry run, per-host output, cancel/rerun, and schedules. Parameters reach the
+  script as exported environment variables, never string-substituted. Authoring is admin-only; root runs
+  requested by editors wait for an admin, and nobody can approve their own run.
+- **Alert channels** (Settings → Alerts): Slack, Microsoft Teams, Discord, PagerDuty (incidents open and
+  resolve), Telegram, email, and HMAC-signed webhooks, each subscribed to chosen events. Delivery goes
+  through a database outbox with retries, backoff, `Retry-After` handling, and a delivery log. Outbound
+  requests are pinned to the resolved IP, never follow redirects, and refuse private, link-local, and
+  metadata addresses unless allowed. `NOTIFY_WEBHOOK_URL` / `NOTIFY_TELEGRAM_*` keep working and appear as
+  read-only channels (the webhook body is unchanged).
+- SSL certificates are scanned daily (`SSL_SCAN_CRON`) and alert at 30, 14, 7, and 1 days before expiry.
+- Scheduled PostgreSQL backups with `pg_dump` (`BACKUP_CRON`, `BACKUP_KEEP`); `/health/ready` reports the
+  last backup.
+- **Status probe history stores far less.** A row is written only when a server's status changes, or once
+  per `STATUS_SAMPLE_INTERVAL_MS` (default 15 min) otherwise — about 96 rows per server per day instead of
+  about 1,440. The table is capped at `STATUS_MAX_ROWS` (default 10,000) on top of the retention days, and
+  admins can see its size and clean it (older than N days, or keep the newest N rows) under
+  **Settings → Maintenance**. On upgrade the first prune trims existing history to the cap.
+- A per-account sign-in limit (`AUTH_LOGIN_ACCOUNT_RATE_LIMIT_MAX`, default 10/min) alongside the per-IP one.
+- CI runs the test suite against PostgreSQL 18 and fails when migrations drift from the schema.
+
+### Fixed
+- **Creating, editing, or deleting an OS user hung forever.** The request never returned and leaked the SSH
+  connection. The commands also ignored the server's SSH password, so they only worked with passwordless
+  sudo.
+- **Deleting an OS user always failed with 400.** The query-string booleans were rejected.
+- **The committed PostgreSQL baseline migration was truncated.** It was missing two tables and every foreign
+  key and index, and was not valid SQL, so fresh installs could not migrate. If `migrate deploy` already
+  failed on it, see [MIGRATION.md](MIGRATION.md).
+- `docker compose up` could not start: the defaults still pointed at SQLite, and the PostgreSQL volume was
+  mounted where the PostgreSQL 18 image refuses to start.
+- Nightly backups silently did nothing on PostgreSQL.
+- `ensure-baseline.mjs` queried SQLite system tables and silently skipped on PostgreSQL.
+- SSL-expiry emails were never sent (`lib/mail.ts` only logged). Telegram alerts failed for hostnames
+  containing `_`.
+- The test suite no longer reuses rows across runs, and refuses to run against a database whose name does
+  not end in `_test`.
+
+### Security
+- The server's SSH password is no longer placed in the remote command line (it was visible in `ps` on the
+  host). Remote scripts are uploaded over stdin into a private temp file, and sudo is probed before any
+  password is sent.
+- Editors can no longer grant sudo or privileged group membership (sudo, wheel, docker, …), change or delete
+  root-equivalent accounts, or set a password containing a newline (which injected extra `chpasswd` lines).
+  Password changes are no longer written to the audit log.
+- Checkout and license activation are admin-only. Checkout completes only with `BILLING_MODE=simulated`,
+  and in production any-key license activation is refused without a license server.
+- `POST /servers/:id/test-alert` requires `alertChannel:manage` and sends a test event only.
+
+### Changed
+- PostgreSQL 18 is the only supported database. Compose runs it by default and requires `POSTGRES_PASSWORD`.
+- New `server:cron`, `alertChannel`, `heartbeat`, and `runbook` permissions; license features
+  `remote_cron` and `runbooks` (Pro and Enterprise).
+
 ## [0.8.0] — 2026-09-21
 
 Closes out the three items left open by 0.7.0, and fixes two problems found while doing it.
