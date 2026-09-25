@@ -20,3 +20,5 @@ export * from "./schemas/ssh-key.js";
 export * from "./schemas/auto-update.js";
 export * from "./schemas/alert-channels.js";
 export * from "./schemas/license.js";
+export * from "./schemas/cron.js";
+export * from "./cron.js";

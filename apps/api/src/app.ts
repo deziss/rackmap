@@ -31,6 +31,7 @@ import { sshKeyRoutes } from "./modules/ssh-keys/ssh-key.routes.js";
 import { licenseRoutes } from "./modules/license/license.routes.js";
 import { checkoutRoutes } from "./modules/checkout/checkout.routes.js";
 import { statusHistoryRoutes } from "./modules/status-history/status-history.routes.js";
+import { cronRoutes } from "./modules/cron/cron.routes.js";
 
 export function createApp() {
   const app = new Hono();
@@ -135,6 +136,7 @@ export function createApp() {
   // specific paths that would otherwise be swallowed by serverRoutes' /:id pattern.
   app.route("/api/v1/servers", importRoutes);
   app.route("/api/v1/servers", serverRoutes);
+  app.route("/api/v1/servers", cronRoutes);
 
   // Same for services
   app.route("/api/v1/services", serviceImportRoutes);
