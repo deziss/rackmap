@@ -1,4 +1,15 @@
+import { escapeEmailHtml, sendEmail } from "../services/email.service.js";
+
+/**
+ * Plain-text mail (the SSL expiry report). This used to be a console.log stub,
+ * so the report was never actually delivered; it now goes through SMTP like
+ * every other email, with the text escaped into a <pre> block.
+ */
 export async function sendMail({ to, subject, text }: { to: string; subject: string; text: string }) {
-  // If SMTP is configured, send here. For now, log to console.
-  console.log(`\n=== EMAIL NOTIFICATION ===\nTo: ${to}\nSubject: ${subject}\n\n${text}\n==========================\n`);
+  await sendEmail({
+    to,
+    subject,
+    html: `<pre style="font-family:ui-monospace,monospace;font-size:13px">${escapeEmailHtml(text)}</pre>`,
+    text,
+  });
 }

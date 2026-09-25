@@ -8,6 +8,9 @@ import { startScheduler, stopScheduler } from "./services/scheduler.js";
 import { scheduleBackup, stopBackup } from "./services/backup.service.js";
 import { setupWebSocket } from "./ws/ssh.ws.js";
 import { startAlertScheduler, stopAlertScheduler } from "./services/alert.service.js";
+import { startAlertDispatcher, stopAlertDispatcher } from "./services/alerting/dispatcher.js";
+import { syncEnvAlertChannels } from "./services/alert-channel.service.js";
+import { startSslDailyScan, stopSslDailyScan } from "./services/ssl-daily-scan.js";
 import { autoInitVaultFromEnv } from "./services/vault.service.js";
 import { autoInitLicenseFromEnv } from "./services/license.service.js";
 import type { Server } from "node:http";
@@ -18,6 +21,9 @@ async function main() {
 
   // Auto-initialize Licencia license if LICENCIA_LICENSE_KEY is configured in .env
   await autoInitLicenseFromEnv();
+
+  // Mirror NOTIFY_* env configuration into env-managed alert channels.
+  await syncEnvAlertChannels().catch((err) => console.error("[alerts] env channel sync failed:", err));
 
   const app = createApp();
 
@@ -33,6 +39,8 @@ async function main() {
     startScheduler();
     startAlertScheduler();
     scheduleBackup();
+    startAlertDispatcher();
+    startSslDailyScan();
   });
 
   injectWebSocket(server as unknown as Server);
@@ -46,6 +54,8 @@ async function main() {
     stopScheduler();
     stopBackup();
     stopAlertScheduler();
+    stopAlertDispatcher();
+    stopSslDailyScan();
     (server as unknown as Server).close();
     await prisma.$disconnect().catch(() => {});
     process.exit(0);

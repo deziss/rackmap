@@ -32,6 +32,8 @@ import { licenseRoutes } from "./modules/license/license.routes.js";
 import { checkoutRoutes } from "./modules/checkout/checkout.routes.js";
 import { statusHistoryRoutes } from "./modules/status-history/status-history.routes.js";
 import { cronRoutes } from "./modules/cron/cron.routes.js";
+import { alertChannelRoutes } from "./modules/alert-channels/alert-channel.routes.js";
+import { alertEventRoutes } from "./modules/alert-channels/alert-event.routes.js";
 
 export function createApp() {
   const app = new Hono();
@@ -155,6 +157,8 @@ export function createApp() {
   app.route("/api/v1/license", licenseRoutes);
   app.route("/api/v1/checkout", checkoutRoutes);
   app.route("/api/v1/status-history", statusHistoryRoutes);
+  app.route("/api/v1/alert-channels", alertChannelRoutes);
+  app.route("/api/v1/alert-events", alertEventRoutes);
 
   app.onError(onError);
 

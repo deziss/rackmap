@@ -1,7 +1,54 @@
 import tls from "tls";
 import { prisma } from "../../db.js";
-import { sendMail } from "../../lib/mail.js"; // Assuming a mail.ts exists or we will create one
+import { sendMail } from "../../lib/mail.js";
 import { resolveTargetHost } from "../../lib/target-resolver.js";
+import { emitAlert } from "../../services/alerting/emit.js";
+import type { AlertSeverity } from "@inv/shared";
+
+/** Days-remaining thresholds that each raise one ssl_expiring alert per certificate. */
+export const SSL_ALERT_THRESHOLDS = [30, 14, 7, 1] as const;
+
+/** The smallest threshold `daysRemaining` has reached, or null while more than 30 days remain. */
+export function sslThresholdFor(daysRemaining: number): number | null {
+  let hit: number | null = null;
+  for (const t of SSL_ALERT_THRESHOLDS) if (daysRemaining <= t) hit = t;
+  return hit;
+}
+
+export interface SslAlertDecision {
+  /** New value for SslStatus.lastAlertThreshold. */
+  nextThreshold: number | null;
+  /** Raise ssl_expiring (trigger) for this threshold. */
+  alert: boolean;
+  /** The certificate was renewed past every threshold: close the incident. */
+  resolved: boolean;
+}
+
+/**
+ * Edge-triggered: alert once per threshold crossed (30 → 14 → 7 → 1) for the
+ * current certificate. A renewed certificate shows up as daysRemaining jumping
+ * above the last alerted threshold; that resets the state (and resolves the
+ * incident if it is now past 30 days), so the next expiry alerts again.
+ */
+export function decideSslAlert(daysRemaining: number, lastAlertThreshold: number | null): SslAlertDecision {
+  const crossed = sslThresholdFor(daysRemaining);
+  let last = lastAlertThreshold;
+  let resolved = false;
+  if (last !== null && (crossed === null || crossed > last)) {
+    resolved = crossed === null;
+    last = null;
+  }
+  if (crossed !== null && (last === null || crossed < last)) {
+    return { nextThreshold: crossed, alert: true, resolved: false };
+  }
+  return { nextThreshold: last, alert: false, resolved };
+}
+
+function sslSeverity(daysRemaining: number): AlertSeverity {
+  if (daysRemaining <= 1) return "critical";
+  if (daysRemaining <= 7) return "error";
+  return "warning";
+}
 
 function connectAndGetCert(
   host: string,
@@ -211,6 +258,7 @@ export async function scanAllDomains(triggerEmail: boolean = false) {
         expiringSoon.push({ domain: ssl.domain, daysRemaining: cert.daysRemaining });
       }
 
+      const decision = decideSslAlert(cert.daysRemaining, ssl.lastAlertThreshold);
       await prisma.sslStatus.update({
         where: { id: ssl.id },
         data: {
@@ -221,8 +269,33 @@ export async function scanAllDomains(triggerEmail: boolean = false) {
           status,
           lastError: null,
           lastScannedAt: new Date(),
+          lastAlertThreshold: decision.nextThreshold,
         }
       });
+      if (decision.alert || decision.resolved) {
+        const expired = cert.daysRemaining <= 0;
+        await emitAlert({
+          type: "ssl_expiring",
+          severity: decision.alert ? sslSeverity(cert.daysRemaining) : "info",
+          action: decision.alert ? "trigger" : "resolve",
+          dedupKey: `rackmap:ssl:${ssl.id}`,
+          title: decision.alert
+            ? expired
+              ? `SSL certificate for ${ssl.domain} has expired`
+              : `SSL certificate for ${ssl.domain} expires in ${cert.daysRemaining} day${cert.daysRemaining === 1 ? "" : "s"}`
+            : `SSL certificate for ${ssl.domain} renewed`,
+          summary: `Valid until ${cert.validTo.toUTCString()} (issuer: ${cert.issuer}).`,
+          payload: {
+            domain: ssl.domain,
+            daysRemaining: cert.daysRemaining,
+            validTo: cert.validTo.toISOString(),
+            issuer: cert.issuer,
+            threshold: decision.nextThreshold,
+          },
+          serverId: ssl.serverId,
+          serviceId: ssl.serviceId,
+        }).catch((err) => console.error(`[ssl] alert for ${ssl.domain} failed:`, (err as Error).message));
+      }
     } catch (e: any) {
       await prisma.sslStatus.update({
         where: { id: ssl.id },
