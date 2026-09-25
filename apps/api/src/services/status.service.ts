@@ -19,6 +19,7 @@ export async function runCheck(serverId: number) {
   const prevStatus = server.lastStatus;
   const newStreak = isUp ? 0 : server.downStreak + 1;
 
+  const record = shouldRecordCheck(serverId, prevStatus, result.status, now.getTime());
   await prisma.$transaction([
     prisma.server.update({
       where: { id: serverId },
@@ -30,16 +31,21 @@ export async function runCheck(serverId: number) {
         notifiedDown: isUp ? false : server.notifiedDown,
       },
     }),
-    prisma.statusCheck.create({
-      data: {
-        serverId,
-        status: result.status,
-        latencyMs: result.latencyMs,
-        errorCode: result.errorCode,
-        checkedAt: now,
-      },
-    }),
+    ...(record
+      ? [
+          prisma.statusCheck.create({
+            data: {
+              serverId,
+              status: result.status,
+              latencyMs: result.latencyMs,
+              errorCode: result.errorCode,
+              checkedAt: now,
+            },
+          }),
+        ]
+      : []),
   ]);
+  if (record) lastRecordedAt.set(serverId, now.getTime());
 
   const flipped = prevStatus !== "unknown" && prevStatus !== result.status;
   const confirmedDown = !isUp && newStreak >= env.STATUS_FLIP_THRESHOLD && !server.notifiedDown;
@@ -66,8 +72,83 @@ export async function runAll() {
   return results.filter(Boolean);
 }
 
-/** Prune status checks older than STATUS_RETENTION_DAYS. */
+/**
+ * When each server last had a history row written, so steady-state probes are
+ * sampled instead of stored one-for-one. In-process on purpose: the scheduler
+ * runs on one replica at a time, and after a restart the first probe simply
+ * writes a fresh row.
+ */
+const lastRecordedAt = new Map<number, number>();
+
+/**
+ * Record a probe when the status changed, when this server has no row yet in
+ * this process, or when the sample interval has passed since its last row.
+ */
+export function shouldRecordCheck(
+  serverId: number,
+  prevStatus: string,
+  nextStatus: string,
+  nowMs: number,
+  intervalMs: number = env.STATUS_SAMPLE_INTERVAL_MS,
+): boolean {
+  if (intervalMs <= 0 || prevStatus !== nextStatus) return true;
+  const last = lastRecordedAt.get(serverId);
+  return last === undefined || nowMs - last >= intervalMs;
+}
+
+/** Test hook: forget the sampling state. */
+export function resetStatusSampling(): void {
+  lastRecordedAt.clear();
+}
+
+/**
+ * Delete history rows by age and/or keep only the newest `keepNewest`.
+ * Row ids are assigned in insert order, so "newest" is "highest id".
+ */
+export async function purgeStatusHistory(opts: { olderThanDays?: number; keepNewest?: number }): Promise<number> {
+  let deleted = 0;
+  if (opts.olderThanDays !== undefined) {
+    const cutoff = new Date(Date.now() - opts.olderThanDays * 24 * 60 * 60 * 1000);
+    deleted += (await prisma.statusCheck.deleteMany({ where: { checkedAt: { lt: cutoff } } })).count;
+  }
+  if (opts.keepNewest !== undefined) {
+    if (opts.keepNewest === 0) {
+      deleted += (await prisma.statusCheck.deleteMany({})).count;
+    } else {
+      const [boundary] = await prisma.statusCheck.findMany({
+        orderBy: { id: "desc" },
+        skip: opts.keepNewest - 1,
+        take: 1,
+        select: { id: true },
+      });
+      if (boundary) {
+        deleted += (await prisma.statusCheck.deleteMany({ where: { id: { lt: boundary.id } } })).count;
+      }
+    }
+  }
+  return deleted;
+}
+
+/** Prune by STATUS_RETENTION_DAYS, then enforce the STATUS_MAX_ROWS cap. */
 export async function pruneStatusHistory() {
-  const cutoff = new Date(Date.now() - env.STATUS_RETENTION_DAYS * 24 * 60 * 60 * 1000);
-  await prisma.statusCheck.deleteMany({ where: { checkedAt: { lt: cutoff } } });
+  await purgeStatusHistory({
+    olderThanDays: env.STATUS_RETENTION_DAYS,
+    ...(env.STATUS_MAX_ROWS > 0 ? { keepNewest: env.STATUS_MAX_ROWS } : {}),
+  });
+}
+
+export async function getStatusHistoryStats() {
+  const [agg, servers] = await Promise.all([
+    prisma.statusCheck.aggregate({ _count: { _all: true }, _min: { checkedAt: true }, _max: { checkedAt: true } }),
+    prisma.statusCheck.groupBy({ by: ["serverId"] }).then((rows) => rows.length),
+  ]);
+  return {
+    total: agg._count._all,
+    oldest: agg._min.checkedAt?.toISOString() ?? null,
+    newest: agg._max.checkedAt?.toISOString() ?? null,
+    servers,
+    retentionDays: env.STATUS_RETENTION_DAYS,
+    maxRows: env.STATUS_MAX_ROWS,
+    sampleIntervalMs: env.STATUS_SAMPLE_INTERVAL_MS,
+  };
 }

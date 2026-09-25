@@ -34,7 +34,10 @@ RUN pnpm --filter @inv/api exec prisma generate
 
 # ── runtime ───────────────────────────────────────────────────────────────────
 FROM node:24-alpine AS runtime
-RUN corepack enable pnpm
+# pg_dump for the scheduled backups (services/backup.service.ts). Its major
+# version must be >= the server's: pg_dump refuses to dump a newer server.
+# postgresql18-client is in Alpine 3.23+; node:24-alpine is currently 3.24.
+RUN corepack enable pnpm && apk add --no-cache postgresql18-client
 WORKDIR /app
 
 COPY --from=builder /app/node_modules ./node_modules
@@ -48,12 +51,14 @@ COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
 
 WORKDIR /app/apps/api
 
-# /data holds the SQLite database and any SSH keys the operator drops in, so it
-# must be writable by the unprivileged user the process runs as.
+# /data holds the SSH keys the operator drops in (and, on installs upgraded from
+# SQLite, the old inventory.db); /backups receives the pg_dump backups. Both must
+# be writable by the unprivileged user the process runs as.
 RUN mkdir -p /data /backups && chown -R node:node /app /data /backups
 VOLUME ["/data"]
 
-ENV DATABASE_URL="file:/data/inventory.db"
+# No DATABASE_URL default: the database is PostgreSQL, and a baked-in URL could
+# only ever be wrong. docker-compose.yml derives it from POSTGRES_*.
 ENV PORT=3001
 EXPOSE 3001
 

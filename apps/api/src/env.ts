@@ -7,7 +7,15 @@ configDotenv({ override: process.env.NODE_ENV !== "test" });
 const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().default(3000),
-  DATABASE_URL: z.string().default("file:./dev.db"),
+  DATABASE_URL: z.string().default("postgresql://postgres:postgres@localhost:5432/server_inventory?schema=public"),
+  AUTH_RATE_LIMIT_ENABLED: z
+    .string()
+    .default("true")
+    .transform((v) => v === "true"),
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().default(200),
+  AUTH_RATE_LIMIT_WINDOW: z.coerce.number().int().default(60),
+  AUTH_LOGIN_RATE_LIMIT_MAX: z.coerce.number().int().default(60),
+  AUTH_LOGIN_RATE_LIMIT_WINDOW: z.coerce.number().int().default(60),
   APP_ENCRYPTION_KEY: z.string().default(""),
   APP_ENCRYPTION_PASSPHRASE: z.string().optional(),
   VAULT_PASSPHRASE: z.string().optional(),
@@ -54,6 +62,13 @@ const EnvSchema = z.object({
   PING_TIMEOUT_MS: z.coerce.number().int().min(200).default(3000),
   PING_CONCURRENCY: z.coerce.number().int().min(1).max(100).default(10),
   STATUS_RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
+  // Probe history is sampled: a row is written when a server's status changes,
+  // otherwise at most once per interval. 0 records every probe (the old behaviour,
+  // about 1,440 rows per server per day at the default PING_INTERVAL_MS).
+  STATUS_SAMPLE_INTERVAL_MS: z.coerce.number().int().min(0).default(900_000),
+  // Hard cap on stored probe history across all servers; the oldest rows beyond it
+  // are pruned with the retention sweep. 0 disables the cap.
+  STATUS_MAX_ROWS: z.coerce.number().int().min(0).default(10_000),
   STATUS_FLIP_THRESHOLD: z.coerce.number().int().min(1).default(2),
   // How long a background job's database lease stays valid before another replica
   // may take it (services/job-lock.service.ts). The holder renews it every TTL/3
@@ -121,6 +136,56 @@ const EnvSchema = z.object({
   LICENCIA_API_KEY: z.string().optional(),
   LICENCIA_PUBLIC_KEY: z.string().optional(),
   LICENCIA_LICENSE_KEY: z.string().optional(),
+  // Billing: "disabled" refuses to complete a checkout; "simulated" marks orders paid
+  // without a payment gateway (local demos only — never on a reachable instance).
+  BILLING_MODE: z.enum(["disabled", "simulated"]).default("disabled"),
+  // Per-account sign-in throttle, independent of the per-IP limit above, so a
+  // shared-IP office is not locked out but one account cannot be brute-forced.
+  AUTH_LOGIN_ACCOUNT_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(10),
+  AUTH_LOGIN_ACCOUNT_RATE_LIMIT_WINDOW: z.coerce.number().int().min(1).default(60),
+  // Nightly database backup (pg_dump custom format) into BACKUP_DIR.
+  BACKUP_CRON: z.string().default("0 2 * * *"),
+  BACKUP_KEEP: z.coerce.number().int().min(1).default(14),
+  // Externally reachable base URL of this instance, e.g. https://rackmap.example.com.
+  // Managed hosts use it for heartbeat check-ins; alert messages use it for links.
+  PUBLIC_BASE_URL: z.preprocess((v) => (v === "" ? undefined : v), z.string().url().optional()),
+  // Alert channel outbox (services/alerting)
+  ALERT_DISPATCH_ENABLED: z
+    .string()
+    .default("true")
+    .transform((v) => v === "true"),
+  ALERT_DISPATCH_INTERVAL_MS: z.coerce.number().int().min(1000).default(5000),
+  ALERT_OUTBOUND_TIMEOUT_MS: z.coerce.number().int().min(1000).default(10_000),
+  // Outbound webhook policy. Private ranges and plain http are refused unless opted in
+  // or the host/CIDR is on the allowlist; link-local/metadata addresses are always refused.
+  ALERT_OUTBOUND_ALLOW_PRIVATE: z
+    .string()
+    .default("false")
+    .transform((v) => v === "true"),
+  ALERT_OUTBOUND_ALLOW_HTTP: z
+    .string()
+    .default("false")
+    .transform((v) => v === "true"),
+  ALERT_OUTBOUND_ALLOWLIST: z.string().default(""),
+  ALERT_DELIVERY_RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
+  ALERT_MAX_EVENT_AGE_MS: z.coerce.number().int().min(60_000).default(21_600_000),
+  // Cron heartbeat monitoring
+  HEARTBEAT_SWEEP_INTERVAL_MS: z.coerce.number().int().min(5000).default(30_000),
+  HEARTBEAT_PING_KEEP: z.coerce.number().int().min(10).default(200),
+  HEARTBEAT_PING_RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
+  HEARTBEAT_PING_MAX_BODY_BYTES: z.coerce.number().int().min(0).max(1_048_576).default(10_240),
+  // Runbooks / fleet exec
+  RUNBOOK_WORKER_ENABLED: z
+    .string()
+    .default("true")
+    .transform((v) => v === "true"),
+  RUNBOOK_MAX_CONCURRENT_RUNS: z.coerce.number().int().min(1).default(2),
+  RUNBOOK_MAX_SSH_SESSIONS: z.coerce.number().int().min(1).default(20),
+  RUNBOOK_MAX_TARGETS: z.coerce.number().int().min(1).default(500),
+  RUNBOOK_OUTPUT_MAX_BYTES: z.coerce.number().int().min(1024).default(262_144),
+  RUNBOOK_APPROVAL_TTL_HOURS: z.coerce.number().int().min(1).default(24),
+  // Scheduled SSL certificate scan (croner expression, server local time).
+  SSL_SCAN_CRON: z.string().default("0 6 * * *"),
 }).refine(
   (data) => {
     const raw = (data.APP_ENCRYPTION_PASSPHRASE || data.APP_ENCRYPTION_KEY || "").trim();

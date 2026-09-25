@@ -23,11 +23,16 @@ export const statement = {
     "sudo",
     "logs",
     "atop",
+    "cron",
   ],
   lookup: ["create", "update", "delete"],
   tag: ["create", "delete"],
   audit: ["read"],
   vault: ["init", "unlock", "status", "reset", "unlockGlobal", "persist"],
+  alertChannel: ["read", "manage"],
+  heartbeat: ["read", "create", "update", "delete"],
+  runbook: ["read", "create", "update", "delete", "execute", "approve"],
+  maintenance: ["manage"],
 } as const;
 
 export const ac = createAccessControl(statement);
@@ -36,13 +41,17 @@ export const ac = createAccessControl(statement);
 export const viewer = ac.newRole({
   server: ["read"],
   vault: ["status"],
+  heartbeat: ["read"],
 });
 
 export const editor = ac.newRole({
-  server: ["read", "create", "update", "revealPassword", "check", "metrics", "discover", "osUsers", "logs", "atop"],
+  server: ["read", "create", "update", "revealPassword", "check", "metrics", "discover", "osUsers", "logs", "atop", "cron"],
   lookup: ["create", "update"],
   tag: ["create"],
   vault: ["unlock", "status"],
+  alertChannel: ["read"],
+  heartbeat: ["read", "create", "update"],
+  runbook: ["read", "execute"],
 });
 
 export const admin = ac.newRole({
@@ -63,11 +72,16 @@ export const admin = ac.newRole({
     "sudo",
     "logs",
     "atop",
+    "cron",
   ],
   lookup: ["create", "update", "delete"],
   tag: ["create", "delete"],
   audit: ["read"],
   vault: ["init", "unlock", "status", "reset", "unlockGlobal", "persist"],
+  alertChannel: ["read", "manage"],
+  heartbeat: ["read", "create", "update", "delete"],
+  runbook: ["read", "create", "update", "delete", "execute", "approve"],
+  maintenance: ["manage"],
 });
 
 export const roles = { admin, editor, viewer };

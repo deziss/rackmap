@@ -4,20 +4,15 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { env } from "./env.js";
 import { prisma } from "./db.js";
 import { createApp } from "./app.js";
-import { startScheduler } from "./services/scheduler.js";
-import { scheduleBackup } from "./services/backup.service.js";
+import { startScheduler, stopScheduler } from "./services/scheduler.js";
+import { scheduleBackup, stopBackup } from "./services/backup.service.js";
 import { setupWebSocket } from "./ws/ssh.ws.js";
-import { startAlertScheduler } from "./services/alert.service.js";
+import { startAlertScheduler, stopAlertScheduler } from "./services/alert.service.js";
 import { autoInitVaultFromEnv } from "./services/vault.service.js";
 import { autoInitLicenseFromEnv } from "./services/license.service.js";
 import type { Server } from "node:http";
 
 async function main() {
-  // WAL mode — prevents SQLITE_BUSY under concurrent probe writes
-  if (env.DATABASE_URL.startsWith("file:")) {
-    await prisma.$queryRawUnsafe("PRAGMA journal_mode=WAL");
-  }
-
   // Auto-initialize or unlock Master Credential Vault if VAULT_PASSPHRASE is configured in .env
   await autoInitVaultFromEnv();
 
@@ -41,6 +36,22 @@ async function main() {
   });
 
   injectWebSocket(server as unknown as Server);
+
+  // Stop background work, then close the listener and the DB pool.
+  let shuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[shutdown] ${signal} received`);
+    stopScheduler();
+    stopBackup();
+    stopAlertScheduler();
+    (server as unknown as Server).close();
+    await prisma.$disconnect().catch(() => {});
+    process.exit(0);
+  };
+  process.once("SIGTERM", () => void shutdown("SIGTERM"));
+  process.once("SIGINT", () => void shutdown("SIGINT"));
 }
 
 main().catch((e) => {

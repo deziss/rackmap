@@ -1,4 +1,5 @@
 import os from "node:os";
+import pkg from "../../package.json" with { type: "json" };
 import { prisma } from "../db.js";
 import { env } from "../env.js";
 import { AppError } from "../lib/errors.js";
@@ -22,6 +23,8 @@ const FREE_FEATURES: Record<LicenseFeature, boolean> = {
   auto_update: false,
   multi_channel_alerts: false,
   unlimited_servers: false,
+  remote_cron: false,
+  runbooks: false,
 };
 
 const PRO_FEATURES: Record<LicenseFeature, boolean> = {
@@ -31,6 +34,8 @@ const PRO_FEATURES: Record<LicenseFeature, boolean> = {
   auto_update: true,
   multi_channel_alerts: true,
   unlimited_servers: false,
+  remote_cron: true,
+  runbooks: true,
 };
 
 const ENTERPRISE_FEATURES: Record<LicenseFeature, boolean> = {
@@ -40,6 +45,8 @@ const ENTERPRISE_FEATURES: Record<LicenseFeature, boolean> = {
   auto_update: true,
   multi_channel_alerts: true,
   unlimited_servers: true,
+  remote_cron: true,
+  runbooks: true,
 };
 
 /** Get the current license status and active entitlements */
@@ -164,6 +171,11 @@ export async function activateLicense(input: {
     }
   }
 
+  // The step-3 fallback below grants a paid tier to ANY key string without
+  // checking it. That is only acceptable for development and explicit demo
+  // instances; in production it needs BILLING_MODE=simulated.
+  const allowUnverifiedKeys = env.BILLING_MODE === "simulated" || env.NODE_ENV !== "production";
+
   // 2. Online validation against Licencia server if LICENCIA_URL configured
   if (env.LICENCIA_URL) {
     try {
@@ -178,7 +190,7 @@ export async function activateLicense(input: {
           hardwareId: hwId,
           deviceName: os.hostname(),
           os: process.platform,
-          appVersion: "0.5.0",
+          appVersion: pkg.version,
         }),
       });
 
@@ -223,6 +235,13 @@ export async function activateLicense(input: {
       return getLicenseStatus();
     } catch (e: any) {
       if (e.message?.includes("fetch failed") || e.message?.includes("ECONNREFUSED") || e.message?.includes("ENOTFOUND")) {
+        if (!allowUnverifiedKeys) {
+          throw new AppError(
+            "VALIDATION_ERROR",
+            "License server unreachable. Retry later, or activate with an offline lease token.",
+            400
+          );
+        }
         console.warn(`[Licencia] Server ${env.LICENCIA_URL} unreachable (${e.message}). Falling back to offline key activation.`);
       } else {
         throw new AppError("VALIDATION_ERROR", `Failed to validate license with Licencia: ${e.message}`, 400);
@@ -231,6 +250,14 @@ export async function activateLicense(input: {
   }
 
   // 3. Fallback / direct license key activation (for local demo or test keys)
+  if (!allowUnverifiedKeys) {
+    throw new AppError(
+      "VALIDATION_ERROR",
+      "License server not configured. Set LICENCIA_URL (online activation) or LICENCIA_PUBLIC_KEY " +
+        "(offline lease tokens) to activate a license.",
+      400
+    );
+  }
   const isEnterprise = key.toUpperCase().includes("ENT") || key.toUpperCase().includes("ENTERPRISE");
   const tier: LicenseTier = isEnterprise ? "enterprise" : "pro";
   const maxServers = isEnterprise ? -1 : 100;
@@ -332,6 +359,8 @@ export async function assertFeatureEnabled(feature: LicenseFeature): Promise<voi
       auto_update: "Automated System Updates (Unattended-Upgrades)",
       multi_channel_alerts: "Multi-Channel Alert Dispatching",
       unlimited_servers: "Unlimited Servers Fleet Management",
+      remote_cron: "Remote Cron Job Editor",
+      runbooks: "Runbooks & Fleet Command Execution",
     };
     const humanName = featureNames[feature] || feature;
     throw new AppError(

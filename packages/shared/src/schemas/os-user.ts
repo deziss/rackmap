@@ -71,6 +71,16 @@ const LinuxGroupName = z
   .max(32)
   .regex(OS_GROUP_NAME_PATTERN, "Invalid Linux group name");
 
+/**
+ * An account password for chpasswd, which reads `user:password` LINES: a line
+ * break would start a second entry and could set any account's password.
+ */
+const OsAccountPassword = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[^\r\n\0]*$/, "Password must not contain line breaks");
+
 export const SudoPermissionInput = z.object({
   username: z.string().min(1),
   permissionType: z.enum(["none", "all_nopasswd", "all_passwd", "custom"]),
@@ -81,7 +91,7 @@ export type SudoPermissionInput = z.infer<typeof SudoPermissionInput>;
 
 export const CreateOsUserInput = z.object({
   username: z.string().min(1).max(32).regex(/^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[$]?$/, "Invalid Linux username format"),
-  password: z.string().min(1).max(128).optional(),
+  password: OsAccountPassword.optional(),
   shell: LinuxShell.default("/bin/bash").optional(),
   homeDir: LinuxHomeDir.optional(),
   createHome: z.boolean().default(true).optional(),
@@ -98,15 +108,25 @@ export const UpdateOsUserInput = z.object({
   shell: LinuxShell.optional(),
   homeDir: LinuxHomeDir.optional(),
   groups: z.array(LinuxGroupName).optional(),
-  password: z.string().min(1).max(128).optional(),
+  password: OsAccountPassword.optional(),
   isLocked: z.boolean().optional(),
   sudoType: z.enum(["none", "all_nopasswd", "all_passwd", "custom"]).optional(),
   customCommands: z.array(SudoCommandSpec).optional(),
 });
 export type UpdateOsUserInput = z.infer<typeof UpdateOsUserInput>;
 
+/**
+ * A boolean that arrives as a query-string value ("true" / "false").
+ *
+ * Deliberately NOT z.coerce.boolean(): that is Boolean(value), which turns the
+ * string "false" into true — here it would silently run `userdel -f`. Anything
+ * other than true / "true" is false.
+ */
+const QueryBoolean = z.union([z.boolean(), z.string()]).transform((v) => v === true || v === "true");
+
+/** Validated from the DELETE query string. An omitted removeHome means "remove it" (the service default). */
 export const DeleteOsUserInput = z.object({
-  removeHome: z.boolean().default(true).optional(),
-  force: z.boolean().default(false).optional(),
+  removeHome: QueryBoolean.optional(),
+  force: QueryBoolean.optional(),
 });
 export type DeleteOsUserInput = z.infer<typeof DeleteOsUserInput>;

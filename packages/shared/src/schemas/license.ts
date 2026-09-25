@@ -10,6 +10,8 @@ export const LicenseFeatureSchema = z.enum([
   "auto_update",
   "multi_channel_alerts",
   "unlimited_servers",
+  "remote_cron",
+  "runbooks",
 ]);
 export type LicenseFeature = z.infer<typeof LicenseFeatureSchema>;
 
@@ -83,3 +85,37 @@ export const CheckoutResultSchema = z.object({
   message: z.string(),
 });
 export type CheckoutResult = z.infer<typeof CheckoutResultSchema>;
+
+
+export const OrderItemSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  userId: z.string(),
+  planId: z.string(),
+  billingCycle: z.string(),
+  amount: z.number(),
+  currency: z.string(),
+  customerName: z.string(),
+  customerEmail: z.string(),
+  company: z.string().nullable().optional(),
+  status: z.string(),
+  paymentGateway: z.string().nullable().optional(),
+  paymentRef: z.string().nullable().optional(),
+  licenseKey: z.string().nullable().optional(),
+  invoiceNumber: z.string().nullable().optional(),
+  createdAt: z.union([z.string(), z.date()]),
+  updatedAt: z.union([z.string(), z.date()]),
+  user: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      email: z.string(),
+    })
+    .optional(),
+});
+export type OrderItem = z.infer<typeof OrderItemSchema>;
+
+export const OrderListResponseSchema = z.object({
+  orders: z.array(OrderItemSchema),
+});
+export type OrderListResponse = z.infer<typeof OrderListResponseSchema>;

@@ -22,7 +22,16 @@ import { runCheck, runAll } from "../../services/status.service.js";
 import { notifyFlip } from "../../services/notify.service.js";
 import { fetchMetrics } from "../../services/metrics.service.js";
 import { autoDiscoverAndApply, formatStorageBytes } from "../../services/discovery.service.js";
-import { listOsUsers, updateSudoPermission, createOsUser, updateOsUser, deleteOsUser } from "../../services/os-user.service.js";
+import {
+  listOsUsers,
+  updateSudoPermission,
+  createOsUser,
+  updateOsUser,
+  deleteOsUser,
+  grantsPrivilegedAccess,
+  osUserErrorToHttp,
+  PRIVILEGED_GRANT_MESSAGE,
+} from "../../services/os-user.service.js";
 import { queryServerLogs } from "../../services/log-viewer.service.js";
 import { getAtopDates, getAtopSnapshots, getAtopIntervalProcesses, getAtopTopProcesses } from "../../services/atop.service.js";
 import { getAutoUpdateStatus, updateAutoUpdateStatus } from "../../services/auto-update.service.js";
@@ -320,33 +329,47 @@ export const serverRoutes = new Hono()
         const users = await listOsUsers(id, sshPass);
         return c.json({ users });
       } catch (err) {
-        const { status, message } = sshErrorToHttp(err);
-        return c.json({ error: { code: "OS_USERS_ERROR", message } }, status);
+        const { status, message, code } = sshErrorToHttp(err);
+        return c.json({ error: { code: code ?? "OS_USERS_ERROR", message } }, status);
       }
     },
   )
 
   // POST /servers/:id/os-users — create new OS user
+  //
+  // server:osUsers (editor) may create plain accounts. A sudo grant or a
+  // root-equivalent group is a privilege grant and additionally needs the
+  // admin-only server:sudo. This check runs before the license check and before
+  // any SSH connection, so it never depends on the target host.
   .post(
     "/:id/os-users",
     requirePermission({ server: ["osUsers"] }),
     zValidator("param", idParamSchema),
     zValidator("json", CreateOsUserInput),
     async (c) => {
-      await assertFeatureEnabled("remote_os_users");
       const { id } = c.req.valid("param");
       const input = c.req.valid("json");
+      const canSudo = can(c.get("user").role, "server", "sudo");
+      if (!canSudo && grantsPrivilegedAccess(input)) {
+        return c.json({ error: { code: "FORBIDDEN", message: PRIVILEGED_GRANT_MESSAGE } }, 403);
+      }
+      await assertFeatureEnabled("remote_os_users");
       try {
         const sshPass = c.req.header("x-ssh-password") || undefined;
-        const result = await createOsUser(id, input, getAuditCtx(c), sshPass);
+        const result = await createOsUser(id, input, getAuditCtx(c), sshPass, { allowPrivileged: canSudo });
         return c.json(result, 201);
-      } catch (err: any) {
-        return c.json({ error: { code: "OS_USER_CREATE_ERROR", message: err.message } }, 400);
+      } catch (err) {
+        const { status, code, message } = osUserErrorToHttp(err, "OS_USER_CREATE_ERROR");
+        return c.json({ error: { code, message } }, status);
       }
     },
   )
 
   // PATCH /servers/:id/os-users/:username — update OS user
+  //
+  // Same privilege rule as POST for the body. Without server:sudo the service
+  // also refuses, on the host, any change to an account that is already
+  // root-equivalent (resetting a sudo user's password is a sudo grant).
   .patch(
     "/:id/os-users/:username",
     requirePermission({ server: ["osUsers"] }),
@@ -355,12 +378,18 @@ export const serverRoutes = new Hono()
     async (c) => {
       const { id, username } = c.req.valid("param");
       const input = c.req.valid("json");
+      const canSudo = can(c.get("user").role, "server", "sudo");
+      if (!canSudo && grantsPrivilegedAccess(input)) {
+        return c.json({ error: { code: "FORBIDDEN", message: PRIVILEGED_GRANT_MESSAGE } }, 403);
+      }
+      await assertFeatureEnabled("remote_os_users");
       try {
         const sshPass = c.req.header("x-ssh-password") || undefined;
-        const result = await updateOsUser(id, username, input, getAuditCtx(c), sshPass);
+        const result = await updateOsUser(id, username, input, getAuditCtx(c), sshPass, { allowPrivileged: canSudo });
         return c.json(result);
-      } catch (err: any) {
-        return c.json({ error: { code: "OS_USER_UPDATE_ERROR", message: err.message } }, 400);
+      } catch (err) {
+        const { status, code, message } = osUserErrorToHttp(err, "OS_USER_UPDATE_ERROR");
+        return c.json({ error: { code, message } }, status);
       }
     },
   )
@@ -374,12 +403,15 @@ export const serverRoutes = new Hono()
     async (c) => {
       const { id, username } = c.req.valid("param");
       const input = c.req.valid("query");
+      const canSudo = can(c.get("user").role, "server", "sudo");
+      await assertFeatureEnabled("remote_os_users");
       try {
         const sshPass = c.req.header("x-ssh-password") || undefined;
-        const result = await deleteOsUser(id, username, input, getAuditCtx(c), sshPass);
+        const result = await deleteOsUser(id, username, input, getAuditCtx(c), sshPass, { allowPrivileged: canSudo });
         return c.json(result);
-      } catch (err: any) {
-        return c.json({ error: { code: "OS_USER_DELETE_ERROR", message: err.message } }, 400);
+      } catch (err) {
+        const { status, code, message } = osUserErrorToHttp(err, "OS_USER_DELETE_ERROR");
+        return c.json({ error: { code, message } }, status);
       }
     },
   )
@@ -397,8 +429,9 @@ export const serverRoutes = new Hono()
         const sshPass = c.req.header("x-ssh-password") || undefined;
         const result = await updateSudoPermission(id, input, getAuditCtx(c), sshPass);
         return c.json(result);
-      } catch (err: any) {
-        return c.json({ error: { code: "SUDO_CONFIG_ERROR", message: err.message } }, 400);
+      } catch (err) {
+        const { status, code, message } = osUserErrorToHttp(err, "SUDO_CONFIG_ERROR");
+        return c.json({ error: { code, message } }, status);
       }
     },
   )

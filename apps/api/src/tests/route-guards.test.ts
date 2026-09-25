@@ -107,11 +107,12 @@ describe("editor is not silently promoted to admin (v0.6.1 regression)", () => {
 });
 
 describe("public config endpoint", () => {
-  it("is reachable without a session and only advertises the signup flag", async () => {
+  it("is reachable without a session and only advertises UI flags", async () => {
     const res = await app.request("/api/v1/public/config");
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
-    expect(Object.keys(body)).toEqual(["allowSelfSignup"]);
+    expect(Object.keys(body)).toEqual(["allowSelfSignup", "billingEnabled"]);
     expect(typeof body["allowSelfSignup"]).toBe("boolean");
+    expect(typeof body["billingEnabled"]).toBe("boolean");
   });
 });

@@ -120,6 +120,18 @@ export async function completeCheckout(
   userId: string,
   input: CompleteCheckoutInput
 ): Promise<CheckoutResult> {
+  // Nothing below verifies a payment: it trusts the client's paymentMethod and
+  // paymentReference and issues a key. That is only acceptable as an explicit
+  // demo mode. Refuse before touching the order, so it stays "pending".
+  if (env.BILLING_MODE !== "simulated") {
+    throw new AppError(
+      "NOT_IMPLEMENTED",
+      "Online checkout is not available: no payment gateway is configured on this instance. " +
+        "Activate a license key from Licencia under Settings → License instead.",
+      501
+    );
+  }
+
   const order = await prisma.order.findUnique({
     where: { sessionId: input.sessionId },
   });
@@ -228,11 +240,42 @@ export async function completeCheckout(
 export async function getUserOrders(userId: string, isAdmin: boolean) {
   if (isAdmin) {
     return prisma.order.findMany({
+      include: {
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
   }
   return prisma.order.findMany({
     where: { userId },
+    include: {
+      user: {
+        select: { id: true, name: true, email: true },
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
+}
+
+export async function getOrderById(orderId: string, userId: string, isAdmin: boolean) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      user: {
+        select: { id: true, name: true, email: true },
+      },
+    },
+  });
+
+  if (!order) {
+    throw new AppError("NOT_FOUND", "Order not found", 404);
+  }
+
+  if (!isAdmin && order.userId !== userId) {
+    throw new AppError("FORBIDDEN", "Unauthorized to view this invoice", 403);
+  }
+
+  return order;
 }

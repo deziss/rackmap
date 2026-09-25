@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import { prisma } from "../../db.js";
+import type { Prisma } from "@prisma/client";
 import { encryptSecret } from "../../lib/crypto.js";
 import { writeAudit, type AuditCtx } from "../../lib/audit.js";
 
@@ -166,18 +167,18 @@ export async function importServers(
 }
 
 export async function exportServers(filters: Record<string, string | undefined>): Promise<Buffer> {
-  const where = {
+  const where: Prisma.ServerWhereInput = {
     deletedAt: null,
     ...(filters.q ? {
       OR: [
-        { hostname: { contains: filters.q, mode: 'insensitive' } },
-        { ip: { contains: filters.q, mode: 'insensitive' } },
-        { domain: { contains: filters.q, mode: 'insensitive' } },
-        { username: { contains: filters.q, mode: 'insensitive' } },
-        { remark: { contains: filters.q, mode: 'insensitive' } },
-        { networkType: { name: { contains: filters.q, mode: 'insensitive' } } },
-        { allocatedTo: { name: { contains: filters.q, mode: 'insensitive' } } },
-        { location: { name: { contains: filters.q, mode: 'insensitive' } } },
+        { hostname: { contains: filters.q, mode: "insensitive" as const } },
+        { ip: { contains: filters.q, mode: "insensitive" as const } },
+        { domain: { contains: filters.q, mode: "insensitive" as const } },
+        { username: { contains: filters.q, mode: "insensitive" as const } },
+        { remark: { contains: filters.q, mode: "insensitive" as const } },
+        { networkType: { name: { contains: filters.q, mode: "insensitive" as const } } },
+        { allocatedTo: { name: { contains: filters.q, mode: "insensitive" as const } } },
+        { location: { name: { contains: filters.q, mode: "insensitive" as const } } },
       ],
     } : {}),
     ...(filters.cloudProviderId ? { cloudProviderId: Number(filters.cloudProviderId) } : {}),

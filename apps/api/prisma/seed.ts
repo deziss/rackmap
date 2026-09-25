@@ -18,8 +18,6 @@ const { hashPassword } = await import(
 ) as { hashPassword: (pw: string) => Promise<string> };
 
 async function main() {
-  await prisma.$queryRawUnsafe("PRAGMA journal_mode=WAL");
-
   // This runs on every container start. Re-seeding a live installation would
   // resurrect deleted demo accounts and reset roles out from under the
   // operator, so bail out as soon as the instance has been set up.

@@ -20,6 +20,8 @@ apps/web/src/routeTree.gen.ts
 *.db-journal
 *.db-wal
 *.db-shm
+*.db.backup.*
+migrations_sqlite_backup/
 *.sqlite
 *.sqlite3
 data/

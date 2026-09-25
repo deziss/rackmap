@@ -7,6 +7,7 @@ import { onError } from "./lib/errors.js";
 import { prisma } from "./db.js";
 import { writeAuditDirect } from "./lib/audit.js";
 import { withVaultSession } from "./lib/vault-context.js";
+import { withSudoOverride } from "./lib/sudo-context.js";
 import { apiKeyAuth } from "./modules/api-keys/api-key.routes.js";
 import { metricsExportRoutes } from "./modules/metrics-export/metrics-export.routes.js";
 import { sshHostKeyRoutes } from "./modules/ssh-host-keys/ssh-host-key.routes.js";
@@ -29,6 +30,7 @@ import { vaultRoutes } from "./modules/vault/vault.routes.js";
 import { sshKeyRoutes } from "./modules/ssh-keys/ssh-key.routes.js";
 import { licenseRoutes } from "./modules/license/license.routes.js";
 import { checkoutRoutes } from "./modules/checkout/checkout.routes.js";
+import { statusHistoryRoutes } from "./modules/status-history/status-history.routes.js";
 
 export function createApp() {
   const app = new Hono();
@@ -38,6 +40,7 @@ export function createApp() {
   // request, so an operator who unlocked only their own session can still open
   // SSH connections. See lib/vault-context.ts.
   app.use(withVaultSession);
+  app.use(withSudoOverride);
   // TRUSTED_ORIGINS defaults to WEB_ORIGIN (see env.ts), so an unconfigured deployment is
   // locked to its own web origin. "*" is an explicit opt-in that reflects any IP/hostname back
   // — with credentials:true CORS can't send a literal "*", so the caller's origin is echoed.
@@ -50,8 +53,8 @@ export function createApp() {
     cors({
       origin: trustedList ? trustedList : (origin) => origin,
       credentials: true,
-      allowHeaders: ["Content-Type", "Authorization"],
-      allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+      allowHeaders: ["Content-Type", "Authorization", "X-SSH-Password", "X-Sudo-Password"],
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     }),
   );
 
@@ -149,6 +152,7 @@ export function createApp() {
   app.route("/api/v1/ssh-host-keys", sshHostKeyRoutes);
   app.route("/api/v1/license", licenseRoutes);
   app.route("/api/v1/checkout", checkoutRoutes);
+  app.route("/api/v1/status-history", statusHistoryRoutes);
 
   app.onError(onError);
 

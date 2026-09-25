@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { SudoPasswordField, useSudoPassword } from "@/components/sudo-password-field";
 import {
   Dialog,
   DialogContent,
@@ -108,6 +109,7 @@ export function CreateOsUserDialog({
   const [sudoType, setSudoType] = useState<"none" | "all_nopasswd" | "all_passwd" | "custom">("none");
   const [customCommands, setCustomCommands] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const sudo = useSudoPassword();
 
   // Reset fields on open
   useEffect(() => {
@@ -126,6 +128,7 @@ export function CreateOsUserDialog({
       setSudoType("none");
       setCustomCommands("");
       setErrorMsg("");
+      sudo.reset();
     }
   }, [open]);
 
@@ -150,7 +153,7 @@ export function CreateOsUserDialog({
   };
 
   const mutation = useMutation({
-    mutationFn: (input: CreateOsUserInput) => createServerOsUser(serverId, input),
+    mutationFn: (input: CreateOsUserInput) => createServerOsUser(serverId, input, sudo.requestOpts()),
     onSuccess: (res) => {
       toast.success(res.message || `User account "${username}" created successfully`);
       queryClient.invalidateQueries({ queryKey: serverKeys.osUsers(serverId) });
@@ -158,6 +161,7 @@ export function CreateOsUserDialog({
     },
     onError: (err: any) => {
       setErrorMsg(err.message || "Failed to create user");
+      sudo.onError(err);
     },
   });
 
@@ -216,6 +220,7 @@ export function CreateOsUserDialog({
             <span>{errorMsg}</span>
           </div>
         )}
+        <SudoPasswordField sudo={sudo} />
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           {/* Section: Basic Identity */}
@@ -495,6 +500,7 @@ export function EditOsUserDialog({
   const [sudoType, setSudoType] = useState<"none" | "all_nopasswd" | "all_passwd" | "custom">("none");
   const [customCommands, setCustomCommands] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const sudo = useSudoPassword();
 
   useEffect(() => {
     if (user && open) {
@@ -505,6 +511,7 @@ export function EditOsUserDialog({
       setShowPassword(false);
       setIsLocked(false);
       setErrorMsg("");
+      sudo.reset();
 
       if (user.hasSudo) {
         const hasNoPasswd = user.sudoRules.some((r) => r.includes("NOPASSWD: ALL"));
@@ -535,7 +542,7 @@ export function EditOsUserDialog({
   const mutation = useMutation({
     mutationFn: (input: UpdateOsUserInput) => {
       if (!user) throw new Error("No user selected");
-      return updateServerOsUser(serverId, user.username, input);
+      return updateServerOsUser(serverId, user.username, input, sudo.requestOpts());
     },
     onSuccess: (res) => {
       toast.success(res.message || `User "${user?.username}" updated successfully`);
@@ -544,6 +551,7 @@ export function EditOsUserDialog({
     },
     onError: (err: any) => {
       setErrorMsg(err.message || "Failed to update user");
+      sudo.onError(err);
     },
   });
 
@@ -612,6 +620,7 @@ export function EditOsUserDialog({
             <span>{errorMsg}</span>
           </div>
         )}
+        <SudoPasswordField sudo={sudo} />
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           {/* Shell & Home Dir */}
@@ -829,6 +838,7 @@ export function DeleteOsUserDialog({
   const [removeHome, setRemoveHome] = useState(true);
   const [force, setForce] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const sudo = useSudoPassword();
 
   useEffect(() => {
     if (open) {
@@ -836,13 +846,14 @@ export function DeleteOsUserDialog({
       setRemoveHome(true);
       setForce(false);
       setErrorMsg("");
+      sudo.reset();
     }
   }, [open]);
 
   const mutation = useMutation({
     mutationFn: (input: DeleteOsUserInput) => {
       if (!user) throw new Error("No user selected");
-      return deleteServerOsUser(serverId, user.username, input);
+      return deleteServerOsUser(serverId, user.username, input, sudo.requestOpts());
     },
     onSuccess: (res) => {
       toast.success(res.message || `User "${user?.username}" deleted successfully`);
@@ -851,6 +862,7 @@ export function DeleteOsUserDialog({
     },
     onError: (err: any) => {
       setErrorMsg(err.message || "Failed to delete user");
+      sudo.onError(err);
     },
   });
 
@@ -914,6 +926,7 @@ export function DeleteOsUserDialog({
                 <span>{errorMsg}</span>
               </div>
             )}
+            <SudoPasswordField sudo={sudo} />
 
             {/* Options */}
             <div className="space-y-2 pt-1">

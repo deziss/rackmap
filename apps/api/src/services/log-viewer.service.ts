@@ -1,5 +1,6 @@
-import { connectToServer, buildSudoCommand, SshError } from "./ssh.service.js";
+import { connectToServer, SshError } from "./ssh.service.js";
 import { escapeShellArg } from "./shell-escape.js";
+import { execPreferRoot, describeRemoteFailure, type RemoteScriptResult } from "./remote-exec.service.js";
 import type { LogQueryInput, LogResponse, LogEntry } from "@inv/shared";
 
 function parseLogLine(raw: string, defaultSource: string): LogEntry {
@@ -73,73 +74,65 @@ export async function queryServerLogs(serverId: number, query: LogQueryInput, ov
       args.push(`-g ${escapeShellArg(query.filterText)}`);
     }
     const journalCmd = args.join(" ");
-    command = `${buildSudoCommand(journalCmd, password)} 2>/dev/null || ${journalCmd}`;
+    command = `${journalCmd} 2>/dev/null`;
   } else if (query.source === "auth") {
     const filter = query.filterText ? ` | grep -i ${escapeShellArg(query.filterText)}` : "";
     const authCmd = `tail -n ${lines} /var/log/auth.log 2>/dev/null ${filter}`;
     const fallbackCmd = `journalctl -u ssh -u sudo --no-pager -n ${lines} --output=short-iso ${filter}`;
-    command = `${buildSudoCommand(authCmd, password)} || ${buildSudoCommand(fallbackCmd, password)} || ${authCmd}`;
+    command = `${authCmd} || ${fallbackCmd}`;
   } else if (query.source === "syslog") {
     const filter = query.filterText ? ` | grep -i ${escapeShellArg(query.filterText)}` : "";
     const sysCmd = `tail -n ${lines} /var/log/syslog 2>/dev/null ${filter}`;
     const sysFallback = `journalctl --no-pager -n ${lines} --output=short-iso ${filter}`;
-    command = `${buildSudoCommand(sysCmd, password)} || ${buildSudoCommand(sysFallback, password)} || ${sysCmd}`;
+    command = `${sysCmd} || ${sysFallback}`;
   } else if (query.source === "dmesg") {
     const filter = query.filterText ? ` | grep -i ${escapeShellArg(query.filterText)}` : "";
-    const dmesgCmd = `dmesg -T 2>/dev/null | tail -n ${lines} ${filter} || dmesg | tail -n ${lines} ${filter}`;
-    command = `${buildSudoCommand(dmesgCmd, password)} 2>/dev/null || ${dmesgCmd}`;
+    command = `dmesg -T 2>/dev/null | tail -n ${lines} ${filter} || dmesg | tail -n ${lines} ${filter}`;
   }
 
-  const probeCmd = `SZ=$( (sudo -n du -sh /var/log 2>/dev/null || du -sh /var/log 2>/dev/null) | head -n 1 | awk '{print $1}'); JU=$( (sudo -n journalctl --disk-usage 2>/dev/null || journalctl --disk-usage 2>/dev/null) | awk '{for(i=1;i<=NF;i++) if($i ~ /^[0-9.]+[KMGTPEB]+$/) print $i}' | head -n 1); echo "===METADATA:LOG_SIZE=\${SZ:-N/A}:JOURNAL_SIZE=\${JU:-N/A}===";`;
+  const probeCmd = `SZ=$(du -sh /var/log 2>/dev/null | head -n 1 | awk '{print $1}'); JU=$(journalctl --disk-usage 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i ~ /^[0-9.]+[KMGTPEB]+$/) print $i}' | head -n 1); echo "===METADATA:LOG_SIZE=\${SZ:-N/A}:JOURNAL_SIZE=\${JU:-N/A}===";`;
 
-  return new Promise((resolve, reject) => {
-    let stdout = "";
-    let stderr = "";
-
-    client.exec(`${probeCmd} ${command}`, (err, stream) => {
-      if (err) {
-        client.end();
-        return reject(new SshError("unreachable", `Failed to execute log query: ${err.message}`));
-      }
-
-      stream
-        .on("data", (chunk: Buffer) => {
-          stdout += chunk.toString("utf8");
-        })
-        .stderr.on("data", (chunk: Buffer) => {
-          stderr += chunk.toString("utf8");
-        });
-
-      stream.on("close", () => {
-        client.end();
-        let totalLogSize: string | null = null;
-        let journalDiskUsage: string | null = null;
-
-        const rawLines = stdout.split("\n");
-        const cleanLines: string[] = [];
-
-        for (const line of rawLines) {
-          const metaMatch = line.match(/^===METADATA:LOG_SIZE=([^:]+):JOURNAL_SIZE=([^=]+)===/);
-          if (metaMatch) {
-            const sz = metaMatch[1]?.trim();
-            const ju = metaMatch[2]?.trim();
-            totalLogSize = sz && sz !== "N/A" ? sz : null;
-            journalDiskUsage = ju && ju !== "N/A" ? ju : null;
-          } else if (line.trim().length > 0) {
-            cleanLines.push(line);
-          }
-        }
-
-        const entries = cleanLines.map((l) => parseLogLine(l, query.source));
-
-        resolve({
-          entries,
-          total: entries.length,
-          source: query.source,
-          totalLogSize,
-          journalDiskUsage,
-        });
-      });
+  // Root when sudo is usable (full journal, auth.log), otherwise the SSH user
+  // sees what it can — the old `sudo cmd || cmd` fallback, minus the password
+  // that `echo '<pw>' | sudo -S` used to put in the remote command line.
+  let result: RemoteScriptResult;
+  try {
+    result = await execPreferRoot(client, `${probeCmd}\n${command}\n`, password, {
+      timeoutMs: 120_000,
+      maxOutputBytes: 16 * 1024 * 1024,
     });
-  });
+  } finally {
+    client.end();
+  }
+  if (result.errorCode === "UPLOAD_FAILED" || result.errorCode === "TIMEOUT") {
+    throw new SshError("unreachable", `Failed to execute log query: ${describeRemoteFailure(result)}`);
+  }
+
+  let totalLogSize: string | null = null;
+  let journalDiskUsage: string | null = null;
+
+  const rawLines = result.stdout.split("\n");
+  const cleanLines: string[] = [];
+
+  for (const line of rawLines) {
+    const metaMatch = line.match(/^===METADATA:LOG_SIZE=([^:]+):JOURNAL_SIZE=([^=]+)===/);
+    if (metaMatch) {
+      const sz = metaMatch[1]?.trim();
+      const ju = metaMatch[2]?.trim();
+      totalLogSize = sz && sz !== "N/A" ? sz : null;
+      journalDiskUsage = ju && ju !== "N/A" ? ju : null;
+    } else if (line.trim().length > 0) {
+      cleanLines.push(line);
+    }
+  }
+
+  const entries = cleanLines.map((l) => parseLogLine(l, query.source));
+
+  return {
+    entries,
+    total: entries.length,
+    source: query.source,
+    totalLogSize,
+    journalDiskUsage,
+  };
 }

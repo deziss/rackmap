@@ -1,15 +1,18 @@
 import type { AppType } from "../app.js";
 
-type Role = "admin" | "editor" | "viewer";
+/** "admin2" is a second admin account, for four-eyes checks (approver ≠ requester). */
+export type Role = "admin" | "admin2" | "editor" | "viewer";
 
 const passwords: Record<Role, string> = {
   admin: "Admin123!",
+  admin2: "Admin2-123!",
   editor: "Editor123!",
   viewer: "Viewer123!",
 };
 
 const emails: Record<Role, string> = {
   admin: "admin@inventory.local",
+  admin2: "admin2@inventory.local",
   editor: "editor@inventory.local",
   viewer: "viewer@inventory.local",
 };
