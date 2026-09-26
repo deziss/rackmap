@@ -34,6 +34,9 @@ import { statusHistoryRoutes } from "./modules/status-history/status-history.rou
 import { cronRoutes } from "./modules/cron/cron.routes.js";
 import { alertChannelRoutes } from "./modules/alert-channels/alert-channel.routes.js";
 import { alertEventRoutes } from "./modules/alert-channels/alert-event.routes.js";
+import { heartbeatPingRoutes } from "./modules/heartbeats/heartbeat-ping.routes.js";
+import { heartbeatRoutes } from "./modules/heartbeats/heartbeat.routes.js";
+import { cronMonitorRoutes } from "./modules/heartbeats/cron-monitor.routes.js";
 
 export function createApp() {
   const app = new Hono();
@@ -124,6 +127,11 @@ export function createApp() {
   // Unauthenticated: what the login screen needs before a session exists.
   app.route("/api/v1/public", publicRoutes);
 
+  // Unauthenticated heartbeat check-ins from cron jobs on managed hosts. The
+  // token in the path is the credential. Mounted before apiKeyAuth so a stray
+  // Authorization header on a ping can never turn it into a 401.
+  app.route("/api/v1/ping", heartbeatPingRoutes);
+
   // Accept `Authorization: Bearer sk_...` anywhere under /api/v1. This only
   // ATTACHES a user when a valid key is presented; `requireSession` on each
   // route group still decides whether authentication is required, so public
@@ -139,6 +147,7 @@ export function createApp() {
   app.route("/api/v1/servers", importRoutes);
   app.route("/api/v1/servers", serverRoutes);
   app.route("/api/v1/servers", cronRoutes);
+  app.route("/api/v1/servers", cronMonitorRoutes);
 
   // Same for services
   app.route("/api/v1/services", serviceImportRoutes);
@@ -159,6 +168,7 @@ export function createApp() {
   app.route("/api/v1/status-history", statusHistoryRoutes);
   app.route("/api/v1/alert-channels", alertChannelRoutes);
   app.route("/api/v1/alert-events", alertEventRoutes);
+  app.route("/api/v1/heartbeats", heartbeatRoutes);
 
   app.onError(onError);
 

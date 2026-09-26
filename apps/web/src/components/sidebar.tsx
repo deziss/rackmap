@@ -26,6 +26,7 @@ import {
   Lock,
   BarChart3,
   Sparkles,
+  HeartPulse,
 } from "lucide-react";
 
 interface User {
@@ -52,7 +53,8 @@ type NavPath =
   | "/reports"
   | "/security"
   | "/settings"
-  | "/portal";
+  | "/portal"
+  | "/heartbeats";
 
 interface NavItem {
   to: NavPath;
@@ -79,6 +81,12 @@ const navSections: NavSection[] = [
       { to: "/services", label: "Services", icon: Globe },
       { to: "/ssl", label: "SSL Certs", icon: Lock },
       { to: "/ssh", label: "SSH Terminal", icon: Terminal, roles: ["admin"] },
+    ],
+  },
+  {
+    title: "Automation",
+    items: [
+      { to: "/heartbeats", label: "Heartbeats", icon: HeartPulse },
     ],
   },
   {
