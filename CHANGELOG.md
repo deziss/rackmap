@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **The sudo password prompt now covers every root action**, not just the OS-user dialogs: cron, systemd, patches,
+  drift, access grants and automatic updates too. One app-wide prompt opens whenever sudo on a host needs or rejects
+  a password and retries the action. The password can be remembered in memory for the session, or saved as the
+  server's (encrypted) password so background jobs — patch/drift scans, scheduled runbooks, access-grant expiry —
+  work as well. Clearer messages when sudo rejects the saved password or none is saved.
+
 ## [1.0.0] — 2026-09-26
 
 RackMap 1.0 turns the inventory into an operations console: cron editing and monitoring, runbooks across the fleet,

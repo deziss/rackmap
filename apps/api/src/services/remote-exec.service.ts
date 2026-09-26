@@ -401,8 +401,8 @@ export function classifySudoFailure(stderr: string): RemoteExecErrorCode | undef
 }
 
 const SUDO_MESSAGES: Record<string, string> = {
-  SUDO_PASSWORD_REQUIRED: "sudo on the host requires a password and none is available for this server",
-  SUDO_AUTH_FAILED: "sudo rejected the server's SSH password",
+  SUDO_PASSWORD_REQUIRED: "sudo on the host needs a password and none is saved for this server",
+  SUDO_AUTH_FAILED: "sudo on the host rejected the password saved for this server",
   SUDO_REQUIRETTY: "sudo on the host is configured with requiretty, which RackMap does not support",
   SUDO_NOT_ALLOWED: "the SSH user is not allowed to run commands as root with sudo",
 };

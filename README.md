@@ -60,7 +60,7 @@ RackMap 1.0 turns the inventory into an operations console and settles on one da
 - **Prometheus service discovery** (`/api/v1/prometheus/sd`), more exporter series, and a Grafana dashboard in
   [`contrib/`](contrib/README.md).
 - **Fixes and hardening:** creating, editing, and deleting OS users no longer hangs. Editors can no longer grant
-  root-equivalent access. OS-user dialogs ask for the sudo password when the stored one is stale. There is a new
+  root-equivalent access. Any root action asks for the sudo password when the stored one is stale, and can save it. There is a new
   per-account sign-in limit. Status history is lighter and admins can clean it under **Settings → Maintenance**. The
   v0.8.0 nginx bug that left the Servers page empty is fixed.
 
@@ -462,7 +462,7 @@ RackMap supports hybrid fleets where some hosts require key pairs and others enf
 - **Automatic fallback** — public key first (`/data/id_ed25519` plus custom uploaded keys). If the target rejects the key, it falls back to password and PAM keyboard-interactive without failing.
 - **Server detail controls** (`/servers/:id`) — *Test Key Login* (reports round-trip latency), *Test Password Login*, and *Set / Change Password*, which stores the credential encrypted in the vault.
 - **Auto-prompt on auth failure** — if discovery, ATOP, logs, or metrics hit an unauthorized host, a password dialog appears and the operation retries.
-- **Sudo password prompt** — root actions (OS users, cron, systemd) use the stored password only for `sudo`. If sudo rejects it, the dialog asks for the sudo password and retries once with an `X-Sudo-Password` header. The password is never stored or logged.
+- **Sudo password prompt** — root actions (OS users, cron, systemd, patches, drift, access grants, auto-update) use the stored password only for `sudo`. If sudo rejects it or has none, one app-wide prompt asks for it and retries with an `X-Sudo-Password` header; it can be remembered in memory for the session or saved as the server's password (so background jobs work). It is never logged. Passwordless sudo on the host avoids the prompt entirely — see the User Guide.
 
 ---
 

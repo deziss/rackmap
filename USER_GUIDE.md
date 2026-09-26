@@ -227,18 +227,39 @@ Editors can manage ordinary accounts. They cannot:
 - create, change, or delete a root-equivalent account (uid 0, a member of a privileged group, or anyone with a sudoers
   rule).
 
-The dialog still shows these options, but RackMap refuses the change and explains why. Ask an admin.
+Editors do not see these options in the dialogs, and the API refuses them anyway. Ask an admin.
 
 ### When RackMap asks for the sudo password
-RackMap usually logs in with an SSH key, so the password saved for a server is only used for `sudo`, and a stale one
-goes unnoticed until a root action fails. When sudo on the host rejects the saved password, or needs one that RackMap
-does not have, the Add, Edit, Delete, and Manage Sudo dialogs show a **Sudo password** field (*Enter it and retry*):
+RackMap usually logs in with an SSH key, so the password saved for a server is only used for `sudo`, and a stale or
+missing one goes unnoticed until a root action fails. That applies to every root action: OS users and sudo rules,
+cron edits and "run now", systemd actions, patch scans and apply, drift scans, access grants, and automatic updates.
 
-1. Type the sudo password for the SSH user and submit again.
-2. RackMap sends it with that one retry and feeds it only to `sudo` on the host. It is **used once and not saved**,
-   never appears on the remote command line, and is cleared the next time the dialog opens.
-3. To stop being asked, update the server's saved password (**Set / Change Password** on the server page), or give
-   the SSH user passwordless sudo.
+When sudo on the host rejects the saved password, or needs one RackMap does not have, a **Sudo password needed**
+prompt opens — wherever you are in the app — and the action is retried with what you type:
+
+1. Enter the sudo password of the server's SSH user and press **Continue**. The failed action runs again; nothing ran
+   on the host the first time, so the retry is safe. If that password is rejected too, the prompt says so.
+2. **Remember for this server until I reload the page** (on by default) keeps it in the browser's memory only, so the
+   next root action on that server does not ask again. It is never written to disk or local storage.
+3. **Also save it as this server's password** (editors and admins) stores it, encrypted, as the server's password.
+   Background jobs — nightly patch and drift scans, scheduled runbooks, access-grant expiry — cannot prompt anyone and
+   use the saved password, so saving it fixes them too.
+
+The password only ever reaches `sudo`'s stdin on the host: it is not logged, not put on the remote command line, and
+sent only with the retried request (header `X-Sudo-Password`).
+
+**To stop being asked at all**, either keep the server's saved password current (tick *Also save it…*, or **Set /
+Change Password** on the server page), or give the SSH user passwordless sudo on the host:
+
+```bash
+# on the managed host, as root — replace "deploy" with the server's SSH user
+echo 'deploy ALL=(ALL:ALL) NOPASSWD: ALL' > /etc/sudoers.d/rackmap
+chmod 0440 /etc/sudoers.d/rackmap
+visudo -cf /etc/sudoers.d/rackmap   # must print "parsed OK"
+```
+
+Passwordless sudo means anyone holding that SSH key is root on the host, so protect the key accordingly (RackMap keeps
+it under `/data` in Docker). Hosts where RackMap only reads (metrics, logs, ATOP) work without sudo at all.
 
 ---
 
@@ -951,10 +972,10 @@ need a Pro license — see [Licensing](#licensing-subscriptions--quotas). The co
 **Q: Live metrics show "connection refused" or "host unreachable"**
 > The API cannot reach the server on its SSH port. Check: (1) the IP in the server record, (2) that the firewall allows SSH from the RackMap host, (3) that SSH is running on the target.
 
-**Q: An OS-user dialog asks for a "Sudo password"**
-> Sudo on the host rejected the saved server password, or needs one RackMap does not have. Type it to retry once; it
-> is not saved. To stop the prompt, update the server's saved password or give the SSH user passwordless sudo. See
-> [When RackMap asks for the sudo password](#when-rackmap-asks-for-the-sudo-password).
+**Q: RackMap asks for a "Sudo password" (or says sudo rejected the saved password)**
+> Sudo on the host rejected the server's saved password, or needs one RackMap does not have. Type it in the prompt to
+> retry; tick *Also save it as this server's password* so background jobs work too, or give the SSH user passwordless
+> sudo. See [When RackMap asks for the sudo password](#when-rackmap-asks-for-the-sudo-password).
 
 **Q: An action fails with "requires an active Pro or Enterprise subscription"**
 > The feature is not included in your license tier. See [Licensing](#licensing-subscriptions--quotas).

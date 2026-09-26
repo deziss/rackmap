@@ -902,7 +902,7 @@ export function cronErrorToHttp(err: unknown): { status: 400 | 404 | 409 | 502 |
       case "SUDO_PASSWORD_REQUIRED":
         return { status: 409, code: "SUDO_ERROR", message: "sudo on this host needs a password: store the server's SSH password or unlock the vault" };
       case "SUDO_AUTH_FAILED":
-        return { status: 409, code: "SUDO_ERROR", message: "sudo rejected the server's SSH password" };
+        return { status: 409, code: "SUDO_ERROR", message: "sudo on the host rejected the password saved for this server" };
       case "SUDO_NOT_ALLOWED":
         return { status: 409, code: "SUDO_ERROR", message: "The SSH user may not run commands as root via sudo" };
       case "SUDO_REQUIRETTY":

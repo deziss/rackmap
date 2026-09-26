@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { authClient } from "@/lib/auth-client";
 import { Sidebar } from "@/components/sidebar";
 import { CommandPalette } from "@/components/command-palette";
+import { SudoPromptHost } from "@/components/sudo-prompt-host";
 
 export const Route = createFileRoute("/_auth")({
   beforeLoad: async () => {
@@ -23,6 +24,7 @@ function AuthLayout() {
         <Outlet />
       </main>
       <CommandPalette userRole={session.user.role ?? "viewer"} />
+      <SudoPromptHost />
     </div>
   );
 }
