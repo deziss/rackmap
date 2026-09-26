@@ -41,7 +41,8 @@ function SettingsPage() {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
 
   return (
-    <div className={`space-y-6 ${activeTab === "subscription" || activeTab === "alerts" ? "max-w-5xl" : "max-w-2xl"} pb-12 transition-all`}>
+    // One fixed width for every tab so switching tabs never resizes the page.
+    <div className="w-full max-w-5xl space-y-6 pb-12">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
@@ -51,7 +52,7 @@ function SettingsPage() {
         </div>
 
         {/* Modern Tab Switcher */}
-        <div className="flex items-center gap-1.5 p-1 bg-muted/60 border rounded-lg text-xs font-medium self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-1.5 p-1 bg-muted/60 border rounded-lg text-xs font-medium whitespace-nowrap self-start sm:self-auto">
           <button
             onClick={() => setActiveTab("subscription")}
             className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
