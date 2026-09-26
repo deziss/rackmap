@@ -111,8 +111,12 @@ so a scrape costs a handful of database round trips regardless of history size.
 | Series | Labels | Meaning |
 |---|---|---|
 | `rackmap_servers_total` | `status` | servers by last probe status |
+| `rackmap_services_total` | `status` | services by last probe status |
+| `rackmap_ssl_certificates_total` | `status` | tracked certificates by status |
 | `rackmap_server_up` | `hostname`, `ip`, `environment` | 1 = last TCP probe succeeded |
 | `rackmap_server_probe_latency_ms` | `hostname` | last successful probe round trip |
+| `rackmap_server_last_probe_age_seconds` | `hostname` | seconds since the last probe; a rising value means the scheduler has stopped |
+| `rackmap_server_gpu_count` | `hostname` | GPUs recorded for the server (servers with none are omitted) |
 | `rackmap_ssl_days_remaining` | `domain` | days until expiry (soonest 200) |
 | `rackmap_heartbeat_up` | `heartbeat`, `heartbeat_id`, `server` | 1 = up or new, 0 = late or down; paused heartbeats are omitted |
 | `rackmap_heartbeat_last_ping_age_seconds` | `heartbeat`, `heartbeat_id` | seconds since the last ping |
