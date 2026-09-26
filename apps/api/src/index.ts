@@ -12,6 +12,7 @@ import { startAlertDispatcher, stopAlertDispatcher } from "./services/alerting/d
 import { syncEnvAlertChannels } from "./services/alert-channel.service.js";
 import { startSslDailyScan, stopSslDailyScan } from "./services/ssl-daily-scan.js";
 import { startHeartbeatScheduler, stopHeartbeatScheduler } from "./services/heartbeat.service.js";
+import { startRunbookBackground, stopRunbookBackground } from "./services/runbook-background.js";
 import { autoInitVaultFromEnv } from "./services/vault.service.js";
 import { autoInitLicenseFromEnv } from "./services/license.service.js";
 import type { Server } from "node:http";
@@ -43,11 +44,13 @@ async function main() {
     startAlertDispatcher();
     startSslDailyScan();
     startHeartbeatScheduler();
+    startRunbookBackground();
   });
 
   injectWebSocket(server as unknown as Server);
 
-  // Stop background work, then close the listener and the DB pool.
+  // Stop claiming new work, fail this instance's in-flight runbook runs so they do
+  // not wait for the reaper, then close the listener and the DB pool.
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
     if (shuttingDown) return;
@@ -59,6 +62,7 @@ async function main() {
     stopAlertDispatcher();
     stopSslDailyScan();
     stopHeartbeatScheduler();
+    await stopRunbookBackground({ markOwnFailed: true }).catch((err) => console.error("[shutdown] runbooks:", err));
     (server as unknown as Server).close();
     await prisma.$disconnect().catch(() => {});
     process.exit(0);

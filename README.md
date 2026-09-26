@@ -56,6 +56,7 @@ cd rackmap
 cp .env.example .env
 sed -i "s|^APP_ENCRYPTION_KEY=.*|APP_ENCRYPTION_KEY=$(openssl rand -base64 32)|" .env
 sed -i "s|^BETTER_AUTH_SECRET=.*|BETTER_AUTH_SECRET=$(openssl rand -hex 32)|" .env
+sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 24)|" .env
 
 # 3. Start (build on first run and after pulling updates)
 docker compose up -d --build
@@ -105,12 +106,22 @@ Change the published port by setting `PORT` in `.env`. Next steps: [add your fir
 <details open>
 <summary><b>Monitoring & observability</b></summary>
 
-- **Live status monitoring** — TCP probe on a configurable interval, up/down history, and webhook + Telegram alerts
+- **Live status monitoring** — TCP probe on a configurable interval, up/down history, and alerts to every configured channel
 - **Agentless live metrics** — CPU load, memory, disk, network I/O, and per-process tables, collected via a single SSH exec
 - **Multi-vendor GPU metrics** — NVIDIA (`nvidia-smi`), AMD sysfs (`amdgpu`), AMD ROCm (`rocm-smi`), and Intel (`xpu-smi`)
 - **Forensic logs & storage footprint** — query `journalctl`, syslog, `auth.log`, and kernel `dmesg` with live `/var/log` size and journal disk usage badges, evidence search, auto-refresh (5s / 10s / 30s / 60s / manual), and `.log` export
 - **ATOP historical replay** — browse historical activity dates and interval snapshots, and extract top CPU / memory / disk processes per interval
 - **SSL certificate monitoring** — auto-discovered and manual domains, wildcard support, expiry badges, and automated email warnings
+
+</details>
+
+<details open>
+<summary><b>Automation</b></summary>
+
+- **Cron job editor** — view and edit every crontab on a host (user crontabs, `/etc/crontab`, `/etc/cron.d`) from the server page, with a schedule builder, plain-English descriptions, next run times in the host's time zone, a raw editor, diff preview before saving, and "run now". Saves are refused if the file changed on the host since you loaded it, and the previous version is backed up on the host. systemd timers are listed read-only
+- **Cron heartbeat monitoring** — one switch wraps a cron job so it checks in with RackMap after every run; a missed, late, or failing run raises an alert. Heartbeats also work for anything that can call a URL (systemd `OnFailure=`, Kubernetes CronJobs, scripts)
+- **Runbooks** — saved, parameterised scripts run across a set of servers chosen by tag, environment, location, or name, with a target preview, dry run, per-host live output, cancel/rerun, schedules, and a two-person approval step for root or sensitive runs
+- **Alert channels** — Slack, Microsoft Teams, Discord, PagerDuty, Telegram, email, and signed webhooks, each subscribing to the events it cares about, with retries, a delivery log, and a test button. PagerDuty incidents open and resolve automatically
 
 </details>
 
@@ -133,7 +144,7 @@ Change the published port by setting `PORT` in `.env`. Next steps: [add your fir
 - **Universal pagination** — rows-per-page selector (10 / 25 / 50 / 100), range display, and numbered pages across every table
 - **Export** — Excel (`.xlsx`), JSON, and PDF export that respects the active search filter
 - **Customer portal** — a public dark-mode product showcase at `/portal` with an interactive mock console and pricing comparison
-- **Single-command deploy** — `docker compose up` for production, with SQLite volume persistence and an optional PostgreSQL profile
+- **Single-command deploy** — `docker compose up` for production, with PostgreSQL 18 and nightly `pg_dump` backups included
 
 </details>
 
@@ -173,7 +184,7 @@ Browser WebSocket → API WS upgrade (validates session + RBAC)
 |-------|-----------|
 | API framework | [Hono](https://hono.dev) |
 | ORM | [Prisma](https://prisma.io) |
-| Database | SQLite by default (PostgreSQL-ready) |
+| Database | PostgreSQL 18 |
 | Auth | [Better Auth](https://better-auth.com) with RBAC |
 | SSH | [`ssh2`](https://github.com/mscdex/ssh2) |
 | Frontend | React 19 + Vite |
@@ -217,9 +228,16 @@ All configuration is environment-driven. Copy [`.env.example`](.env.example) to 
 | `PING_TIMEOUT_MS` | `3000` | Per-server TCP probe timeout |
 | `PING_CONCURRENCY` | `10` | Maximum simultaneous probes |
 | `STATUS_RETENTION_DAYS` | `30` | Days of probe history to keep |
+| `STATUS_SAMPLE_INTERVAL_MS` | `900000` | Store a probe result only on a status change or once per interval (`0` = every probe) |
+| `STATUS_MAX_ROWS` | `10000` | Cap on stored probe history; oldest rows beyond it are pruned (`0` = no cap). Admins can also clean it under Settings → Maintenance |
 | `STATUS_FLIP_THRESHOLD` | `2` | Consecutive failures before the status changes |
 
 ### Optional — notifications
+
+Alert channels (Slack, Teams, Discord, PagerDuty, Telegram, email, webhooks) are managed by admins under
+**Settings → Alerts**. The two variables below are still honoured and appear there as read-only channels.
+Outbound webhooks to private or plain-`http` addresses are refused unless you allow them with
+`ALERT_OUTBOUND_ALLOW_PRIVATE`, `ALERT_OUTBOUND_ALLOW_HTTP`, or `ALERT_OUTBOUND_ALLOWLIST`.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -428,7 +446,8 @@ All vendors normalize to the same shape: utilization %, VRAM used/total (MiB), a
 
 ## 🔌 API Overview
 
-Every endpoint requires an authenticated Better Auth session cookie.
+Every endpoint requires an authenticated Better Auth session cookie or an `Authorization: Bearer sk_…` API key,
+except `/health/*`, `/api/v1/public/config`, and the heartbeat check-in `/api/v1/ping/:token`.
 
 ```
 # Auth
@@ -451,13 +470,43 @@ GET    /api/v1/servers/:id/os-users              List accounts, UIDs, shells, gr
 POST   /api/v1/servers/:id/os-users              Create a Linux user
 PATCH  /api/v1/servers/:id/os-users/:username    Update shell, home, groups, password, lock state, sudo rules
 DELETE /api/v1/servers/:id/os-users/:username    Delete a user (root/SSH safeguards apply)
-PATCH  /api/v1/servers/:id/sudo-permission       Atomic sudoers update (/etc/sudoers.d/rackmap_*)
+POST   /api/v1/servers/:id/os-users/sudo         Atomic sudoers update (/etc/sudoers.d/rackmap_*) (admin)
+# Granting sudo or a privileged group (sudo, wheel, docker, …) requires admin.
+
+# Cron (editor+; root, /etc/crontab, /etc/cron.d and privileged users need admin)
+GET    /api/v1/servers/:id/cron                  All crontabs + systemd timers on the host
+PUT    /api/v1/servers/:id/cron                  Replace one crontab (compare-and-set on its hash)
+POST   /api/v1/servers/:id/cron/run              Run one entry now as its user
+POST   /api/v1/servers/:id/cron/monitor          Wrap an entry with a heartbeat
+POST   /api/v1/servers/:id/cron/unmonitor        Remove the heartbeat wrapper
+
+# Heartbeats
+GET|POST       /api/v1/heartbeats                List (all roles) / create (editor+)
+GET|PATCH|DELETE /api/v1/heartbeats/:id          Detail, update (editor+), delete (admin)
+POST   /api/v1/heartbeats/:id/{pause,resume,rotate-token}
+GET|POST /api/v1/ping/:token[/start|/fail|/log|/<exit code>]   Check-in (no auth — the token is the credential)
+
+# Runbooks
+GET|POST       /api/v1/runbooks                  List (editor+) / create (admin)
+GET|PATCH|DELETE /api/v1/runbooks/:id            Detail, update, soft-delete (admin)
+POST   /api/v1/runbooks/:id/preview-targets      Resolve the target servers first
+POST   /api/v1/runbooks/:id/runs                 Start a run (editor+; root runs by editors need approval)
+GET    /api/v1/runbook-runs[/:id]                Run history and per-host status
+GET    /api/v1/runbook-runs/:id/hosts/:serverId/output   Incremental output
+POST   /api/v1/runbook-runs/:id/{approve,reject,cancel,rerun}
+
+# Alert channels (admin; editors can read)
+GET|POST       /api/v1/alert-channels
+GET|PATCH|DELETE /api/v1/alert-channels/:id
+POST   /api/v1/alert-channels/:id/test
+GET    /api/v1/alert-channels/:id/deliveries
+GET    /api/v1/alert-events
 
 # Logs & ATOP forensics
 POST   /api/v1/servers/:id/logs                  Query journalctl/syslog by priority and unit
 GET    /api/v1/servers/:id/atop/dates            List historical ATOP activity dates
-GET    /api/v1/servers/:id/atop/snapshots        Query ATOP interval snapshots
-GET    /api/v1/servers/:id/atop/top-processes    Top CPU/memory/disk processes per interval
+POST   /api/v1/servers/:id/atop/snapshots        Query ATOP interval snapshots
+POST   /api/v1/servers/:id/atop/top-processes    Top CPU/memory/disk processes per interval
 
 # SSH host keys
 GET    /api/v1/ssh-host-keys              Review pinned host keys (editor+); ?serverId= / ?fingerprint=
@@ -466,8 +515,7 @@ DELETE /api/v1/ssh-host-keys/:id          Forget a pin so the next connection re
 # Lookup tables (admin)
 GET|POST|PATCH|DELETE /api/v1/lookups/{cloud-providers,gpu-types,allocated-to,locations,server-types}
 
-# Users (admin)
-GET    /api/v1/users
+# Users (admin) — listing goes through Better Auth's admin API
 PATCH  /api/v1/users/:id
 DELETE /api/v1/users/:id
 POST   /api/v1/users/:id/ban
@@ -499,7 +547,12 @@ GET    /health/ready
    cp .env.example .env
    sed -i "s|^APP_ENCRYPTION_KEY=.*|APP_ENCRYPTION_KEY=\"$(openssl rand -base64 32)\"|" .env
    sed -i "s|^BETTER_AUTH_SECRET=.*|BETTER_AUTH_SECRET=\"$(openssl rand -hex 32)\"|" .env
+   sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 24)|" .env
    ```
+
+   `POSTGRES_PASSWORD` is required — Compose refuses to start without it. It is embedded in a connection URL,
+   so use URL-safe characters (the command above does). Set `PUBLIC_BASE_URL` to the address managed hosts can
+   reach if you want to use cron heartbeats.
 
 2. **Pick a port.** The web UI is published on `8080` by default; override with `PORT` in `.env`.
 
@@ -509,8 +562,9 @@ GET    /health/ready
    docker compose up -d --build
    ```
 
-4. **Volumes and backups.** The SQLite database lives in a Docker volume named `sqlite_data`; backups land in
-   `backups`. Map either to host directories by editing the `volumes` section of `docker-compose.yml`.
+4. **Volumes and backups.** PostgreSQL data lives in the `pgdata` volume; nightly `pg_dump` backups land in
+   `backups`. The `sqlite_data` volume (mounted at `/data`) still holds SSH keys and any pre-0.9 SQLite file.
+   Map any of them to host directories by editing the `volumes` section of `docker-compose.yml`.
 
 5. **Reverse proxy (recommended).** Put RackMap behind Nginx, Caddy, or Traefik with TLS termination. The API and
    web UI are already combined behind the web container's Nginx config, so one upstream is enough.
@@ -529,35 +583,23 @@ sudo cp server-inventory.service /etc/systemd/system/
 sudo systemctl enable --now server-inventory
 ```
 
-Set `DATABASE_URL=file:/var/lib/rackmap/inventory.db` and make sure the directory exists and is writable by the service user.
+Point `DATABASE_URL` at a PostgreSQL 18 database, for example
+`postgresql://rackmap:<password>@localhost:5432/rackmap?schema=public`, then apply migrations with
+`pnpm --filter @inv/api db:deploy`.
 
-### Using PostgreSQL instead of SQLite
+### Upgrading from SQLite (0.8 and earlier)
 
-1. In `apps/api/prisma/schema.prisma`, change `provider = "sqlite"` to `provider = "postgresql"`.
-2. Set the connection string in `.env`:
-
-   ```env
-   DATABASE_URL="postgresql://rackmap:rackmap123@localhost:5432/rackmap?schema=public"
-   ```
-
-3. Run migrations:
-
-   ```bash
-   pnpm --filter @inv/api prisma migrate dev --name baseline
-   ```
-
-4. With Docker Compose, start the optional `postgres` profile:
-
-   ```bash
-   docker compose --profile postgres up -d --build
-   ```
+RackMap now runs on PostgreSQL only. [MIGRATION.md](MIGRATION.md) walks through copying an existing SQLite
+database across with `pnpm --filter @inv/api db:migrate:postgres`.
 
 ### Backups
 
-Set `BACKUP_DIR` to enable automatic SQLite backups (mounted at `/backups` in Docker). Manual backup:
+Set `BACKUP_DIR` (Compose sets it to `/backups`) to enable scheduled `pg_dump --format=custom` backups.
+`BACKUP_CRON` sets the schedule (default `0 2 * * *`) and `BACKUP_KEEP` how many dumps to keep (default 14).
+The API image includes the PostgreSQL 18 client; `/health/ready` reports the last backup's status. Restore with:
 
 ```bash
-sqlite3 /data/inventory.db ".backup '/backups/inventory-$(date +%Y%m%d).db'"
+pg_restore --clean --if-exists -d "$DATABASE_URL" /backups/rackmap-<timestamp>.dump
 ```
 
 ---
@@ -605,7 +647,7 @@ team, tag, probe status, and whether they have GPUs. See [contrib/README.md](con
 
 `GET /api/v1/metrics` exposes fleet state in the Prometheus text format. RackMap
 deliberately does not store a time series of its own — Prometheus does that job
-better than SQLite would.
+better than an inventory database would.
 
 ```yaml
 scrape_configs:

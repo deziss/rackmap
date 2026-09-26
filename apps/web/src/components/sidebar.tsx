@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
 import { apiFetch } from "@/lib/api";
 import { fetchMe, systemKeys } from "@/lib/queries";
+import { fetchPendingRunbookApprovals, runbookKeys } from "@/lib/runbooks-api";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -27,6 +28,7 @@ import {
   BarChart3,
   Sparkles,
   HeartPulse,
+  PlayCircle,
 } from "lucide-react";
 
 interface User {
@@ -54,7 +56,8 @@ type NavPath =
   | "/security"
   | "/settings"
   | "/portal"
-  | "/heartbeats";
+  | "/heartbeats"
+  | "/runbooks";
 
 interface NavItem {
   to: NavPath;
@@ -86,6 +89,7 @@ const navSections: NavSection[] = [
   {
     title: "Automation",
     items: [
+      { to: "/runbooks", label: "Runbooks", icon: PlayCircle, roles: ["admin", "editor"] },
       { to: "/heartbeats", label: "Heartbeats", icon: HeartPulse },
     ],
   },
@@ -128,6 +132,13 @@ export function Sidebar({ user }: SidebarProps) {
     queryKey: systemKeys.me,
     queryFn: fetchMe,
     staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: runbookPending } = useQuery({
+    queryKey: runbookKeys.pendingCount,
+    queryFn: fetchPendingRunbookApprovals,
+    enabled: !!me?.can?.["runbook.approve"],
+    refetchInterval: 30_000,
   });
 
   function toggleCollapse() {
@@ -188,10 +199,13 @@ export function Sidebar({ user }: SidebarProps) {
               )}
               {visibleItems.map(({ to, label, icon: Icon }) => {
                 const active = !!matchRoute({ to, fuzzy: true });
-                const badge =
-                  to === "/access-requests" && (pendingData?.count ?? 0) > 0
-                    ? pendingData!.count
-                    : null;
+                const count =
+                  to === "/access-requests"
+                    ? (pendingData?.count ?? 0)
+                    : to === "/runbooks"
+                      ? (runbookPending?.count ?? 0)
+                      : 0;
+                const badge = count > 0 ? count : null;
 
                 const linkEl = (
                   <Link
