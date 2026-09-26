@@ -33,48 +33,10 @@ import { generateId } from "better-auth";
 // Lazy import after env is set
 const { prisma } = await import("../db.js");
 
-/**
- * The test database is a real Postgres database reused by every spec. Left
- * alone it accumulates rows across runs, which makes results order-dependent:
- * a test can pass because a previous run left the right state behind, and fail
- * on a clean checkout. Reset it exactly once per process — `db push` brings the
- * schema up to date, then every table is truncated — and let each file seed
- * what it needs. (The `_test` name guard above is what makes the truncate safe.)
- *
- * `setupFiles` runs once per test file, so the guard is a process-global rather
- * than a module-local — under `pool: forks, singleFork` all files share one
- * process and must not each wipe the database out from under the others.
- */
-const RESET_FLAG = Symbol.for("rackmap.test.db.reset");
-const globalStore = globalThis as unknown as Record<symbol, boolean>;
-
+// The schema sync and the once-per-run reset live in global-setup.ts. Every
+// spec file runs in its own fork, so this file only seeds the fixture
+// accounts (idempotently) before that file's tests.
 beforeAll(async () => {
-  if (globalStore[RESET_FLAG]) {
-    // Schema is already in place for this process; skip the reset.
-    await seedTestUsers();
-    return;
-  }
-  globalStore[RESET_FLAG] = true;
-
-  const { execSync } = await import("node:child_process");
-  const apiDir = new URL("../..", import.meta.url).pathname;
-  try {
-    execSync("pnpm exec prisma db push --skip-generate --schema=./prisma/schema.prisma", {
-      cwd: apiDir,
-      env: { ...process.env },
-      stdio: "pipe",
-    });
-  } catch (err: any) {
-    console.error("Test database schema sync failed:", err.stdout?.toString(), err.stderr?.toString());
-    throw err;
-  }
-  const tables = await prisma.$queryRaw<{ tablename: string }[]>`
-    SELECT tablename FROM pg_tables
-    WHERE schemaname = current_schema() AND tablename <> '_prisma_migrations'`;
-  if (tables.length > 0) {
-    const list = tables.map((t) => `"${t.tablename.replace(/"/g, '""')}"`).join(", ");
-    await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
-  }
   await seedTestUsers();
 });
 

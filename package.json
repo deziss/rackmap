@@ -18,5 +18,10 @@
     "@playwright/test": "^1.61.0",
     "typescript": "^7.0.2"
   },
-  "license": "AGPL-3.0-only"
+  "license": "AGPL-3.0-only",
+  "pnpm": {
+    "overrides": {
+      "deepmerge-ts": "^8.0.2"
+    }
+  }
 }

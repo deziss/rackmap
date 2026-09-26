@@ -13,7 +13,7 @@ import { useDebounce } from "@/hooks/use-debounce";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import { autoTable } from "jspdf-autotable";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_auth/reports")({
@@ -150,7 +150,7 @@ function ReportsPage() {
       getLogDetailsText(log, networks, projects),
     ]);
 
-    (doc as any).autoTable({
+    autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
       startY: 40,

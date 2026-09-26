@@ -35,6 +35,12 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore(docker)"
+    # Stay on the Node.js LTS line: odd majors never become LTS and even ones
+    # are "Current" for six months first. Move the images by hand when the next
+    # even major enters Active LTS (Node 26: October 2026).
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "docker"
     directory: "/apps/web"
@@ -42,3 +48,9 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore(docker)"
+    # Stay on the Node.js LTS line: odd majors never become LTS and even ones
+    # are "Current" for six months first. Move the images by hand when the next
+    # even major enters Active LTS (Node 26: October 2026).
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
