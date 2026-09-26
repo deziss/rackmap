@@ -174,8 +174,10 @@ export function ApplyPatchesDialog({
                 </Badge>
               )}
               <span className="text-xs text-muted-foreground">in {formatMs(result.durationMs)}</span>
-              <span className="text-xs font-mono text-muted-foreground truncate">{result.command}</span>
             </div>
+            <code className="block rounded-md bg-black/30 px-2 py-1 text-[11px] font-mono text-muted-foreground break-all">
+              {result.command}
+            </code>
             {result.status ? (
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="text-muted-foreground">After the update:</span>

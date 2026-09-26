@@ -34,7 +34,12 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 p-6",
+        // Width: viewport minus a margin, capped by max-w-* (callers widen with
+        // e.g. sm:max-w-[760px]). One shrinkable column: long unbreakable content
+        // (commands, output, hostnames) wraps or scrolls inside instead of
+        // widening the dialog and pushing the footer buttons off-screen.
+        "fixed left-1/2 top-1/2 z-50 grid w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 p-6",
+        "grid-cols-[minmax(0,1fr)] [&>*]:min-w-0",
         "bg-card/85 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/40 rounded-xl",
         "duration-200",
         "data-[state=open]:animate-in data-[state=closed]:animate-out",
