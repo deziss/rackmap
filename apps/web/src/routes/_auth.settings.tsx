@@ -25,12 +25,14 @@ import { CheckoutDialog } from "@/components/checkout-dialog";
 import { StatusHistoryCard } from "@/components/status-history-card";
 import { Database } from "lucide-react";
 import { BillingHistoryCard } from "@/components/billing-history-card";
+import { AlertChannelsSection } from "@/components/alerts/alert-channels-section";
+import { BellRing } from "lucide-react";
 
 export const Route = createFileRoute("/_auth/settings")({
   component: SettingsPage,
 });
 
-type SettingsTab = "subscription" | "notifications" | "vault" | "maintenance";
+type SettingsTab = "subscription" | "notifications" | "vault" | "alerts" | "maintenance";
 
 function SettingsPage() {
   const { data: session } = authClient.useSession();
@@ -39,7 +41,7 @@ function SettingsPage() {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
 
   return (
-    <div className={`space-y-6 ${activeTab === "subscription" ? "max-w-5xl" : "max-w-2xl"} pb-12 transition-all`}>
+    <div className={`space-y-6 ${activeTab === "subscription" || activeTab === "alerts" ? "max-w-5xl" : "max-w-2xl"} pb-12 transition-all`}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
@@ -87,6 +89,19 @@ function SettingsPage() {
           )}
           {isAdmin && (
             <button
+              onClick={() => setActiveTab("alerts")}
+              className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
+                activeTab === "alerts"
+                  ? "bg-background text-foreground shadow-sm font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <BellRing className="h-3.5 w-3.5 text-amber-500" />
+              Alerts
+            </button>
+          )}
+          {isAdmin && (
+            <button
               onClick={() => setActiveTab("maintenance")}
               className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
                 activeTab === "maintenance"
@@ -117,6 +132,12 @@ function SettingsPage() {
       {activeTab === "vault" && isAdmin && (
         <div className="animate-fade-in">
           <VaultConfigurationSection />
+        </div>
+      )}
+
+      {activeTab === "alerts" && isAdmin && (
+        <div className="animate-fade-in">
+          <AlertChannelsSection />
         </div>
       )}
 

@@ -2,7 +2,7 @@ import { prisma } from "../db.js";
 import { env } from "../env.js";
 import { fetchMetrics } from "./metrics.service.js";
 import { formatStorageBytes } from "./discovery.service.js";
-import { notifyMetricAlert } from "./notify.service.js";
+import { notifyMetricAlert, notifyMetricResolved } from "./notify.service.js";
 import { withJobLock } from "./job-lock.service.js";
 import pLimit from "p-limit";
 
@@ -67,6 +67,9 @@ async function checkServer(server: { id: number; hostname: string; ip: string })
       if (!prev.cpuHigh) {
         await notifyMetricAlert("highCpu", server, `CPU Load is at ${Math.round(cpuPct)}% (Threshold: ${env.ALERT_THRESHOLD_CPU}%)`);
       }
+    } else if (prev.cpuHigh) {
+      // Falling edge: close the incident the trigger opened (PagerDuty dedup_key).
+      await notifyMetricResolved("highCpu", server, `CPU Load is back to ${Math.round(cpuPct)}% (Threshold: ${env.ALERT_THRESHOLD_CPU}%)`);
     }
 
     // RAM Check
@@ -76,6 +79,8 @@ async function checkServer(server: { id: number; hostname: string; ip: string })
       if (!prev.ramHigh) {
         await notifyMetricAlert("ramFull", server, `RAM Usage is at ${Math.round(ramPct)}% (Threshold: ${env.ALERT_THRESHOLD_RAM}%)`);
       }
+    } else if (prev.ramHigh) {
+      await notifyMetricResolved("ramFull", server, `RAM Usage is back to ${Math.round(ramPct)}% (Threshold: ${env.ALERT_THRESHOLD_RAM}%)`);
     }
 
     // Disk Full Check
@@ -86,6 +91,8 @@ async function checkServer(server: { id: number; hostname: string; ip: string })
         const fullDisks = metrics.disks.filter((d) => d.pct >= env.ALERT_THRESHOLD_DISK).map((d) => `${d.mount} (${d.pct}%)`);
         await notifyMetricAlert("diskFull", server, `Disk Full: ${fullDisks.join(", ")}`);
       }
+    } else if (prev.diskFull) {
+      await notifyMetricResolved("diskFull", server, `All disks are below ${env.ALERT_THRESHOLD_DISK}% (highest ${Math.round(maxDiskPct)}%)`);
     }
 
     // Disk Unmounted Check

@@ -3,6 +3,7 @@ import pkg from "../../package.json" with { type: "json" };
 import { prisma } from "../db.js";
 import { env } from "../env.js";
 import { AppError } from "../lib/errors.js";
+import { invalidateAlertLicenseCache } from "./alerting/license.js";
 import {
   generateHardwareFingerprint,
   verifyLicenseToken,
@@ -165,6 +166,7 @@ export async function activateLicense(input: {
         },
       });
 
+      invalidateAlertLicenseCache();
       return getLicenseStatus();
     } catch (e: any) {
       throw new AppError("VALIDATION_ERROR", `Offline verification failed: ${e.message}`, 400);
@@ -232,6 +234,7 @@ export async function activateLicense(input: {
         },
       });
 
+      invalidateAlertLicenseCache();
       return getLicenseStatus();
     } catch (e: any) {
       if (e.message?.includes("fetch failed") || e.message?.includes("ECONNREFUSED") || e.message?.includes("ENOTFOUND")) {
@@ -286,6 +289,7 @@ export async function activateLicense(input: {
     },
   });
 
+  invalidateAlertLicenseCache();
   return getLicenseStatus();
 }
 
@@ -333,6 +337,7 @@ export async function deactivateLicense(): Promise<LicenseStatusResponse> {
     },
   });
 
+  invalidateAlertLicenseCache();
   return getLicenseStatus();
 }
 

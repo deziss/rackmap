@@ -19,7 +19,10 @@ import {
   getStatusHistory,
 } from "./server.service.js";
 import { runCheck, runAll } from "../../services/status.service.js";
-import { notifyFlip } from "../../services/notify.service.js";
+import { countFlipEmailRecipients } from "../../services/notify.service.js";
+import { emitAlert } from "../../services/alerting/emit.js";
+import { channelsForServer } from "../../services/alert-channel.service.js";
+import { alertTestRateLimit } from "../alert-channels/alert-channel.routes.js";
 import { fetchMetrics } from "../../services/metrics.service.js";
 import { autoDiscoverAndApply, formatStorageBytes } from "../../services/discovery.service.js";
 import {
@@ -594,12 +597,15 @@ export const serverRoutes = new Hono()
     },
   )
 
-  // GET /servers/:id/alert-channels — check configured alert notification dispatchers
+  // GET /servers/:id/alert-channels — which alert channels this server's alerts reach
   .get(
     "/:id/alert-channels",
     requirePermission({ server: ["update"] }),
     zValidator("param", idParamSchema),
     async (c) => {
+      const { id } = c.req.valid("param");
+      const [channels, preferenceEmailRecipients] = await Promise.all([channelsForServer(id), countFlipEmailRecipients()]);
+      // webhook/telegram/email keep the pre-channel shape for the old server card.
       return c.json({
         webhook: {
           configured: !!env.NOTIFY_WEBHOOK_URL,
@@ -613,40 +619,58 @@ export const serverRoutes = new Hono()
           configured: !!env.SMTP_HOST,
           host: env.SMTP_HOST || null,
         },
+        channels,
+        preferenceEmailRecipients,
       });
     },
   )
 
-  // POST /servers/:id/test-alert — dispatch a test probe alert to configured channels
+  // POST /servers/:id/test-alert — queue a `test` event for the channels routed to this server.
+  // Deliberately NOT a fake status flip: a flip is a server_down trigger, which pages PagerDuty.
   .post(
     "/:id/test-alert",
-    requirePermission({ server: ["update"] }),
+    requirePermission({ alertChannel: ["manage"] }),
+    alertTestRateLimit,
     zValidator("param", idParamSchema),
     async (c) => {
       const { id } = c.req.valid("param");
-      const server = await prisma.server.findUnique({
-        where: { id },
-        select: { id: true, hostname: true, ip: true, sshPort: true },
+      const server = await prisma.server.findFirst({
+        where: { id, deletedAt: null },
+        select: { id: true, hostname: true, ip: true },
       });
       if (!server) return c.json({ error: { code: "NOT_FOUND", message: "Server not found" } }, 404);
 
-      await notifyFlip({
+      const { eventId, queued } = await emitAlert({
+        type: "test",
+        severity: "info",
+        action: "info",
+        title: `Test alert for ${server.hostname}`,
+        summary: `This is a test alert for ${server.hostname} (${server.ip}), sent from RackMap. No action is needed.`,
+        payload: { hostname: server.hostname, ip: server.ip, test: true },
         serverId: server.id,
-        hostname: server.hostname,
-        ip: server.ip,
-        port: server.sshPort,
-        from: "test_probe",
-        to: "alert_verification",
+      });
+      await writeAuditDirect({
+        ctx: getAuditCtx(c),
+        category: "notification",
+        action: "alert_channel.test",
+        entity: "Server",
+        entityId: String(server.id),
+        after: { eventId, queued },
       });
 
       return c.json({
         success: true,
-        message: `Test alert dispatched to configured channels for ${server.hostname} (${server.ip})`,
+        message:
+          queued > 0
+            ? `Test alert queued for ${queued} channel${queued === 1 ? "" : "s"} routed to ${server.hostname}`
+            : `No enabled channel subscribed to test alerts is routed to ${server.hostname}`,
         channels: {
           webhook: !!env.NOTIFY_WEBHOOK_URL,
           telegram: !!(env.NOTIFY_TELEGRAM_BOT_TOKEN && env.NOTIFY_TELEGRAM_CHAT_ID),
           email: !!env.SMTP_HOST,
         },
+        eventId,
+        queued,
       });
     },
   );

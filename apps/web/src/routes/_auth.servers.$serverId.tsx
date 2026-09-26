@@ -25,9 +25,6 @@ import {
   fetchAutoUpdateStatus,
   updateAutoUpdateStatus,
   autoUpdateKeys,
-  fetchServerAlertChannels,
-  sendServerTestAlert,
-  alertChannelKeys,
   updateServer,
 } from "@/lib/queries";
 import { apiFetch } from "@/lib/api";
@@ -48,14 +45,13 @@ import { SudoPermissionDialog } from "@/components/sudo-permission-dialog";
 import { PaginationBar } from "@/components/pagination-bar";
 import { CreateOsUserDialog, EditOsUserDialog, DeleteOsUserDialog } from "@/components/os-user-dialogs";
 import { CronTab } from "@/components/cron/cron-tab";
+import { ServerAlertChannelsCard } from "@/components/alerts/server-alert-channels-card";
 import { AtopProcessModal } from "@/components/atop-process-modal";
 import { AddSshKeyDialog } from "@/components/add-ssh-key-dialog";
 import { RequestAccessButton } from "@/components/request-access-button";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
-  Bell,
-  Send,
   Trash2,
   Plus,
   Cpu,
@@ -1097,8 +1093,8 @@ function OverviewTab({
       {/* Automated System Updates (Unattended-Upgrades) — editor+ only */}
       {canManage && <AutoUpdateCard serverId={server.id} />}
 
-      {/* Alert Channels & Live Notification Dispatcher (CloudScope Feature) — editor+ only */}
-      {canManage && <AlertChannelsCard serverId={server.id} />}
+      {/* Alert channels routed to this server — editor+ only (test sends need alertChannel:manage) */}
+      {canManage && <ServerAlertChannelsCard serverId={server.id} />}
     </div>
   );
 }
@@ -1649,111 +1645,6 @@ function AutoUpdateCard({ serverId }: { serverId: number }) {
   );
 }
 
-
-// ----------------------------------------------------------------------
-// Sub-Card: Alert Channels & Live Notification Dispatcher (CloudScope Integration)
-// ----------------------------------------------------------------------
-function AlertChannelsCard({ serverId }: { serverId: number }) {
-  const { data: channels, isLoading } = useQuery({
-    queryKey: alertChannelKeys.detail(serverId),
-    queryFn: () => fetchServerAlertChannels(serverId),
-  });
-
-  const [dispatching, setDispatching] = useState(false);
-
-  const handleTestAlert = async () => {
-    setDispatching(true);
-    try {
-      const res = await sendServerTestAlert(serverId);
-      toast.success(res.message);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to dispatch test alert");
-    } finally {
-      setDispatching(false);
-    }
-  };
-
-  return (
-    <Card>
-      <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          <Bell className="h-4 w-4 text-amber-500" />
-          Alert Channels & Live Notification Dispatcher (CloudScope Feature)
-        </CardTitle>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 text-xs gap-1.5"
-          onClick={handleTestAlert}
-          disabled={dispatching}
-        >
-          {dispatching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5 text-amber-500" />}
-          Dispatch Test Alert
-        </Button>
-      </CardHeader>
-      <CardContent className="p-4 pt-2 space-y-3">
-        <div className="text-xs text-muted-foreground">
-          When this server transitions states (UP ➔ DOWN or DOWN ➔ UP), RackMap automatically dispatches notifications across configured external webhooks and chat bots.
-        </div>
-
-        {isLoading ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking notification channels...
-          </div>
-        ) : !channels ? (
-          <p className="text-xs text-muted-foreground">Notification channels status unavailable.</p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-            {/* Webhook */}
-            <div className="p-3 rounded-lg bg-muted/40 border space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold">Discord / Slack Webhook</span>
-                {channels.webhook.configured ? (
-                  <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400">Configured</Badge>
-                ) : (
-                  <Badge variant="outline" className="text-[10px] border-zinc-500/30 text-zinc-400">Inactive</Badge>
-                )}
-              </div>
-              <div className="text-[11px] text-muted-foreground font-mono truncate">
-                {channels.webhook.urlMasked || "NOTIFY_WEBHOOK_URL unset"}
-              </div>
-            </div>
-
-            {/* Telegram */}
-            <div className="p-3 rounded-lg bg-muted/40 border space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold">Telegram Alert Bot</span>
-                {channels.telegram.configured ? (
-                  <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400">Configured</Badge>
-                ) : (
-                  <Badge variant="outline" className="text-[10px] border-zinc-500/30 text-zinc-400">Inactive</Badge>
-                )}
-              </div>
-              <div className="text-[11px] text-muted-foreground font-mono truncate">
-                {channels.telegram.chatId ? `Chat ID: ${channels.telegram.chatId}` : "NOTIFY_TELEGRAM_BOT_TOKEN unset"}
-              </div>
-            </div>
-
-            {/* Email */}
-            <div className="p-3 rounded-lg bg-muted/40 border space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold">Email Alerts (SMTP)</span>
-                {channels.email.configured ? (
-                  <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400">Configured</Badge>
-                ) : (
-                  <Badge variant="outline" className="text-[10px] border-zinc-500/30 text-zinc-400">Inactive</Badge>
-                )}
-              </div>
-              <div className="text-[11px] text-muted-foreground font-mono truncate">
-                {channels.email.host ? `Host: ${channels.email.host}` : "SMTP_HOST unset"}
-              </div>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
 
 // ----------------------------------------------------------------------
 // TAB 2: Live Metrics (5s polling)

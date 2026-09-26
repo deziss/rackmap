@@ -5,7 +5,7 @@ import { requireSession } from "../../middleware/session.js";
 import { forbidden, notFound } from "../../lib/errors.js";
 import { getAuditCtx, writeAuditDirect } from "../../lib/audit.js";
 import { prisma } from "../../db.js";
-import { notifyAccessRequest } from "../../services/notify.service.js";
+import { notifyAccessRequest, notifyAccessRequestCreated } from "../../services/notify.service.js";
 
 const createSchema = z.object({
   serverId: z.number().int().positive().optional(),
@@ -94,6 +94,17 @@ export const accessRequestRoutes = new Hono()
       entity: "AccessRequest",
       entityId: String(req.id),
       after: { type, serverId, serviceId, entityName },
+    });
+
+    // Fire-and-forget: tell admins a request is waiting (access_request alert event).
+    void notifyAccessRequestCreated({
+      requestId: req.id,
+      type,
+      requesterEmail: user.email ?? "unknown",
+      hostname: entityName,
+      note: note ?? null,
+      serverId,
+      serviceId,
     });
 
     return c.json(req, 201);

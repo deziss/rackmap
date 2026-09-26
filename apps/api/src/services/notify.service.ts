@@ -1,7 +1,21 @@
 import { env } from "../env.js";
 import { prisma } from "../db.js";
-import { sendEmail } from "./email.service.js";
+import { escapeEmailHtml as esc, sendEmail } from "./email.service.js";
+import { emitAlert } from "./alerting/emit.js";
+import type { LegacyPayload } from "./alerting/formatters/webhook.js";
 import type { NotificationPreference } from "@prisma/client";
+
+/**
+ * Notification adapters. The call sites (status/service-status flips, metric
+ * alerts, access requests, sign-up) keep these signatures; underneath, channel
+ * delivery goes through the alert outbox (emitAlert → dispatcher), and the
+ * per-user email preferences are sent directly as before.
+ *
+ * NOTIFY_WEBHOOK_URL / NOTIFY_TELEGRAM_* are no longer posted to from here:
+ * syncEnvAlertChannels() mirrors them into env-managed channels at boot, the
+ * webhook one in `legacy_v1` format, which reproduces the old bodies exactly
+ * from the `payload.legacy` stashed below.
+ */
 
 interface FlipEvent {
   serverId?: number;
@@ -24,6 +38,18 @@ export interface AccessRequestEvent {
   expiresAt?: Date | null;
 }
 
+export interface AccessRequestCreatedEvent {
+  requestId: number;
+  type: "ssh" | "password_reveal" | "service_password_reveal";
+  requesterEmail: string;
+  hostname: string;
+  note?: string | null;
+  serverId?: number;
+  serviceId?: number;
+}
+
+type MetricAlertType = "highCpu" | "ramFull" | "diskFull" | "diskUnmounted" | "gpuCountChanged";
+
 async function getOptedInEmails(preferenceField: keyof NotificationPreference, adminOnly = false) {
   const whereClause: any = {
     notificationPreference: {
@@ -39,6 +65,11 @@ async function getOptedInEmails(preferenceField: keyof NotificationPreference, a
     select: { email: true, id: true },
   });
   return users.map(u => u.email);
+}
+
+/** How many users receive server up/down email through their notification preferences. */
+export async function countFlipEmailRecipients(): Promise<number> {
+  return prisma.user.count({ where: { notificationPreference: { serverUpDown: true } } });
 }
 
 async function logAuditNotification(action: string, entity: string, entityId: string, details: any) {
@@ -58,94 +89,108 @@ async function logAuditNotification(action: string, entity: string, entityId: st
   }
 }
 
-async function sendWebhook(event: FlipEvent): Promise<void> {
-  if (!env.NOTIFY_WEBHOOK_URL) return;
-  await fetch(env.NOTIFY_WEBHOOK_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      event: "status_flip",
-      type: event.type ?? "server",
-      serverId: event.serverId,
-      serviceId: event.serviceId,
-      hostname: event.hostname,
-      ip: event.ip,
-      port: event.port,
-      from: event.from,
-      to: event.to,
-      ts: new Date().toISOString(),
-    }),
-  }).catch((e) => console.error("[notify] webhook failed:", (e as Error).message));
+/** Never let an alert-outbox problem break the caller (a probe sweep, a request). */
+async function safeEmit(e: Parameters<typeof emitAlert>[0]): Promise<void> {
+  try {
+    await emitAlert(e);
+  } catch (err) {
+    console.error(`[notify] emitAlert(${e.type}) failed:`, (err as Error).message);
+  }
 }
 
-async function sendTelegram(event: FlipEvent): Promise<void> {
-  if (!env.NOTIFY_TELEGRAM_BOT_TOKEN || !env.NOTIFY_TELEGRAM_CHAT_ID) return;
-  const emoji = event.to === "up" ? "✅" : "🔴";
-  const typeLabel = event.type === "service" ? "Service" : "Server";
-  const text = `${emoji} [${typeLabel}] *${event.hostname}* (${event.ip}:${event.port})\nStatus: ${event.from} → ${event.to}`;
-  const url = `https://api.telegram.org/bot${env.NOTIFY_TELEGRAM_BOT_TOKEN}/sendMessage`;
-  await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: env.NOTIFY_TELEGRAM_CHAT_ID, text, parse_mode: "Markdown" }),
-  }).catch((e) => console.error("[notify] telegram failed:", (e as Error).message));
-}
-
-async function sendAccessWebhook(ev: AccessRequestEvent): Promise<void> {
-  if (!env.NOTIFY_WEBHOOK_URL) return;
-  await fetch(env.NOTIFY_WEBHOOK_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      event: "access_request",
-      requestId: ev.requestId,
-      status: ev.status,
-      type: ev.type,
-      requesterEmail: ev.requesterEmail,
-      hostname: ev.hostname,
-      adminNote: ev.adminNote ?? null,
-      expiresAt: ev.expiresAt?.toISOString() ?? null,
-      ts: new Date().toISOString(),
-    }),
-  }).catch((e) => console.error("[notify] webhook access_request failed:", (e as Error).message));
-}
-
-async function sendAccessTelegram(ev: AccessRequestEvent): Promise<void> {
-  if (!env.NOTIFY_TELEGRAM_BOT_TOKEN || !env.NOTIFY_TELEGRAM_CHAT_ID) return;
-  const emoji = ev.status === "approved" ? "✅" : "❌";
-  const typeLabel = ev.type === "ssh" ? "SSH Terminal" : "Password Reveal";
-  const expiry = ev.expiresAt ? `\nExpires: ${ev.expiresAt.toUTCString()}` : "";
-  const note = ev.adminNote ? `\nNote: ${ev.adminNote}` : "";
-  const text =
-    `${emoji} Access request *${ev.status}*\n` +
-    `User: ${ev.requesterEmail}\n` +
-    `Server: *${ev.hostname}*\n` +
-    `Type: ${typeLabel}${note}${expiry}`;
-  const url = `https://api.telegram.org/bot${env.NOTIFY_TELEGRAM_BOT_TOKEN}/sendMessage`;
-  await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: env.NOTIFY_TELEGRAM_CHAT_ID, text, parse_mode: "Markdown" }),
-  }).catch((e) => console.error("[notify] telegram access_request failed:", (e as Error).message));
-}
+const ACCESS_TYPE_LABELS: Record<AccessRequestEvent["type"], string> = {
+  ssh: "SSH Terminal",
+  password_reveal: "Password Reveal",
+  service_password_reveal: "Service Password Reveal",
+};
 
 export async function notifyFlip(event: FlipEvent): Promise<void> {
-  await Promise.allSettled([sendWebhook(event), sendTelegram(event)]);
-  
+  const isService = event.type === "service";
+  const up = event.to === "up";
+  const typeLabel = isService ? "Service" : "Server";
+  const legacy: LegacyPayload = {
+    kind: "status_flip",
+    type: event.type ?? "server",
+    serverId: event.serverId,
+    serviceId: event.serviceId,
+    hostname: event.hostname,
+    ip: event.ip,
+    port: event.port,
+    from: event.from,
+    to: event.to,
+  };
+  const entityId = isService ? event.serviceId : event.serverId;
+
+  await safeEmit({
+    type: isService ? (up ? "service_up" : "service_down") : up ? "server_up" : "server_down",
+    severity: up ? "info" : "critical",
+    action: up ? "resolve" : "trigger",
+    ...(entityId !== undefined ? { dedupKey: `rackmap:${isService ? "service" : "server"}:${entityId}` } : {}),
+    title: `${typeLabel} ${event.hostname} is ${up ? "UP" : "DOWN"}`,
+    summary: `${event.hostname} (${event.ip}:${event.port}) status changed from ${event.from} to ${event.to}.`,
+    payload: { hostname: event.hostname, ip: event.ip, port: event.port, from: event.from, to: event.to, legacy },
+    serverId: event.serverId ?? null,
+    serviceId: event.serviceId ?? null,
+  });
+
   const emails = await getOptedInEmails("serverUpDown");
   if (emails.length > 0) {
-    const emoji = event.to === "up" ? "✅" : "🔴";
+    const emoji = up ? "✅" : "🔴";
     await sendEmail({
       to: emails,
-      subject: `[RackMap] Server ${event.hostname} is ${event.to.toUpperCase()}`,
-      html: `<p>${emoji} The server <b>${event.hostname}</b> (${event.ip}:${event.port}) status changed from <b>${event.from}</b> to <b>${event.to}</b>.</p>`,
+      subject: `[RackMap] Server ${event.hostname} is ${event.to.toUpperCase()}`.replace(/[\r\n]+/g, " "),
+      html: `<p>${emoji} The server <b>${esc(event.hostname)}</b> (${esc(event.ip)}:${event.port}) status changed from <b>${esc(event.from)}</b> to <b>${esc(event.to)}</b>.</p>`,
     });
     await logAuditNotification("email_sent", "Server", String(event.serverId), { type: "serverUpDown", count: emails.length });
   }
 }
 
+/** An access request was approved or rejected. */
 export async function notifyAccessRequest(ev: AccessRequestEvent): Promise<void> {
-  await Promise.allSettled([sendAccessWebhook(ev), sendAccessTelegram(ev)]);
+  const legacy: LegacyPayload = {
+    kind: "access_request",
+    requestId: ev.requestId,
+    status: ev.status,
+    type: ev.type,
+    requesterEmail: ev.requesterEmail,
+    hostname: ev.hostname,
+    adminNote: ev.adminNote ?? null,
+    expiresAt: ev.expiresAt?.toISOString() ?? null,
+  };
+  const note = ev.adminNote ? `\nNote: ${ev.adminNote}` : "";
+  const expiry = ev.expiresAt ? `\nExpires: ${ev.expiresAt.toUTCString()}` : "";
+  await safeEmit({
+    type: "access_request",
+    severity: "info",
+    action: "info",
+    title: `Access request ${ev.status}: ${ev.hostname}`,
+    summary: `User: ${ev.requesterEmail}\nServer: ${ev.hostname}\nType: ${ACCESS_TYPE_LABELS[ev.type] ?? ev.type}${note}${expiry}`,
+    payload: { requestId: ev.requestId, status: ev.status, hostname: ev.hostname, requesterEmail: ev.requesterEmail, legacy },
+  });
+}
+
+/** A new access request is waiting for an admin (so admins hear about it without polling the badge). */
+export async function notifyAccessRequestCreated(ev: AccessRequestCreatedEvent): Promise<void> {
+  const legacy: LegacyPayload = {
+    kind: "access_request",
+    requestId: ev.requestId,
+    status: "pending",
+    type: ev.type,
+    requesterEmail: ev.requesterEmail,
+    hostname: ev.hostname,
+    adminNote: null,
+    expiresAt: null,
+  };
+  await safeEmit({
+    type: "access_request",
+    severity: "info",
+    action: "info",
+    title: `Access requested: ${ev.hostname}`,
+    summary: `${ev.requesterEmail} requested ${ACCESS_TYPE_LABELS[ev.type] ?? ev.type} access to ${ev.hostname}.${ev.note ? `\nNote: ${ev.note}` : ""}`,
+    payload: { requestId: ev.requestId, status: "pending", hostname: ev.hostname, requesterEmail: ev.requesterEmail, legacy },
+    serverId: ev.serverId ?? null,
+    serviceId: ev.serviceId ?? null,
+  });
 }
 
 export async function notifyNewServer(server: { id: number; hostname: string; ip: string }): Promise<void> {
@@ -153,27 +198,68 @@ export async function notifyNewServer(server: { id: number; hostname: string; ip
   if (emails.length > 0) {
     await sendEmail({
       to: emails,
-      subject: `[RackMap] New Server Added: ${server.hostname}`,
-      html: `<p>A new server has been added to RackMap.</p><p><b>Hostname:</b> ${server.hostname}<br/><b>IP:</b> ${server.ip}</p>`,
+      subject: `[RackMap] New Server Added: ${server.hostname}`.replace(/[\r\n]+/g, " "),
+      html: `<p>A new server has been added to RackMap.</p><p><b>Hostname:</b> ${esc(server.hostname)}<br/><b>IP:</b> ${esc(server.ip)}</p>`,
     });
     await logAuditNotification("email_sent", "Server", String(server.id), { type: "newServerAdded", count: emails.length });
   }
 }
 
+const METRIC_LABELS: Record<MetricAlertType, string> = {
+  highCpu: "High CPU load",
+  ramFull: "RAM almost full",
+  diskFull: "Disk almost full",
+  diskUnmounted: "Disk unmounted",
+  gpuCountChanged: "GPU count changed",
+};
+
+/** Stateful metrics have a matching resolve; the one-shot ones do not. */
+const STATEFUL_METRICS: readonly MetricAlertType[] = ["highCpu", "ramFull", "diskFull"];
+
 export async function notifyMetricAlert(
-  type: "highCpu" | "ramFull" | "diskFull" | "diskUnmounted" | "gpuCountChanged",
+  type: MetricAlertType,
   server: { id: number; hostname: string },
   details: string
 ): Promise<void> {
+  const stateful = STATEFUL_METRICS.includes(type);
+  await safeEmit({
+    type: "metric_alert",
+    severity: type === "diskFull" || type === "diskUnmounted" ? "error" : "warning",
+    action: stateful ? "trigger" : "info",
+    ...(stateful ? { dedupKey: `rackmap:metric:${server.id}:${type}` } : {}),
+    title: `${METRIC_LABELS[type]} on ${server.hostname}`,
+    summary: details,
+    payload: { hostname: server.hostname, metric: type, details },
+    serverId: server.id,
+  });
+
   const emails = await getOptedInEmails(type);
   if (emails.length > 0) {
     await sendEmail({
       to: emails,
-      subject: `[RackMap] Alert for ${server.hostname}: ${type}`,
-      html: `<p><b>Alert on server ${server.hostname}</b></p><p>${details}</p>`,
+      subject: `[RackMap] Alert for ${server.hostname}: ${type}`.replace(/[\r\n]+/g, " "),
+      html: `<p><b>Alert on server ${esc(server.hostname)}</b></p><p>${esc(details)}</p>`,
     });
     await logAuditNotification("email_sent", "Server", String(server.id), { type, details, count: emails.length });
   }
+}
+
+/** Falling edge of a stateful metric alert: closes the incident the trigger opened. Channels only. */
+export async function notifyMetricResolved(
+  type: "highCpu" | "ramFull" | "diskFull",
+  server: { id: number; hostname: string },
+  details: string,
+): Promise<void> {
+  await safeEmit({
+    type: "metric_alert",
+    severity: "info",
+    action: "resolve",
+    dedupKey: `rackmap:metric:${server.id}:${type}`,
+    title: `${METRIC_LABELS[type]} on ${server.hostname}`,
+    summary: details,
+    payload: { hostname: server.hostname, metric: type, details },
+    serverId: server.id,
+  });
 }
 
 export async function notifyUserRegistered(user: { id: string; email: string; name: string }): Promise<void> {
@@ -182,8 +268,8 @@ export async function notifyUserRegistered(user: { id: string; email: string; na
   if (adminEmails.length > 0) {
     await sendEmail({
       to: adminEmails,
-      subject: `[RackMap] New User Registered: ${user.name}`,
-      html: `<p>A new user just registered.</p><p><b>Name:</b> ${user.name}<br/><b>Email:</b> ${user.email}</p>`,
+      subject: `[RackMap] New User Registered: ${user.name}`.replace(/[\r\n]+/g, " "),
+      html: `<p>A new user just registered.</p><p><b>Name:</b> ${esc(user.name)}<br/><b>Email:</b> ${esc(user.email)}</p>`,
     });
     await logAuditNotification("email_sent", "User", user.id, { type: "userRegisteredAdminAlert", count: adminEmails.length });
   }
@@ -193,7 +279,7 @@ export async function notifyUserRegistered(user: { id: string; email: string; na
     await sendEmail({
       to: user.email,
       subject: `Welcome to RackMap`,
-      html: `<p>Hi ${user.name},</p><p>Welcome to RackMap! Your account has been successfully created.</p>`,
+      html: `<p>Hi ${esc(user.name)},</p><p>Welcome to RackMap! Your account has been successfully created.</p>`,
     });
     await logAuditNotification("email_sent", "User", user.id, { type: "userWelcome" });
   }
