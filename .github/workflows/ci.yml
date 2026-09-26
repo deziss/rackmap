@@ -54,7 +54,7 @@ jobs:
 
       # Matches the runtime image (node:24-alpine).
       - name: Set up Node.js 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: "pnpm"
