@@ -47,6 +47,7 @@ import { fetchLicenseStatus, licenseKeys } from "@/lib/queries";
 import { SudoPermissionDialog } from "@/components/sudo-permission-dialog";
 import { PaginationBar } from "@/components/pagination-bar";
 import { CreateOsUserDialog, EditOsUserDialog, DeleteOsUserDialog } from "@/components/os-user-dialogs";
+import { CronTab } from "@/components/cron/cron-tab";
 import { AtopProcessModal } from "@/components/atop-process-modal";
 import { AddSshKeyDialog } from "@/components/add-ssh-key-dialog";
 import { RequestAccessButton } from "@/components/request-access-button";
@@ -200,7 +201,7 @@ function ServerDetailPage() {
   const id = Number(serverId);
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"overview" | "metrics" | "atop" | "logs" | "users" | "terminal">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "metrics" | "atop" | "logs" | "users" | "cron" | "terminal">("overview");
   const [vaultModalOpen, setVaultModalOpen] = useState(false);
   const [selectedUserForSudo, setSelectedUserForSudo] = useState<OsUserInfo | null>(null);
   const [selectedAtopSnapshot, setSelectedAtopSnapshot] = useState<AtopIntervalSnapshot | null>(null);
@@ -594,6 +595,17 @@ function ServerDetailPage() {
           <Users className="h-3.5 w-3.5 text-emerald-500" /> OS Users & Sudoers
         </Button>
 
+        {me?.can?.["server.cron"] && (
+          <Button
+            variant={activeTab === "cron" ? "secondary" : "ghost"}
+            size="sm"
+            className={cn("gap-1.5 text-xs h-8 font-medium", activeTab === "cron" && "bg-secondary shadow-sm")}
+            onClick={() => setActiveTab("cron")}
+          >
+            <Clock className="h-3.5 w-3.5 text-sky-500" /> Cron Jobs
+          </Button>
+        )}
+
         {sshEnabled && (canAdmin || viewerApproved("ssh")) && (
           <Button
             variant={activeTab === "terminal" ? "secondary" : "ghost"}
@@ -642,6 +654,9 @@ function ServerDetailPage() {
           onManageSudo={(user) => setSelectedUserForSudo(user)}
         />
       )}
+
+      {/* Tab: Cron Jobs */}
+      {activeTab === "cron" && <CronTab serverId={id} />}
 
       {/* Tab 6: Web Terminal */}
       {activeTab === "terminal" && (
