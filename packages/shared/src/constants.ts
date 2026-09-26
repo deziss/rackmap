@@ -98,5 +98,56 @@ export const AUDIT_ACTIONS = [
   "security.rate_limited",
   "vault.reset_destructive",
   "ssh_host_key.forget",
+  "server.cron_update",
+  "server.cron_run",
+  "server.cron_monitor",
+  "server.cron_unmonitor",
+  "alert_channel.create",
+  "alert_channel.update",
+  "alert_channel.delete",
+  "alert_channel.test",
+  "heartbeat.create",
+  "heartbeat.update",
+  "heartbeat.delete",
+  "heartbeat.pause",
+  "heartbeat.resume",
+  "heartbeat.rotate_token",
+  "runbook.create",
+  "runbook.update",
+  "runbook.delete",
+  "runbook.run_request",
+  "runbook.run_approve",
+  "runbook.run_reject",
+  "runbook.run_cancel",
+  "runbook.run_scheduled",
+  "runbook.run_finished",
+  "status_history.prune",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+
+/** Delivery targets an alert channel can post to. */
+export const ALERT_CHANNEL_TYPES = ["slack", "teams", "discord", "pagerduty", "telegram", "webhook", "email"] as const;
+export type AlertChannelType = (typeof ALERT_CHANNEL_TYPES)[number];
+
+/** Every event the alerting outbox can carry; channels subscribe to a subset. */
+export const ALERT_EVENT_TYPES = [
+  "server_down",
+  "server_up",
+  "service_down",
+  "service_up",
+  "metric_alert",
+  "access_request",
+  "heartbeat_late",
+  "heartbeat_fail",
+  "heartbeat_recover",
+  "runbook_failed",
+  "runbook_succeeded",
+  "runbook_approval",
+  "ssl_expiring",
+  "system",
+  "test",
+] as const;
+export type AlertEventType = (typeof ALERT_EVENT_TYPES)[number];
+
+export const ALERT_SEVERITIES = ["critical", "error", "warning", "info"] as const;
+export type AlertSeverity = (typeof ALERT_SEVERITIES)[number];

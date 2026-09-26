@@ -1,4 +1,5 @@
 import type { Context, Next } from "hono";
+import { env } from "../env.js";
 import { getClientIp } from "../lib/client-ip.js";
 import { getAuditCtx, writeAuditDirect } from "../lib/audit.js";
 
@@ -91,6 +92,76 @@ export type RateLimitOptions = {
   message?: string;
 };
 
+/** Outcome of one attempt against a fixed-window counter. */
+export type FixedWindowHit = {
+  allowed: boolean;
+  /** Attempts left in this window after this one (0 once blocked). */
+  remaining: number;
+  /** Epoch ms at which the current window ends. */
+  resetAt: number;
+  /** Whole seconds until the window ends, at least 1. */
+  retryAfterSec: number;
+  /**
+   * True only for the first rejection in a window. Blocked requests are
+   * themselves unbounded, so callers audit on this rather than on every block:
+   * a row per rejection would let an attacker who keeps hammering flood the
+   * audit table — the opposite of useful.
+   */
+  firstRejection: boolean;
+};
+
+/**
+ * The counter behind `rateLimit`, usable outside a Hono route — the per-account
+ * sign-in limit in auth.ts runs inside a Better Auth hook, which has no Hono
+ * context. Same single-process caveats as the middleware (see the top of this
+ * file), and registered with `resetRateLimits` like every other store.
+ *
+ * A rejected attempt does not consume budget; an allowed one always does.
+ */
+export function fixedWindowCounter(opts: { windowMs: number; max: number }) {
+  const { windowMs, max } = opts;
+  const store = new Map<string, Bucket>();
+  stores.add(store);
+  let lastSweep = Date.now();
+
+  return {
+    max,
+    windowMs,
+    hit(key: string, now = Date.now()): FixedWindowHit {
+      // Evict expired buckets. This process is long-lived and the key space is
+      // unbounded (user × resource id), so without this the Map only grows.
+      if (now - lastSweep >= SWEEP_INTERVAL_MS) {
+        lastSweep = now;
+        for (const [k, b] of store) {
+          if (b.resetAt <= now) store.delete(k);
+        }
+      }
+
+      let bucket = store.get(key);
+      if (!bucket || bucket.resetAt <= now) {
+        bucket = { count: 0, resetAt: now + windowMs, audited: false };
+        store.set(key, bucket);
+      }
+      const retryAfterSec = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+
+      if (bucket.count >= max) {
+        const firstRejection = !bucket.audited;
+        bucket.audited = true;
+        return { allowed: false, remaining: 0, resetAt: bucket.resetAt, retryAfterSec, firstRejection };
+      }
+
+      bucket.count += 1;
+      return {
+        allowed: true,
+        remaining: max - bucket.count,
+        resetAt: bucket.resetAt,
+        retryAfterSec,
+        firstRejection: false,
+      };
+    },
+  };
+}
+
 /**
  * Returns Hono middleware enforcing `max` requests per `windowMs` per key.
  *
@@ -101,43 +172,20 @@ export type RateLimitOptions = {
 export function rateLimit(opts: RateLimitOptions) {
   const { windowMs, max, message } = opts;
   const keyOf = opts.key ?? defaultKey;
-
-  const store = new Map<string, Bucket>();
-  stores.add(store);
-  let lastSweep = Date.now();
+  const counter = fixedWindowCounter({ windowMs, max });
 
   return async (c: Context, next: Next) => {
-    const now = Date.now();
+    const hit = counter.hit(keyOf(c));
+    const resetAtSec = String(Math.ceil(hit.resetAt / 1000));
 
-    // Evict expired buckets. This process is long-lived and the key space is
-    // unbounded (user × resource id), so without this the Map only grows.
-    if (now - lastSweep >= SWEEP_INTERVAL_MS) {
-      lastSweep = now;
-      for (const [k, b] of store) {
-        if (b.resetAt <= now) store.delete(k);
-      }
-    }
-
-    const key = keyOf(c);
-    let bucket = store.get(key);
-    if (!bucket || bucket.resetAt <= now) {
-      bucket = { count: 0, resetAt: now + windowMs, audited: false };
-      store.set(key, bucket);
-    }
-
-    const resetAtSec = String(Math.ceil(bucket.resetAt / 1000));
-
-    if (bucket.count >= max) {
-      const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+    if (!hit.allowed) {
+      const retryAfter = hit.retryAfterSec;
       c.header("Retry-After", String(retryAfter));
       c.header("X-RateLimit-Limit", String(max));
       c.header("X-RateLimit-Remaining", "0");
       c.header("X-RateLimit-Reset", resetAtSec);
-      // Audit the first block per bucket only. Blocked requests are themselves
-      // unbounded, so emitting a row per rejection would let an attacker who
-      // keeps hammering flood the audit table — the opposite of useful.
-      if (!bucket.audited) {
-        bucket.audited = true;
+      // Audit the first block per bucket only (see FixedWindowHit.firstRejection).
+      if (hit.firstRejection) {
         void writeAuditDirect({
           ctx: getAuditCtx(c),
           category: "security",
@@ -160,9 +208,8 @@ export function rateLimit(opts: RateLimitOptions) {
       );
     }
 
-    bucket.count += 1;
     c.header("X-RateLimit-Limit", String(max));
-    c.header("X-RateLimit-Remaining", String(max - bucket.count));
+    c.header("X-RateLimit-Remaining", String(hit.remaining));
     c.header("X-RateLimit-Reset", resetAtSec);
     return next();
   };
@@ -248,3 +295,34 @@ export const sshCredentialTestUserLimit = rateLimit({
   key: callerIdentity,
   message: "Too many connectivity tests. Try again shortly.",
 });
+
+/*
+ * Sign-in, per ACCOUNT (`POST /api/auth/sign-in/email`, applied in auth.ts)
+ *
+ *   What an attacker does: guesses one account's password. Better Auth's own
+ *   limiter is keyed on the client IP only, and it has to stay generous
+ *   (AUTH_LOGIN_RATE_LIMIT_MAX, 60/min) because an office behind one NAT, or
+ *   every user behind a proxy with no trusted-proxy config, shares that bucket.
+ *   On its own that is 86,400 guesses a day against one account from one
+ *   address, and unbounded from a botnet.
+ *
+ *   What an operator does: mistypes a password a few times.
+ *
+ *   So: AUTH_LOGIN_ACCOUNT_RATE_LIMIT_MAX (10) attempts per account per
+ *   AUTH_LOGIN_ACCOUNT_RATE_LIMIT_WINDOW (60s), counted whatever the source
+ *   address. It applies to unknown emails exactly as to real ones, so the
+ *   limiter's behaviour reveals nothing about which accounts exist.
+ *
+ *   Trade-off: anyone who knows an email can hold that account at the limit by
+ *   spending 10 guesses a minute on it. The window is short on purpose so that
+ *   costs the victim a minute, not a lockout.
+ */
+export const signInAccountLimit = fixedWindowCounter({
+  windowMs: env.AUTH_LOGIN_ACCOUNT_RATE_LIMIT_WINDOW * 1000,
+  max: env.AUTH_LOGIN_ACCOUNT_RATE_LIMIT_MAX,
+});
+
+/** Bucket key for an email: trimmed and lowercased, as Better Auth matches it. */
+export function signInAccountKey(email: string): string {
+  return `signin:${email.trim().toLowerCase()}`;
+}

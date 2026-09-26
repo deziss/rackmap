@@ -22,27 +22,111 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CheckoutDialog } from "@/components/checkout-dialog";
+import { StatusHistoryCard } from "@/components/status-history-card";
+import { Database } from "lucide-react";
+import { BillingHistoryCard } from "@/components/billing-history-card";
 
 export const Route = createFileRoute("/_auth/settings")({
   component: SettingsPage,
 });
 
+type SettingsTab = "subscription" | "notifications" | "vault" | "maintenance";
+
 function SettingsPage() {
   const { data: session } = authClient.useSession();
   const isAdmin = session?.user?.role === "admin";
+  const [activeTab, setActiveTab] = useState<SettingsTab>("subscription");
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
 
   return (
-    <div className="space-y-6 max-w-xl pb-12">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">Manage notifications, credential security, and global vault settings</p>
+    <div className={`space-y-6 ${activeTab === "subscription" ? "max-w-5xl" : "max-w-2xl"} pb-12 transition-all`}>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            Manage licensing subscriptions, billing invoices, notifications, and credential vault
+          </p>
+        </div>
+
+        {/* Modern Tab Switcher */}
+        <div className="flex items-center gap-1.5 p-1 bg-muted/60 border rounded-lg text-xs font-medium self-start sm:self-auto">
+          <button
+            onClick={() => setActiveTab("subscription")}
+            className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
+              activeTab === "subscription"
+                ? "bg-background text-foreground shadow-sm font-semibold"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+            Subscription &amp; Billing
+          </button>
+          <button
+            onClick={() => setActiveTab("notifications")}
+            className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
+              activeTab === "notifications"
+                ? "bg-background text-foreground shadow-sm font-semibold"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Bell className="h-3.5 w-3.5 text-blue-500" />
+            Notifications
+          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab("vault")}
+              className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
+                activeTab === "vault"
+                  ? "bg-background text-foreground shadow-sm font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Lock className="h-3.5 w-3.5 text-purple-500" />
+              Vault Security
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab("maintenance")}
+              className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
+                activeTab === "maintenance"
+                  ? "bg-background text-foreground shadow-sm font-semibold"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Database className="h-3.5 w-3.5 text-sky-500" />
+              Maintenance
+            </button>
+          )}
+        </div>
       </div>
 
-      {isAdmin && <LicensingConfigurationSection />}
+      {activeTab === "subscription" && (
+        <div className="space-y-6 animate-fade-in">
+          {isAdmin && <LicensingConfigurationSection onUpgradeClick={() => setCheckoutOpen(true)} />}
+          <BillingHistoryCard onUpgradeClick={() => setCheckoutOpen(true)} />
+        </div>
+      )}
 
-      {isAdmin && <VaultConfigurationSection />}
+      {activeTab === "notifications" && (
+        <div className="animate-fade-in">
+          <NotificationPreferencesSection />
+        </div>
+      )}
 
-      <NotificationPreferencesSection />
+      {activeTab === "vault" && isAdmin && (
+        <div className="animate-fade-in">
+          <VaultConfigurationSection />
+        </div>
+      )}
+
+      {activeTab === "maintenance" && isAdmin && (
+        <div className="animate-fade-in">
+          <StatusHistoryCard />
+        </div>
+      )}
+
+      <CheckoutDialog open={checkoutOpen} onOpenChange={setCheckoutOpen} />
     </div>
   );
 }
@@ -397,7 +481,7 @@ function PrefToggle({ label, prefKey, val, onChange, disabled }: { label: string
 // ----------------------------------------------------------------------
 // Section: Subscription & Licensing (Licencia)
 // ----------------------------------------------------------------------
-function LicensingConfigurationSection() {
+function LicensingConfigurationSection({ onUpgradeClick }: { onUpgradeClick?: () => void } = {}) {
   const qc = useQueryClient();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const { data: license, isLoading } = useQuery({
@@ -466,7 +550,7 @@ function LicensingConfigurationSection() {
         <div className="flex items-center gap-2">
           <Button
             size="sm"
-            onClick={() => setCheckoutOpen(true)}
+            onClick={() => onUpgradeClick ? onUpgradeClick() : setCheckoutOpen(true)}
             className="h-7 text-xs bg-blue-600 hover:bg-blue-500 text-white font-medium gap-1.5 shadow-sm"
           >
             <Sparkles className="h-3 w-3 text-blue-200" />
@@ -524,6 +608,8 @@ function LicensingConfigurationSection() {
             { key: "remote_os_users", label: "Remote OS Users & Sudoers" },
             { key: "auto_update", label: "Automated OS Patching" },
             { key: "multi_channel_alerts", label: "Multi-Channel Alerting" },
+            { key: "remote_cron", label: "Remote Cron Job Editor" },
+            { key: "runbooks", label: "Runbooks & Fleet Exec" },
           ].map((feat) => {
             const isEnabled = !isFree && !!license?.features?.[feat.key];
             return (

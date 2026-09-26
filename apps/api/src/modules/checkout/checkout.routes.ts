@@ -1,6 +1,8 @@
 import { Hono } from "hono";
+import type { Context, Next } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { requireSession } from "../../middleware/session.js";
+import { forbidden } from "../../lib/errors.js";
 import { getAuditCtx, writeAuditDirect } from "../../lib/audit.js";
 import {
   CreateCheckoutSessionSchema,
@@ -10,6 +12,7 @@ import {
   createCheckoutSession,
   completeCheckout,
   getUserOrders,
+  getOrderById,
 } from "../../services/checkout.service.js";
 
 export const checkoutRoutes = new Hono();
@@ -49,9 +52,24 @@ checkoutRoutes.get("/plans", (c) => {
 // All subsequent checkout routes require an active authenticated user session
 checkoutRoutes.use("/*", requireSession);
 
-/** POST /api/v1/checkout/session — initiate a checkout order */
+/**
+ * Buying a plan changes the licence of the whole instance (auto-activation
+ * replaces the system licence), so it is an admin action — the same rule as
+ * POST /license/activate. Checked before body validation so a non-admin learns
+ * nothing about the expected payload.
+ */
+async function requireAdmin(c: Context, next: Next) {
+  const user = c.get("user") as { role?: string } | undefined;
+  if (user?.role !== "admin") {
+    throw forbidden("Admin access required to purchase a subscription");
+  }
+  return next();
+}
+
+/** POST /api/v1/checkout/session — initiate a checkout order (Admin only) */
 checkoutRoutes.post(
   "/session",
+  requireAdmin,
   zValidator("json", CreateCheckoutSessionSchema),
   async (c) => {
     const user = c.get("user");
@@ -61,9 +79,13 @@ checkoutRoutes.post(
   }
 );
 
-/** POST /api/v1/checkout/complete — finalize payment & receive Licencia key */
+/**
+ * POST /api/v1/checkout/complete — finalize payment & receive Licencia key (Admin only).
+ * 501 unless BILLING_MODE=simulated: there is no payment gateway to verify against.
+ */
 checkoutRoutes.post(
   "/complete",
+  requireAdmin,
   zValidator("json", CompleteCheckoutSchema),
   async (c) => {
     const user = c.get("user");
@@ -92,4 +114,12 @@ checkoutRoutes.get("/orders", async (c) => {
   const user = c.get("user");
   const orders = await getUserOrders(user.id, user.role === "admin");
   return c.json({ orders });
+});
+
+/** GET /api/v1/checkout/orders/:id — retrieve single invoice & order details */
+checkoutRoutes.get("/orders/:id", async (c) => {
+  const user = c.get("user");
+  const orderId = c.req.param("id");
+  const order = await getOrderById(orderId, user.id, user.role === "admin");
+  return c.json({ order });
 });

@@ -9,12 +9,17 @@ services:
     environment:
       IN_DOCKER: "true"
       NODE_ENV: ${NODE_ENV:-production}
-      DATABASE_URL: ${DOCKER_DATABASE_URL:-file:/data/inventory.db}
+      # Built from the postgres service's credentials below. Set
+      # DOCKER_DATABASE_URL to use an external PostgreSQL 18 instead.
+      # POSTGRES_PASSWORD goes into a URL here: use URL-safe characters
+      # (openssl rand -hex 24), or percent-encode it in DOCKER_DATABASE_URL.
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://${POSTGRES_USER:-rackmap}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-rackmap}}
       PORT: "3001"
       BETTER_AUTH_URL: http://api:3001
       # nginx (the web service) terminates in front of the API, so forwarding
       # headers come from a proxy we control and can be trusted here.
       TRUST_PROXY: ${TRUST_PROXY:-true}
+      TRUSTED_PROXY_CIDRS:
       # Must list every origin the UI is actually reached at. Defaults to
       # WEB_ORIGIN; set explicitly if you browse by host IP as well as by name.
       TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
@@ -36,6 +41,7 @@ services:
       NOTIFY_WEBHOOK_URL: ${NOTIFY_WEBHOOK_URL:-}
       NOTIFY_TELEGRAM_BOT_TOKEN: ${NOTIFY_TELEGRAM_BOT_TOKEN:-}
       NOTIFY_TELEGRAM_CHAT_ID: ${NOTIFY_TELEGRAM_CHAT_ID:-}
+      # Nightly pg_dump into the `backups` volume (see BACKUP_* in .env.example).
       BACKUP_DIR: /backups
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@example.com}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
@@ -54,9 +60,67 @@ services:
       LICENCIA_API_KEY: ${LICENCIA_API_KEY:-}
       LICENCIA_PUBLIC_KEY: ${LICENCIA_PUBLIC_KEY:-}
       LICENCIA_LICENSE_KEY: ${LICENCIA_LICENSE_KEY:-}
+
+      # ── Passed through from .env only when set ────────────────────────────
+      # A bare key (no value) forwards the variable if .env or the shell sets
+      # it, and otherwise leaves it unset in the container so the default in
+      # apps/api/src/env.ts applies. Do not write `${VAR:-}` for these: an
+      # empty string fails validation for the numeric and URL variables and the
+      # API refuses to start. Every one is documented in .env.example.
+      AUTH_RATE_LIMIT_ENABLED:
+      AUTH_RATE_LIMIT_MAX:
+      AUTH_RATE_LIMIT_WINDOW:
+      AUTH_LOGIN_RATE_LIMIT_MAX:
+      AUTH_LOGIN_RATE_LIMIT_WINDOW:
+      AUTH_LOGIN_ACCOUNT_RATE_LIMIT_MAX:
+      AUTH_LOGIN_ACCOUNT_RATE_LIMIT_WINDOW:
+      PUBLIC_BASE_URL:
+      BILLING_MODE:
+      PING_TIMEOUT_MS:
+      JOB_LOCK_TTL_MS:
+      BACKUP_CRON:
+      BACKUP_KEEP:
+      SSH_HOST_POLICY:
+      SSH_REAUTH_INTERVAL_MS:
+      SSH_PRIVATE_KEY_PATH:
+      SMTP_HOST:
+      SMTP_PORT:
+      SMTP_USER:
+      SMTP_PASS:
+      SMTP_FROM:
+      METRICS_ALERT_ENABLED:
+      METRICS_ALERT_INTERVAL_MS:
+      ALERT_THRESHOLD_CPU:
+      ALERT_THRESHOLD_RAM:
+      ALERT_THRESHOLD_DISK:
+      ALERT_DISPATCH_ENABLED:
+      ALERT_DISPATCH_INTERVAL_MS:
+      ALERT_OUTBOUND_TIMEOUT_MS:
+      ALERT_OUTBOUND_ALLOW_PRIVATE:
+      ALERT_OUTBOUND_ALLOW_HTTP:
+      ALERT_OUTBOUND_ALLOWLIST:
+      ALERT_DELIVERY_RETENTION_DAYS:
+      ALERT_MAX_EVENT_AGE_MS:
+      SSL_SCAN_CRON:
+      HEARTBEAT_SWEEP_INTERVAL_MS:
+      HEARTBEAT_PING_KEEP:
+      HEARTBEAT_PING_RETENTION_DAYS:
+      HEARTBEAT_PING_MAX_BODY_BYTES:
+      RUNBOOK_WORKER_ENABLED:
+      RUNBOOK_MAX_CONCURRENT_RUNS:
+      RUNBOOK_MAX_SSH_SESSIONS:
+      RUNBOOK_MAX_TARGETS:
+      RUNBOOK_OUTPUT_MAX_BYTES:
+      RUNBOOK_APPROVAL_TTL_HOURS:
     volumes:
+      # /data holds SSH keys (and, on installs upgraded from SQLite, the old
+      # inventory.db). The volume keeps its historical name so an upgrade does
+      # not silently detach those keys.
       - sqlite_data:/data
       - backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - internal
     healthcheck:
@@ -75,30 +139,36 @@ services:
       options: { max-size: "10m", max-file: "3" }
 
 
-  # Optional PostgreSQL container — run with: docker compose --profile postgres up -d
+  # The database. Always started: the API is PostgreSQL-only.
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg18
     restart: unless-stopped
-    profiles:
-      - postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-rackmap}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rackmap123}
+      # Required — there is deliberately no default password.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-rackmap}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # PostgreSQL 18 images keep PGDATA at /var/lib/postgresql/18/docker and
+      # refuse to start with a volume at the old /var/lib/postgresql/data.
+      - pgdata:/var/lib/postgresql
     networks:
       - internal
     # Bound to loopback: the API reaches Postgres over the internal network, so
     # publishing it on every interface only widens exposure. Override
-    # POSTGRES_BIND if you genuinely need remote access.
+    # POSTGRES_BIND if you genuinely need remote access, and POSTGRES_HOST_PORT
+    # if the host already runs its own PostgreSQL on 5432.
     ports:
-      - "${POSTGRES_BIND:-127.0.0.1}:5432:5432"
+      - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_HOST_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rackmap} -d ${POSTGRES_DB:-rackmap}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options: { max-size: "10m", max-file: "3" }
 
   web:
     build:
@@ -116,7 +186,9 @@ services:
     networks:
       - internal
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      # 127.0.0.1, not localhost: busybox wget resolves localhost to ::1 first
+      # and nginx only listens on IPv4, so the check was always refused.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
       interval: 30s
       timeout: 5s
       retries: 3

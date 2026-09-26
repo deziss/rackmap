@@ -281,6 +281,16 @@ export function setupWebSocket(app: Hono): (server: Server) => void {
             if (err instanceof Error && "kind" in err && (err as { kind: string }).kind === "no_credentials") {
               waitingForPassword = true;
               ws.send(JSON.stringify({ t: "need_password", message: "No password stored. Enter SSH password:" }));
+            } else if (err instanceof Error && "kind" in err && (err as { kind: string }).kind === "vault_locked") {
+              // The stored password exists but cannot be decrypted right now. A
+              // typed password bypasses the vault entirely (connectToServer override).
+              waitingForPassword = true;
+              ws.send(
+                JSON.stringify({
+                  t: "need_password",
+                  message: "The vault is locked, so the stored password is unavailable. Enter SSH password:",
+                }),
+              );
             } else if (err instanceof Error && "kind" in err && (err as { kind: string }).kind === "auth_failed") {
               if (recordAuthFailure("stored credentials rejected")) {
                 ws.send(JSON.stringify({ t: "auth_error", message: "Too many failed SSH authentication attempts." }));

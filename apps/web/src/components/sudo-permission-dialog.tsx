@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { SudoPasswordField, useSudoPassword } from "@/components/sudo-password-field";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,10 +24,12 @@ export function SudoPermissionDialog({ serverId, user, open, onOpenChange }: Sud
   const [mode, setMode] = useState<"none" | "all_nopasswd" | "all_passwd" | "custom">("none");
   const [customCommands, setCustomCommands] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const sudo = useSudoPassword();
 
   useEffect(() => {
     if (user) {
       setErrorMsg("");
+      sudo.reset();
       if (user.hasSudo) {
         const hasNoPasswd = user.sudoRules.some((r) => r.includes("NOPASSWD: ALL"));
         if (hasNoPasswd) {
@@ -42,7 +45,7 @@ export function SudoPermissionDialog({ serverId, user, open, onOpenChange }: Sud
   }, [user, open]);
 
   const mutation = useMutation({
-    mutationFn: (input: SudoPermissionInput) => updateServerSudoPermission(serverId, input),
+    mutationFn: (input: SudoPermissionInput) => updateServerSudoPermission(serverId, input, sudo.requestOpts()),
     onSuccess: (res) => {
       toast.success(res.message || "Sudo permissions updated successfully");
       queryClient.invalidateQueries({ queryKey: serverKeys.osUsers(serverId) });
@@ -50,6 +53,7 @@ export function SudoPermissionDialog({ serverId, user, open, onOpenChange }: Sud
     },
     onError: (err: any) => {
       setErrorMsg(err.message || "Failed to update sudo permissions");
+      sudo.onError(err);
     },
   });
 
@@ -181,6 +185,7 @@ export function SudoPermissionDialog({ serverId, user, open, onOpenChange }: Sud
               <span>{errorMsg}</span>
             </div>
           )}
+          <SudoPasswordField sudo={sudo} />
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">

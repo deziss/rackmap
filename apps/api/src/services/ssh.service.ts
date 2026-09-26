@@ -13,7 +13,9 @@ export type SshErrorKind =
   | "no_credentials"
   | "unreachable"
   | "auth_failed"
-  | "host_key_changed";
+  | "host_key_changed"
+  /** The server's password is vault-encrypted and no vault session (request or system) is unlocked. */
+  | "vault_locked";
 
 export class SshError extends Error {
   readonly kind: SshErrorKind;
@@ -38,26 +40,9 @@ export interface ConnectOptions {
   keyId?: string;
 }
 
-/**
- * Builds a sudo-elevated command string.
- * If password is provided, uses `echo <password> | sudo -S -p '' <cmd>`
- * Otherwise falls back to passwordless `sudo -n <cmd> 2>/dev/null || <cmd>`.
- */
-/**
- * Wrap a command so it runs under sudo, piping in the password when one is known.
- *
- * SECURITY: `cmd` is interpolated verbatim. Callers are responsible for escaping
- * every request-derived value inside it — use `escapeShellArg` from
- * ./shell-escape.js, or a stricter format-specific validator. Do not pass a
- * string built by concatenating unvalidated input.
- */
-export function buildSudoCommand(cmd: string, password?: string): string {
-  if (password) {
-    const escaped = password.replace(/'/g, "'\\''");
-    return `echo '${escaped}' | sudo -S -p '' ${cmd}`;
-  }
-  return `sudo -n ${cmd} 2>/dev/null || ${cmd}`;
-}
+// Root commands go through execAsRoot / execPreferRoot in ./remote-exec.service.ts.
+// The old buildSudoCommand put `echo '<password>' | sudo -S` in the remote
+// command line, which exposed the SSH password to every local user via `ps`.
 
 /**
  * Open an authenticated ssh2 Client to a server.
@@ -77,6 +62,12 @@ export async function connectToServer(
   authMethodUsed?: "key" | "password";
   /** Host-key verification outcome for this connection (see ssh-host-key.service.ts). */
   hostKey?: HostKeyVerdict;
+  /**
+   * Why `password` is undefined even though the server has a stored password
+   * (key auth succeeded, so the connection still opened). Callers that need sudo
+   * surface this instead of a generic "password required".
+   */
+  passwordUnavailable?: "vault_locked" | "decrypt_failed";
 }> {
   const opts: ConnectOptions =
     typeof overridePasswordOrOptions === "string"
@@ -145,6 +136,7 @@ export async function connectToServer(
   }
 
   // 2. Resolve password (override or decrypted from Vault)
+  let passwordUnavailable: "vault_locked" | "decrypt_failed" | undefined;
   if (opts.overridePassword !== undefined && opts.overridePassword !== "") {
     password = opts.overridePassword;
   } else if (server.passwordEnc) {
@@ -152,15 +144,22 @@ export async function connectToServer(
       const decrypted = await decryptPasswordWithVault(server.passwordEnc);
       if (decrypted !== null) {
         password = decrypted;
+      } else {
+        // v1/v3 envelope that no longer authenticates under APP_ENCRYPTION_KEY.
+        passwordUnavailable = "decrypt_failed";
       }
     } catch (vaultErr: any) {
+      const locked = typeof vaultErr?.message === "string" && vaultErr.message.includes("Vault is locked");
+      passwordUnavailable = locked ? "vault_locked" : "decrypt_failed";
       // If we do NOT have an SSH private key, we must have the decrypted password
       if (!privateKey || opts.preferredAuth === "password") {
         throw new SshError(
-          "no_credentials",
+          locked ? "vault_locked" : "no_credentials",
           vaultErr.message || "Vault is locked. Unlock the vault or enter server SSH password."
         );
       }
+      // Key auth can still open the connection; `passwordUnavailable` tells
+      // sudo-needing callers why there is no password instead of a bare undefined.
     }
   }
 
@@ -278,7 +277,14 @@ export async function connectToServer(
       .on("ready", () => {
         if (settled) return;
         settled = true;
-        resolve({ client, target, password, authMethodUsed, hostKey: hostKeyVerdict ?? undefined });
+        resolve({
+          client,
+          target,
+          password,
+          authMethodUsed,
+          hostKey: hostKeyVerdict ?? undefined,
+          ...(passwordUnavailable && !password ? { passwordUnavailable } : {}),
+        });
       })
       .on("error", (err: Error & { level?: string }) => {
         // A refused host key always wins: report the fingerprint change rather
@@ -299,14 +305,24 @@ export async function connectToServer(
   });
 }
 
-/** Map an SshError to an HTTP status + client-safe message. */
-export function sshErrorToHttp(err: unknown): { status: 404 | 409 | 503; message: string } {
+/** User-facing text for a locked vault; shared by sshErrorToHttp and the sudo-failure messages. */
+export const VAULT_LOCKED_MESSAGE =
+  "The server password is encrypted with the vault, and the vault is locked. Unlock the vault or enter the SSH password.";
+
+/**
+ * Map an SshError to an HTTP status + client-safe message. `code` is set for
+ * kinds a client should branch on (a locked vault means "prompt for a password
+ * or unlock", not "retry later").
+ */
+export function sshErrorToHttp(err: unknown): { status: 404 | 409 | 503; message: string; code?: "VAULT_LOCKED" } {
   if (err instanceof SshError) {
     switch (err.kind) {
       case "not_found":
         return { status: 404, message: "Server not found" };
       case "no_credentials":
         return { status: 409, message: err.message || "Server has no usable SSH credentials" };
+      case "vault_locked":
+        return { status: 409, message: VAULT_LOCKED_MESSAGE, code: "VAULT_LOCKED" };
       case "auth_failed":
         return { status: 503, message: err.message || "SSH authentication failed" };
       case "host_key_changed":

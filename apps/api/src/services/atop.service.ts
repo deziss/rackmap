@@ -1,5 +1,7 @@
-import { connectToServer, buildSudoCommand, SshError } from "./ssh.service.js";
+import type { Client } from "ssh2";
+import { connectToServer, SshError } from "./ssh.service.js";
 import { escapeShellArg } from "./shell-escape.js";
+import { execPreferRoot, describeRemoteFailure } from "./remote-exec.service.js";
 import type {
   AtopQueryInput,
   AtopDatesResponse,
@@ -38,53 +40,56 @@ function shellSafeAtopTime(time: string): string {
   return escapeShellArg(trimmed);
 }
 
+/**
+ * Run a read-only atop script as root when sudo is usable, else as the SSH user
+ * (atop logs are usually world-readable), mirroring the old `cmd || sudo cmd`.
+ * Closes the client and returns stdout.
+ */
+async function runAtopScript(client: Client, script: string, password: string | undefined, what: string): Promise<string> {
+  try {
+    const result = await execPreferRoot(client, script, password, {
+      timeoutMs: 120_000,
+      maxOutputBytes: 16 * 1024 * 1024,
+    });
+    if (result.errorCode === "UPLOAD_FAILED" || result.errorCode === "TIMEOUT") {
+      throw new SshError("unreachable", `${what}: ${describeRemoteFailure(result)}`);
+    }
+    return result.stdout;
+  } finally {
+    client.end();
+  }
+}
+
 export async function getAtopDates(serverId: number, overridePassword?: string): Promise<AtopDatesResponse> {
   const { client, password } = await connectToServer(serverId, overridePassword);
-  const sudoLs = buildSudoCommand("ls -1 /var/log/atop/atop_*", password);
 
   const script = `
 which atop 2>/dev/null || echo "NOT_INSTALLED"
 systemctl is-active atop 2>/dev/null || echo "inactive"
-ls -1 /var/log/atop/atop_* 2>/dev/null || ${sudoLs} 2>/dev/null || echo ""
+ls -1 /var/log/atop/atop_* 2>/dev/null || echo ""
 `;
 
-  return new Promise((resolve, reject) => {
-    let stdout = "";
-    client.exec(script, (err, stream) => {
-      if (err) {
-        client.end();
-        return reject(new SshError("unreachable", `Failed to inspect atop: ${err.message}`));
-      }
+  const stdout = await runAtopScript(client, script, password, "Failed to inspect atop");
+  const lines = stdout.split("\n").map((l) => l.trim()).filter(Boolean);
+  const installed = !stdout.includes("NOT_INSTALLED");
+  const serviceRunning = lines.some((l) => l === "active");
 
-      stream.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString("utf8");
-      });
+  const dates: string[] = [];
+  for (const line of lines) {
+    const match = line.match(/atop_(\d{8})$/);
+    if (match && match[1]) {
+      dates.push(match[1]);
+    }
+  }
 
-      stream.on("close", () => {
-        client.end();
-        const lines = stdout.split("\n").map((l) => l.trim()).filter(Boolean);
-        const installed = !stdout.includes("NOT_INSTALLED");
-        const serviceRunning = lines.some((l) => l === "active");
+  // Sort descending (newest first)
+  dates.sort((a, b) => b.localeCompare(a));
 
-        const dates: string[] = [];
-        for (const line of lines) {
-          const match = line.match(/atop_(\d{8})$/);
-          if (match && match[1]) {
-            dates.push(match[1]);
-          }
-        }
-
-        // Sort descending (newest first)
-        dates.sort((a, b) => b.localeCompare(a));
-
-        resolve({
-          dates,
-          installed,
-          serviceRunning,
-        });
-      });
-    });
-  });
+  return {
+    dates,
+    installed,
+    serviceRunning,
+  };
 }
 
 export function parseTopProcesses(raw: string): AtopTopProcesses {
@@ -310,88 +315,70 @@ export async function getAtopSnapshots(serverId: number, query: AtopQueryInput, 
   const filePath = `/var/log/atop/atop_${targetDate}`;
 
   const atopCmd = `atop -r ${filePath} -P CPU,MEM,DSK,NET ${timeFlags}`;
-  const sudoAtop = buildSudoCommand(atopCmd, password);
 
-  // Script with robust file check, interval snapshots, AND top 5 processes by default for that day
+  // Script with robust file check, interval snapshots, AND top 5 processes by default for that day.
+  // It runs as root when sudo is usable (see runAtopScript), so no inner sudo.
   const command = `
 if [ ! -f "${filePath}" ]; then
-  if ! sudo -n test -f "${filePath}" 2>/dev/null; then
-    echo "FILE_NOT_FOUND"
-    exit 0
-  fi
+  echo "FILE_NOT_FOUND"
+  exit 0
 fi
-${atopCmd} 2>/dev/null || ${sudoAtop} 2>/dev/null
+${atopCmd} 2>/dev/null
 echo '<<<TOP_PROCS>>>'
 echo '<<<CPU>>>'
-atop -r ${filePath} -s 1 1 2>/dev/null | head -n 60 || sudo -n atop -r ${filePath} -s 1 1 2>/dev/null | head -n 60
+atop -r ${filePath} -s 1 1 2>/dev/null | head -n 60
 echo '<<<MEM>>>'
-atop -r ${filePath} -m 1 1 2>/dev/null | head -n 60 || sudo -n atop -r ${filePath} -m 1 1 2>/dev/null | head -n 60
+atop -r ${filePath} -m 1 1 2>/dev/null | head -n 60
 echo '<<<DSK>>>'
-atop -r ${filePath} -d 1 1 2>/dev/null | head -n 60 || sudo -n atop -r ${filePath} -d 1 1 2>/dev/null | head -n 60
+atop -r ${filePath} -d 1 1 2>/dev/null | head -n 60
 echo '<<<SOCKETS>>>'
 ss -tp 2>/dev/null | head -n 60
 `;
 
-  return new Promise((resolve, reject) => {
-    let stdout = "";
-    client.exec(command, (err, stream) => {
-      if (err) {
-        client.end();
-        return reject(new SshError("unreachable", `Failed to query atop log: ${err.message}`));
-      }
+  const stdout = await runAtopScript(client, command, password, "Failed to query atop log");
+  if (stdout.includes("FILE_NOT_FOUND")) {
+    return {
+      installed: true,
+      date: targetDate,
+      snapshots: [],
+      total: 0,
+      spikesCount: 0,
+    };
+  }
 
-      stream.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString("utf8");
-      });
+  const [snapshotsPart, topProcsPart] = stdout.split("<<<TOP_PROCS>>>");
+  const allSnapshots = parseAtopRawOutput(
+    snapshotsPart || "",
+    query.cpuThreshold || 70,
+    query.memThreshold || 80,
+    query.dskThreshold || 60
+  );
 
-      stream.on("close", () => {
-        client.end();
-        if (stdout.includes("FILE_NOT_FOUND")) {
-          return resolve({
-            installed: true,
-            date: targetDate,
-            snapshots: [],
-            total: 0,
-            spikesCount: 0,
-          });
-        }
+  let filtered = allSnapshots;
+  if (query.metricFilter === "cpu") {
+    filtered = allSnapshots.filter((s) => s.spikes.isCpuSpike);
+  } else if (query.metricFilter === "mem") {
+    filtered = allSnapshots.filter((s) => s.spikes.isMemSpike);
+  } else if (query.metricFilter === "dsk") {
+    filtered = allSnapshots.filter((s) => s.spikes.isDskSpike);
+  } else if (query.metricFilter === "net") {
+    filtered = allSnapshots.filter((s) => s.spikes.isNetSpike);
+  }
 
-        const [snapshotsPart, topProcsPart] = stdout.split("<<<TOP_PROCS>>>");
-        const allSnapshots = parseAtopRawOutput(
-          snapshotsPart || "",
-          query.cpuThreshold || 70,
-          query.memThreshold || 80,
-          query.dskThreshold || 60
-        );
+  const spikesCount = allSnapshots.filter(
+    (s) => s.spikes.isCpuSpike || s.spikes.isMemSpike || s.spikes.isDskSpike || s.spikes.isNetSpike
+  ).length;
 
-        let filtered = allSnapshots;
-        if (query.metricFilter === "cpu") {
-          filtered = allSnapshots.filter((s) => s.spikes.isCpuSpike);
-        } else if (query.metricFilter === "mem") {
-          filtered = allSnapshots.filter((s) => s.spikes.isMemSpike);
-        } else if (query.metricFilter === "dsk") {
-          filtered = allSnapshots.filter((s) => s.spikes.isDskSpike);
-        } else if (query.metricFilter === "net") {
-          filtered = allSnapshots.filter((s) => s.spikes.isNetSpike);
-        }
+  const topProcesses = topProcsPart ? parseTopProcesses(topProcsPart) : undefined;
 
-        const spikesCount = allSnapshots.filter(
-          (s) => s.spikes.isCpuSpike || s.spikes.isMemSpike || s.spikes.isDskSpike || s.spikes.isNetSpike
-        ).length;
-
-        const topProcesses = topProcsPart ? parseTopProcesses(topProcsPart) : undefined;
-
-        resolve({
-          installed: true,
-          date: targetDate,
-          snapshots: filtered,
-          total: filtered.length,
-          spikesCount,
-          topProcesses,
-        });
-      });
-    });
-  });
+  return {
+    installed: true,
+    date: targetDate,
+    snapshots: filtered,
+    total: filtered.length,
+    spikesCount,
+    topProcesses,
+  };
 }
 
 export async function getAtopTopProcesses(
@@ -410,42 +397,24 @@ export async function getAtopTopProcesses(
 
   const command = `
 if [ ! -f "${filePath}" ]; then
-  if ! sudo -n test -f "${filePath}" 2>/dev/null; then
-    echo "FILE_NOT_FOUND"
-    exit 0
-  fi
+  echo "FILE_NOT_FOUND"
+  exit 0
 fi
 echo '<<<CPU>>>'
-atop -r ${filePath} ${timeFlag} -s 1 1 2>/dev/null | head -n 60 || sudo -n atop -r ${filePath} ${timeFlag} -s 1 1 2>/dev/null | head -n 60
+atop -r ${filePath} ${timeFlag} -s 1 1 2>/dev/null | head -n 60
 echo '<<<MEM>>>'
-atop -r ${filePath} ${timeFlag} -m 1 1 2>/dev/null | head -n 60 || sudo -n atop -r ${filePath} ${timeFlag} -m 1 1 2>/dev/null | head -n 60
+atop -r ${filePath} ${timeFlag} -m 1 1 2>/dev/null | head -n 60
 echo '<<<DSK>>>'
-atop -r ${filePath} ${timeFlag} -d 1 1 2>/dev/null | head -n 60 || sudo -n atop -r ${filePath} ${timeFlag} -d 1 1 2>/dev/null | head -n 60
+atop -r ${filePath} ${timeFlag} -d 1 1 2>/dev/null | head -n 60
 echo '<<<SOCKETS>>>'
 ss -tp 2>/dev/null | head -n 60
 `;
 
-  return new Promise((resolve, reject) => {
-    let stdout = "";
-    client.exec(command, (err, stream) => {
-      if (err) {
-        client.end();
-        return reject(new SshError("unreachable", `Failed to query top processes: ${err.message}`));
-      }
-
-      stream.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString("utf8");
-      });
-
-      stream.on("close", () => {
-        client.end();
-        if (stdout.includes("FILE_NOT_FOUND")) {
-          return resolve({ cpu: [], mem: [], dsk: [], net: [] });
-        }
-        resolve(parseTopProcesses(stdout));
-      });
-    });
-  });
+  const stdout = await runAtopScript(client, command, password, "Failed to query top processes");
+  if (stdout.includes("FILE_NOT_FOUND")) {
+    return { cpu: [], mem: [], dsk: [], net: [] };
+  }
+  return parseTopProcesses(stdout);
 }
 
 export async function getAtopIntervalProcesses(

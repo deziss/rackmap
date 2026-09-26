@@ -8,6 +8,13 @@ export const ErrorCode = z.enum([
   "CONFLICT",
   "RATE_LIMITED",
   "INTERNAL",
+  "CRON_CONFLICT",
+  "VAULT_LOCKED",
+  "SELF_APPROVAL",
+  "NOT_LICENSED",
+  "PAYLOAD_TOO_LARGE",
+  "PUBLIC_BASE_URL_UNSET",
+  "NOT_IMPLEMENTED",
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
 

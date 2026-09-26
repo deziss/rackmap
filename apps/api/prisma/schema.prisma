@@ -3,8 +3,7 @@ generator client {
 }
 
 datasource db {
-  // To switch to Postgres: change "sqlite" -> "postgresql", delete migrations/, run `prisma migrate dev --name baseline`
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -37,6 +36,14 @@ model User {
   resolvedRequests       AccessRequest[]         @relation("Resolver")
   notificationPreference NotificationPreference?
   orders                 Order[]
+  alertChannels          AlertChannel[]
+  heartbeats             Heartbeat[]
+  runbooksCreated        Runbook[]               @relation("RunbookCreator")
+  runbooksUpdated        Runbook[]               @relation("RunbookUpdater")
+  runbookRunsRequested   RunbookRun[]            @relation("RunRequester")
+  runbookRunsApproved    RunbookRun[]            @relation("RunApprover")
+  runbookRunsRejected    RunbookRun[]            @relation("RunRejecter")
+  runbookRunsCancelled   RunbookRun[]            @relation("RunCanceller")
 
   @@map("user")
 }
@@ -208,60 +215,61 @@ model ServerTag {
 
 // ─── Inventory ───────────────────────────────────────────────────────────────
 model Server {
-  id              Int             @id @default(autoincrement())
-  hostname        String
-  ip              String
-  username        String
+  id                Int            @id @default(autoincrement())
+  hostname          String
+  ip                String
+  username          String
   /// AES-256-GCM blob "v1.<iv>.<tag>.<ct>". NEVER sent to client.
-  passwordEnc     String?
+  passwordEnc       String?
   /// Per-server SSH port (varies — from Excel SSH column). Probe uses this.
-  sshPort         Int             @default(22)
-  cpu             String?
-  ram             String?
-  gpuCount        Int?
-  remark          String?
-  domain          String?
-  environment     String?         @default("on-premise")
-  cloudProviderId Int?
-  cloudProvider   CloudProvider?  @relation(fields: [cloudProviderId], references: [id], onDelete: Restrict)
-  gpuTypeId       Int?
-  gpuType         GpuType?        @relation(fields: [gpuTypeId], references: [id], onDelete: Restrict)
-  allocatedToId   Int?
-  allocatedTo     AllocatedTo?    @relation(fields: [allocatedToId], references: [id], onDelete: Restrict)
-  locationId      Int?
-  location        Location?       @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  serverTypeId    Int?
-  serverType      ServerType?     @relation(fields: [serverTypeId], references: [id], onDelete: Restrict)
-  networkTypeId   Int?
-  networkType     NetworkType?    @relation(fields: [networkTypeId], references: [id], onDelete: Restrict)
-  tags            ServerTag[]
+  sshPort           Int            @default(22)
+  cpu               String?
+  ram               String?
+  gpuCount          Int?
+  remark            String?
+  domain            String?
+  environment       String?        @default("on-premise")
+  cloudProviderId   Int?
+  cloudProvider     CloudProvider? @relation(fields: [cloudProviderId], references: [id], onDelete: Restrict)
+  gpuTypeId         Int?
+  gpuType           GpuType?       @relation(fields: [gpuTypeId], references: [id], onDelete: Restrict)
+  allocatedToId     Int?
+  allocatedTo       AllocatedTo?   @relation(fields: [allocatedToId], references: [id], onDelete: Restrict)
+  locationId        Int?
+  location          Location?      @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  serverTypeId      Int?
+  serverType        ServerType?    @relation(fields: [serverTypeId], references: [id], onDelete: Restrict)
+  networkTypeId     Int?
+  networkType       NetworkType?   @relation(fields: [networkTypeId], references: [id], onDelete: Restrict)
+  tags              ServerTag[]
   /// Denormalized latest probe result (updated by scheduler; NOT audited)
-  lastStatus      String          @default("unknown")
-  lastCheckedAt   DateTime?
-  lastLatencyMs   Int?
+  lastStatus        String         @default("unknown")
+  lastCheckedAt     DateTime?
+  lastLatencyMs     Int?
   /// Consecutive down count — triggers notification at threshold
-  downStreak      Int             @default(0)
-  notifiedDown    Boolean         @default(false)
-  deletedAt       DateTime?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  updatedByEmail  String?
-  osType          String?
-  disk            String?
-  isPrivateIp     Boolean         @default(false)
-  purpose         String?
-  createdBy       String?
+  downStreak        Int            @default(0)
+  notifiedDown      Boolean        @default(false)
+  deletedAt         DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  updatedByEmail    String?
+  osType            String?
+  disk              String?
+  isPrivateIp       Boolean        @default(false)
+  purpose           String?
+  createdBy         String?
   // ── Backup Automation & Policies ───────────────────────────────────────────
-  backupScript      String?  @map("backup_script")
-  backupDestination String?  @map("backup_destination")
-  backupSchedule    String?  @map("backup_schedule")
-  backupDurability  String?  @map("backup_durability")
-  backupDataType    String?  @map("backup_data_type")
+  backupScript      String?        @map("backup_script")
+  backupDestination String?        @map("backup_destination")
+  backupSchedule    String?        @map("backup_schedule")
+  backupDurability  String?        @map("backup_durability")
+  backupDataType    String?        @map("backup_data_type")
 
-
-  statusChecks    StatusCheck[]
-  accessRequests  AccessRequest[]
-  sslStatuses     SslStatus[]
+  statusChecks       StatusCheck[]
+  accessRequests     AccessRequest[]
+  sslStatuses        SslStatus[]
+  heartbeats         Heartbeat[]
+  runbookHostResults RunbookHostResult[]
 
   @@index([cloudProviderId])
   @@index([gpuTypeId])
@@ -445,9 +453,11 @@ model SslStatus {
   validTo       DateTime?
   daysRemaining Int?
 
-  status        String    @default("unknown")
-  lastError     String?
-  lastScannedAt DateTime?
+  status             String    @default("unknown")
+  lastError          String?
+  lastScannedAt      DateTime?
+  /// Smallest days-remaining threshold (30/14/7/1) already alerted for the current cert.
+  lastAlertThreshold Int?
 
   isManual Boolean @default(false)
 
@@ -476,7 +486,7 @@ model SystemLicense {
   leaseToken   String?
   tier         String    @default("free") // "free" | "pro" | "enterprise"
   featuresJson String    @default("{}")
-  maxServers   Int       @default(10)     // -1 for unlimited
+  maxServers   Int       @default(10) // -1 for unlimited
   expiresAt    DateTime?
   cachedAt     DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -486,24 +496,24 @@ model SystemLicense {
 
 // ─── Orders & Subscriptions (Licencia Checkout) ──────────────────────────────
 model Order {
-  id             String    @id @default(uuid())
-  sessionId      String    @unique
+  id             String   @id @default(uuid())
+  sessionId      String   @unique
   userId         String
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  planId         String    // "free" | "pro" | "enterprise"
-  billingCycle   String    // "monthly" | "annual"
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId         String // "free" | "pro" | "enterprise"
+  billingCycle   String // "monthly" | "annual"
   amount         Float
-  currency       String    @default("USD")
+  currency       String   @default("USD")
   customerName   String
   customerEmail  String
   company        String?
-  status         String    @default("pending") // "pending" | "paid" | "failed"
-  paymentGateway String?   // "razorpay" | "card" | "free"
+  status         String   @default("pending") // "pending" | "paid" | "failed"
+  paymentGateway String? // "razorpay" | "card" | "free"
   paymentRef     String?
   licenseKey     String?
   invoiceNumber  String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@map("orders")
 }
@@ -587,4 +597,281 @@ model SchedulerLock {
   updatedAt   DateTime @updatedAt
 
   @@map("scheduler_lock")
+}
+
+// ─── Alert channels (services/alerting) ─────────────────────────────────────
+// Outbox pattern: an AlertEvent fans out into one AlertDelivery per matching
+// channel; any replica claims due deliveries row by row, so sends survive
+// restarts and are retried with backoff.
+
+model AlertChannel {
+  id                  Int             @id @default(autoincrement())
+  name                String
+  /// ALERT_CHANNEL_TYPES: slack | teams | discord | pagerduty | telegram | webhook | email
+  type                String
+  enabled             Boolean         @default(true)
+  /// "ui" (created in Settings) | "env" (mirrored from NOTIFY_* env vars on boot)
+  managedBy           String          @default("ui")
+  /// Set for env-managed rows: "NOTIFY_WEBHOOK_URL" | "NOTIFY_TELEGRAM"
+  envKey              String?         @unique
+  /// Non-secret settings, e.g. {chatId, emails[], region, template, sendResolved}
+  config              Json            @default("{}")
+  /// v3 encryptSecret() blob of the secret JSON {url|routingKey|botToken|hmacSecret|headers}
+  secretEnc           String?
+  /// Masked hint safe to show in the UI, e.g. "hooks.slack.com/…/a1B2"
+  secretHint          String?
+  /// Subscribed ALERT_EVENT_TYPES
+  events              String[]
+  /// {serverIds?, tagIds?, environments?, minSeverity?, includeUnscoped?}
+  filters             Json?
+  consecutiveFailures Int             @default(0)
+  lastSuccessAt       DateTime?
+  lastFailureAt       DateTime?
+  lastError           String?
+  createdById         String?
+  createdBy           User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  deliveries          AlertDelivery[]
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([enabled])
+  @@map("alert_channel")
+}
+
+model AlertEvent {
+  id           Int             @id @default(autoincrement())
+  /// ALERT_EVENT_TYPES
+  type         String
+  /// ALERT_SEVERITIES
+  severity     String
+  /// "trigger" | "resolve" | "info"
+  action       String          @default("info")
+  /// Stable incident key, e.g. "rackmap:server:12" — PagerDuty dedup_key
+  dedupKey     String?
+  title        String
+  summary      String
+  payload      Json            @default("{}")
+  /// Plain ids (no FKs) so the event log survives entity deletion.
+  serverId     Int?
+  serviceId    Int?
+  heartbeatId  Int?
+  runbookRunId Int?
+  deliveries   AlertDelivery[]
+  createdAt    DateTime        @default(now())
+
+  @@index([type, createdAt])
+  @@index([createdAt])
+  @@map("alert_event")
+}
+
+model AlertDelivery {
+  id             Int          @id @default(autoincrement())
+  eventId        Int
+  event          AlertEvent   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  channelId      Int
+  channel        AlertChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  /// pending | sending | retrying | succeeded | failed | expired | suppressed
+  status         String       @default("pending")
+  attempts       Int          @default(0)
+  maxAttempts    Int          @default(6)
+  nextAttemptAt  DateTime     @default(now())
+  /// Instance id of the replica currently sending (job-lock INSTANCE_ID)
+  lockedBy       String?
+  lockedUntil    DateTime?
+  lastStatusCode Int?
+  /// Sanitized (never contains URLs or tokens), <= 1000 chars
+  lastError      String?
+  sentAt         DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([channelId, createdAt])
+  @@index([eventId])
+  @@map("alert_delivery")
+}
+
+// ─── Cron heartbeat monitoring ───────────────────────────────────────────────
+
+model Heartbeat {
+  id                Int             @id @default(autoincrement())
+  name              String
+  description       String?
+  /// sha256 hex of the ping token — the lookup key; the raw token is never stored in clear
+  tokenHash         String          @unique
+  /// v3 encryptSecret() of the raw token, so the ping URL can be shown again
+  tokenEnc          String
+  /// First chars of the token for display
+  tokenPrefix       String
+  serverId          Int?
+  server            Server?         @relation(fields: [serverId], references: [id], onDelete: SetNull)
+  /// "cron" | "period"
+  kind              String          @default("cron")
+  schedule          String?
+  timezone          String          @default("UTC")
+  periodSeconds     Int?
+  graceSeconds      Int             @default(300)
+  maxRuntimeSeconds Int?
+  /// new | up | late | down | paused
+  status            String          @default("new")
+  resumeOnPing      Boolean         @default(true)
+  notifyOnLate      Boolean         @default(false)
+  lastPingAt        DateTime?
+  lastPingKind      String?
+  lastStartAt       DateTime?
+  lastSuccessAt     DateTime?
+  lastFailureAt     DateTime?
+  lastExitCode      Int?
+  lastDurationMs    Int?
+  /// When the next ping is due
+  expectedAt        DateTime?
+  /// Precomputed deadline (expectedAt + grace, or start + maxRuntime) after which it is down
+  alertAt           DateTime?
+  /// Set when created from the cron editor: {target, originalCommand, label}
+  cronSource        Json?
+  createdById       String?
+  createdBy         User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  pings             HeartbeatPing[]
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([status, alertAt])
+  @@index([status, expectedAt])
+  @@index([serverId])
+  @@map("heartbeat")
+}
+
+model HeartbeatPing {
+  id            Int       @id @default(autoincrement())
+  heartbeatId   Int
+  heartbeat     Heartbeat @relation(fields: [heartbeatId], references: [id], onDelete: Cascade)
+  /// success | start | fail | log
+  kind          String
+  exitCode      Int?
+  durationMs    Int?
+  remoteIp      String?
+  userAgent     String?
+  body          String?
+  bodyTruncated Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  @@index([heartbeatId, createdAt])
+  @@map("heartbeat_ping")
+}
+
+// ─── Runbooks / fleet exec ───────────────────────────────────────────────────
+
+model Runbook {
+  id                  Int          @id @default(autoincrement())
+  name                String       @unique
+  description         String?
+  script              String
+  /// "bash" | "sh"
+  interpreter         String       @default("bash")
+  /// RunbookParam[] (validated with zod at the boundary)
+  parameters          Json         @default("[]")
+  /// "root" | "sshUser"
+  runAs               String       @default("sshUser")
+  timeoutSec          Int          @default(300)
+  concurrency         Int          @default(5)
+  maxFailures         Int?
+  requireApproval     Boolean      @default(false)
+  /// {serverIds[], tagIds[], environments[], locationIds[], excludeServerIds[], onlyUp}
+  targetSelector      Json         @default("{}")
+  allowTargetOverride Boolean      @default(true)
+  schedule            String?
+  scheduleTimezone    String       @default("UTC")
+  scheduleEnabled     Boolean      @default(false)
+  /// v3 encryptSecret() of the parameter values used by scheduled runs
+  scheduleParamsEnc   String?
+  nextScheduledAt     DateTime?
+  version             Int          @default(1)
+  deletedAt           DateTime?
+  createdById         String?
+  createdBy           User?        @relation("RunbookCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById         String?
+  updatedBy           User?        @relation("RunbookUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  runs                RunbookRun[]
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@index([scheduleEnabled, nextScheduledAt])
+  @@map("runbook")
+}
+
+model RunbookRun {
+  id                Int                 @id @default(autoincrement())
+  runbookId         Int
+  runbook           Runbook             @relation(fields: [runbookId], references: [id], onDelete: Restrict)
+  // Snapshot of the runbook at request time, so edits never change a queued run.
+  runbookVersion    Int
+  scriptSnapshot    String
+  interpreter       String
+  runAs             String
+  timeoutSec        Int
+  concurrency       Int
+  maxFailures       Int?
+  /// Parameter values with secret values replaced by "***"
+  params            Json                @default("{}")
+  /// v3 encryptSecret() of the full parameter values (executor only)
+  paramsEnc         String?
+  /// Frozen target list: number[]
+  targetServerIds   Json                @default("[]")
+  /// "user" | "schedule" | "api"
+  triggeredBy       String              @default("user")
+  dryRun            Boolean             @default(false)
+  requestedById     String?
+  requestedBy       User?               @relation("RunRequester", fields: [requestedById], references: [id], onDelete: SetNull)
+  approvedById      String?
+  approvedBy        User?               @relation("RunApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt        DateTime?
+  rejectedById      String?
+  rejectedBy        User?               @relation("RunRejecter", fields: [rejectedById], references: [id], onDelete: SetNull)
+  rejectionReason   String?
+  /// pending_approval | queued | running | succeeded | failed | partially_failed | cancelled | rejected | expired
+  status            String              @default("queued")
+  cancelRequestedAt DateTime?
+  cancelledById     String?
+  cancelledBy       User?               @relation("RunCanceller", fields: [cancelledById], references: [id], onDelete: SetNull)
+  claimedBy         String?
+  claimedAt         DateTime?
+  /// Executor liveness; the reaper fails runs whose heartbeat went stale
+  heartbeatAt       DateTime?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  /// {total, succeeded, failed, timedOut, cancelled, skipped}
+  summary           Json?
+  error             String?
+  hostResults       RunbookHostResult[]
+  createdAt         DateTime            @default(now())
+
+  @@index([status, createdAt])
+  @@index([runbookId, createdAt])
+  @@index([status, heartbeatAt])
+  @@map("runbook_run")
+}
+
+model RunbookHostResult {
+  id              Int        @id @default(autoincrement())
+  runId           Int
+  run             RunbookRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  serverId        Int?
+  server          Server?    @relation(fields: [serverId], references: [id], onDelete: SetNull)
+  /// Snapshot so results stay readable after the server is deleted
+  hostname        String
+  /// pending | running | succeeded | failed | timed_out | cancelled | skipped
+  status          String     @default("pending")
+  errorCode       String?
+  exitCode        Int?
+  stdout          String     @default("")
+  stderr          String     @default("")
+  stdoutTruncated Boolean    @default(false)
+  stderrTruncated Boolean    @default(false)
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  durationMs      Int?
+
+  @@unique([runId, serverId])
+  @@index([runId, status])
+  @@map("runbook_host_result")
 }

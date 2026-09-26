@@ -1,6 +1,7 @@
 /**
  * Shell-safety helper shared by the services that build command strings and run
- * them over SSH on managed hosts — frequently as root, via `buildSudoCommand`.
+ * them over SSH on managed hosts — frequently as root, via `execAsRoot`
+ * (services/remote-exec.service.ts).
  *
  * Any value that originates from an HTTP request MUST pass through
  * `escapeShellArg` (or a stricter, format-specific validator) before it is

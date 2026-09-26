@@ -9,5 +9,10 @@ import { env } from "../../env.js";
  * reach the API.
  */
 export const publicRoutes = new Hono().get("/config", (c) =>
-  c.json({ allowSelfSignup: env.ALLOW_SELF_SIGNUP }),
+  c.json({
+    allowSelfSignup: env.ALLOW_SELF_SIGNUP,
+    // Online checkout only works with a payment backend; with BILLING_MODE
+    // "disabled" the UI offers license-key activation instead.
+    billingEnabled: env.BILLING_MODE === "simulated",
+  }),
 );

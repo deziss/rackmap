@@ -1,5 +1,15 @@
-import { connectToServer, buildSudoCommand, SshError } from "./ssh.service.js";
+import { connectToServer, SshError } from "./ssh.service.js";
+import {
+  execAsRoot,
+  describeRemoteFailure,
+  remoteFailureToHttp,
+  RemoteFailureError,
+  type RemoteScriptResult,
+} from "./remote-exec.service.js";
 import type { AutoUpdateStatus, AutoUpdateActionInput } from "@inv/shared";
+
+/** apt-get update + install on a slow mirror can take several minutes. */
+const AUTO_UPDATE_WRITE_TIMEOUT_MS = 15 * 60 * 1000;
 
 export async function getAutoUpdateStatus(serverId: number, overridePassword?: string): Promise<AutoUpdateStatus> {
   const { client } = await connectToServer(serverId, overridePassword);
@@ -88,7 +98,6 @@ export async function updateAutoUpdateStatus(
   input: AutoUpdateActionInput,
   overridePassword?: string
 ): Promise<{ success: boolean; message: string }> {
-  const { client, password } = await connectToServer(serverId, overridePassword);
   const action = input.action;
 
   let rawCmd = "";
@@ -120,39 +129,33 @@ echo "SUCCESS_REMOVE"
 `;
   }
 
-  const sudoExec = buildSudoCommand(`sh -c "${rawCmd.replace(/"/g, '\\"')}"`, password);
-
-  return new Promise((resolve, reject) => {
-    let stdout = "";
-    let stderr = "";
-
-    client.exec(sudoExec, (err, stream) => {
-      if (err) {
-        client.end();
-        return reject(new SshError("unreachable", `Failed to execute auto-update change: ${err.message}`));
-      }
-
-      stream.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString("utf8");
-      });
-      stream.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString("utf8");
-      });
-
-      stream.on("close", (code: number | null) => {
-        client.end();
-        if (code === 0 || stdout.includes("SUCCESS_")) {
-          const msg =
-            action === "enable"
-              ? "Unattended Upgrades auto-update successfully enabled and activated on host."
-              : action === "disable"
-              ? "Unattended Upgrades disabled (system will not perform automated background updates)."
-              : "Unattended Upgrades package purged from host.";
-          resolve({ success: true, message: msg });
-        } else {
-          reject(new Error(`Failed to configure unattended-upgrades (exit code ${code}): ${stderr || stdout}`));
-        }
-      });
+  // The script runs as root through execAsRoot: it is uploaded over stdin and the
+  // SSH password only ever reaches sudo's stdin. The old form put
+  // `echo '<password>' | sudo -S` in the remote command line, and without a
+  // password silently fell back to running as the SSH user, which could not
+  // write /etc/apt yet still printed SUCCESS_.
+  const { client, password, passwordUnavailable } = await connectToServer(serverId, overridePassword);
+  let result: RemoteScriptResult;
+  try {
+    result = await execAsRoot(client, rawCmd, password, {
+      timeoutMs: AUTO_UPDATE_WRITE_TIMEOUT_MS,
+      maxOutputBytes: 1024 * 1024,
     });
-  });
+  } finally {
+    client.end();
+  }
+
+  const failure = remoteFailureToHttp(result, { passwordUnavailable });
+  if (failure) throw new RemoteFailureError(failure, `Failed to execute auto-update change: ${failure.message}`);
+  if (!result.errorCode && (result.exitCode === 0 || result.stdout.includes("SUCCESS_"))) {
+    const msg =
+      action === "enable"
+        ? "Unattended Upgrades auto-update successfully enabled and activated on host."
+        : action === "disable"
+        ? "Unattended Upgrades disabled (system will not perform automated background updates)."
+        : "Unattended Upgrades package purged from host.";
+    return { success: true, message: msg };
+  }
+  const detail = result.errorCode ? describeRemoteFailure(result) : result.stderr || result.stdout;
+  throw new Error(`Failed to configure unattended-upgrades (exit code ${result.exitCode}): ${detail}`);
 }

@@ -74,6 +74,8 @@ export function CheckoutDialog({
   // Self-registration is opt-in (ALLOW_SELF_SIGNUP). When it is off, checkout
   // has to start from an existing account instead of offering a form that fails.
   const [allowSelfSignup, setAllowSelfSignup] = useState(true);
+  // Online checkout is off unless the API runs with BILLING_MODE=simulated.
+  const [billingEnabled, setBillingEnabled] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,6 +85,9 @@ export function CheckoutDialog({
         if (!cancelled && cfg && typeof cfg.allowSelfSignup === "boolean") {
           setAllowSelfSignup(cfg.allowSelfSignup);
           if (!cfg.allowSelfSignup) setAuthTab("signin");
+        }
+        if (!cancelled && cfg && typeof cfg.billingEnabled === "boolean") {
+          setBillingEnabled(cfg.billingEnabled);
         }
       })
       .catch(() => {
@@ -557,10 +562,16 @@ export function CheckoutDialog({
               </div>
             </div>
 
+            {!billingEnabled && (
+              <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+                Online checkout is not enabled on this instance. Activate a license key under Settings → License instead.
+              </p>
+            )}
+
             {/* CTA */}
             <Button
               onClick={handleProceedToPayment}
-              disabled={isProcessing}
+              disabled={isProcessing || !billingEnabled}
               className="w-full h-11 bg-blue-600 hover:bg-blue-500 text-white font-semibold shadow-lg shadow-blue-600/30 gap-2"
             >
               {isProcessing ? (

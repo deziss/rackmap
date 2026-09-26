@@ -1,6 +1,14 @@
 import { prisma } from "../db.js";
-import { connectToServer, buildSudoCommand, SshError } from "./ssh.service.js";
+import { connectToServer, SshError, sshErrorToHttp } from "./ssh.service.js";
 import { escapeShellArg } from "./shell-escape.js";
+import {
+  execAsRoot,
+  execPreferRoot,
+  describeRemoteFailure,
+  remoteFailureToHttp,
+  RemoteFailureError,
+  type RemoteScriptResult,
+} from "./remote-exec.service.js";
 import { writeAudit, type AuditCtx } from "../lib/audit.js";
 import type { OsUserInfo, SudoPermissionInput, CreateOsUserInput, UpdateOsUserInput, DeleteOsUserInput } from "@inv/shared";
 
@@ -25,6 +33,75 @@ const SUDO_COMMAND_PATTERN = /^\/[A-Za-z0-9._@+-]+(?:\/[A-Za-z0-9._@+-]+)*(?: [A
 const SUDO_RESERVED_WORD_PATTERN =
   /\b(?:ALL|NOPASSWD|PASSWD|SETENV|NOSETENV|EXEC|NOEXEC|LOG_INPUT|NOLOG_INPUT|LOG_OUTPUT|NOLOG_OUTPUT|MAIL|NOMAIL|FOLLOW|NOFOLLOW)\b/;
 
+/**
+ * Groups whose members are root-equivalent (sudo/wheel/admin grant sudo; docker,
+ * lxd and disk give root through the daemon or the raw block device; adm and
+ * shadow expose logs and password hashes). Granting any of them — or any sudo
+ * rule — needs `server:sudo`, not just `server:osUsers`.
+ */
+export const PRIVILEGED_OS_GROUPS = ["sudo", "wheel", "admin", "docker", "lxd", "disk", "root", "adm", "shadow"] as const;
+const PRIVILEGED_GROUP_SET = new Set<string>(PRIVILEGED_OS_GROUPS);
+
+/** True when a create/update request would grant root-equivalent access. */
+export function grantsPrivilegedAccess(input: { sudoType?: string; groups?: string[] }): boolean {
+  if (input.sudoType !== undefined && input.sudoType !== "none") return true;
+  // Case-folded on purpose: over-matching "Docker" costs an admin a click,
+  // under-matching would be an escalation.
+  return (input.groups ?? []).some((g) => PRIVILEGED_GROUP_SET.has(g.trim().toLowerCase()));
+}
+
+/**
+ * Raised when the target account (or a requested primary group) turns out to be
+ * root-equivalent on the host and the caller lacks `server:sudo`. Setting the
+ * password of a sudo-group user is as good as a sudo grant, so the route-level
+ * check on the request body is not enough on its own.
+ */
+export class PrivilegedTargetError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PrivilegedTargetError";
+  }
+}
+
+/** 403 message for a create/update body that grants sudo or a privileged group without `server:sudo`. */
+export const PRIVILEGED_GRANT_MESSAGE =
+  "Granting sudo rights or a privileged group (sudo, wheel, admin, docker, lxd, disk, root, adm, shadow) requires the server:sudo permission";
+
+/**
+ * Map an error from the OS-user service to an HTTP response. Privileged-target
+ * refusals are 403, SSH errors keep their sshErrorToHttp mapping, failures
+ * around the root script keep remoteFailureToHttp's (unreachable 503, a locked
+ * vault 409 VAULT_LOCKED, sudo 409, timeout 504), and everything else — including
+ * a failed useradd — stays the 400 the routes have always returned.
+ */
+export function osUserErrorToHttp(
+  err: unknown,
+  fallbackCode: string,
+): { status: 400 | 403 | 404 | 409 | 503 | 504; code: string; message: string } {
+  if (err instanceof PrivilegedTargetError) return { status: 403, code: "FORBIDDEN", message: err.message };
+  if (err instanceof RemoteFailureError) return { status: err.status, code: err.code, message: err.message };
+  if (err instanceof SshError) {
+    const mapped = sshErrorToHttp(err);
+    return { status: mapped.status, code: mapped.code ?? fallbackCode, message: mapped.message };
+  }
+  const message = err instanceof Error && err.message ? err.message : "OS user operation failed";
+  return { status: 400, code: fallbackCode, message };
+}
+
+export interface OsUserWriteOptions {
+  /** Caller holds `server:sudo`. When false, privileged targets are refused on the host. */
+  allowPrivileged?: boolean;
+}
+
+// Exit status + stderr marker the in-script guards use (77 = EX_NOPERM).
+const PRIVILEGED_EXIT = 77;
+const PRIVILEGED_MARKER = "RACKMAP_PRIVILEGED_TARGET";
+const PRIVILEGED_CASE_PATTERN = PRIVILEGED_OS_GROUPS.join("|");
+
+/** OS-user writes: useradd/usermod -m/userdel -r can walk a large home directory. */
+const WRITE_TIMEOUT_MS = 300_000;
+const READ_TIMEOUT_MS = 60_000;
+
 /** Validate an absolute path and return it single-quoted for the remote shell. */
 function shellSafeAbsolutePath(value: string, label: string): string {
   const trimmed = value.trim();
@@ -46,6 +123,24 @@ function validateGroupNames(groups: string[]): string[] {
     }
   }
   return clean;
+}
+
+/** A positive integer id, re-checked because it is interpolated into a root script. */
+function safeNumericId(value: number, label: string): string {
+  if (!Number.isInteger(value) || value <= 0 || value > 4_294_967_294) {
+    throw new Error(`Invalid ${label} "${value}"`);
+  }
+  return String(value);
+}
+
+/**
+ * chpasswd reads `user:password` LINES: a newline in the password would start a
+ * second entry and set any account's password (e.g. root's).
+ */
+function assertSafePassword(password: string): void {
+  if (/[\r\n\0]/.test(password)) {
+    throw new Error("The password must not contain line breaks or NUL characters");
+  }
 }
 
 /**
@@ -91,70 +186,140 @@ function buildSudoersRuleLine(user: string, grant: SudoGrantType, customCommands
 }
 
 /**
- * Install a sudoers rule without the shell ever seeing the rule text: the line
- * travels as base64 and is decoded on the target, so `$(...)`, backticks and
- * backslashes cannot expand during the write (the old `echo "<rule>"` form ran
- * them as root).
+ * Root-script fragment that installs a sudoers rule without the shell ever
+ * seeing the rule text: the line travels as base64 and is decoded on the target,
+ * so `$(...)`, backticks and backslashes cannot expand during the write.
  *
- * The scratch file comes from `mktemp` — the previous fixed
- * `/tmp/rackmap_sudo_<Date.now()>_<Math.random()>` name was predictable enough
- * for a local attacker to win a symlink race between the write and the move.
- * `install` runs as root so the result is root:root 0440, which is what sudo
- * requires (the old `mv` left the file owned by the SSH user).
+ * The scratch file comes from `mktemp` (a predictable name would allow a symlink
+ * race between the write and the move), and `install` leaves the result
+ * root:root 0440, which is what sudo requires. The script already runs as root,
+ * so there is no inner `sudo` here.
  */
-function buildSudoersWriteCommand(ruleLine: string, fileName: string): string {
+function buildSudoersWriteFragment(ruleLine: string, fileName: string): string {
   const payload = Buffer.from(`${ruleLine}\n`, "utf8").toString("base64");
   return (
     `(tmp=$(mktemp /tmp/rackmap_sudo.XXXXXXXX) && ` +
     `printf %s ${escapeShellArg(payload)} | base64 -d > "$tmp" && ` +
-    `sudo visudo -cf "$tmp" && ` +
-    `sudo install -o root -g root -m 0440 "$tmp" ${escapeShellArg(fileName)}; ` +
+    `visudo -cf "$tmp" && ` +
+    `install -o root -g root -m 0440 "$tmp" ${escapeShellArg(fileName)}; ` +
     `rc=$?; rm -f "$tmp" 2>/dev/null; exit $rc)`
   );
 }
 
-export async function listOsUsers(serverId: number, overridePassword?: string): Promise<OsUserInfo[]> {
-  const { client, password } = await connectToServer(serverId, overridePassword);
-  const sudoCat = buildSudoCommand("cat /etc/sudoers /etc/sudoers.d/*", password);
+/**
+ * `chpasswd` input as a root-script step. `printf` is a shell builtin, so the
+ * `user:password` line never appears in any process's argv; the only copy on
+ * the host is the 0600 script file, which is removed as soon as the run ends.
+ */
+function buildChpasswdStep(username: string, password: string): string {
+  assertSafePassword(password);
+  return `printf '%s\\n' ${escapeShellArg(`${username}:${password}`)} | chpasswd`;
+}
 
-  const script = `
+/**
+ * Refuse (exit 77 + marker) when `username` is root-equivalent on the host:
+ * uid 0, a member of a privileged group (primary included — `id -Gn` lists it),
+ * or holder of any sudoers rule. Runs as root, before any change is made.
+ */
+function buildPrivilegedUserGuard(username: string): string {
+  const u = escapeShellArg(username);
+  const refuse = `{ echo ${PRIVILEGED_MARKER} >&2; exit ${PRIVILEGED_EXIT}; }`;
+  return [
+    `if id ${u} >/dev/null 2>&1; then`,
+    `  [ "$(id -u ${u})" = 0 ] && ${refuse}`,
+    `  for g in $(id -Gn ${u} 2>/dev/null); do case "$g" in ${PRIVILEGED_CASE_PATTERN}) ${refuse};; esac; done`,
+    `  if command -v sudo >/dev/null 2>&1 && LC_ALL=C sudo -n -l -U ${u} 2>/dev/null | grep -q 'may run the following'; then ${refuse}; fi`,
+    `fi`,
+  ].join("\n");
+}
+
+/** Refuse when a numeric primary gid resolves to a privileged group (e.g. `-g 27` = sudo on Debian). */
+function buildPrivilegedGidGuard(gid: string): string {
+  return [
+    `g=$(getent group ${gid} 2>/dev/null | cut -d: -f1)`,
+    `case "$g" in ${PRIVILEGED_CASE_PATTERN}) echo ${PRIVILEGED_MARKER} >&2; exit ${PRIVILEGED_EXIT};; esac`,
+  ].join("\n");
+}
+
+/**
+ * Assemble a root script: guards first, then each step; the first failing step
+ * stops the script with its own exit status. PATH is pinned because a non-root
+ * SSH user's PATH often lacks /usr/sbin (useradd, visudo, chpasswd).
+ */
+function buildRootScript(steps: string[], guards: string[] = []): string {
+  return [
+    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH; export PATH",
+    ...guards,
+    ...steps.map((s) => `${s} || exit $?`),
+    "exit 0",
+    "",
+  ].join("\n");
+}
+
+/**
+ * Run a root script on the server and throw an operator-facing error unless it
+ * succeeded. The SSH password (from the vault or the x-ssh-password override)
+ * is handed to execAsRoot, which only writes it to sudo when `sudo -n` fails.
+ */
+async function runRootScript(
+  serverId: number,
+  script: string,
+  overridePassword: string | undefined,
+  failurePrefix: string,
+): Promise<RemoteScriptResult> {
+  const { client, password, passwordUnavailable } = await connectToServer(serverId, overridePassword);
+  let result: RemoteScriptResult;
+  try {
+    result = await execAsRoot(client, script, password, { timeoutMs: WRITE_TIMEOUT_MS, maxOutputBytes: 256 * 1024 });
+  } finally {
+    client.end();
+  }
+
+  // Upload, sudo (a locked vault → 409 VAULT_LOCKED: unlock it or resend with
+  // x-ssh-password) and timeouts carry their HTTP mapping to the route.
+  const failure = remoteFailureToHttp(result, { passwordUnavailable });
+  if (failure) throw new RemoteFailureError(failure, `${failurePrefix}: ${failure.message}`);
+  if (result.exitCode === PRIVILEGED_EXIT && result.stderr.includes(PRIVILEGED_MARKER)) {
+    throw new PrivilegedTargetError(
+      "The target account or group is root-equivalent on this host; changing it requires the server:sudo permission"
+    );
+  }
+  if (result.exitCode !== 0 || result.errorCode) {
+    throw new Error(`${failurePrefix}: ${describeRemoteFailure(result)}`);
+  }
+  return result;
+}
+
+const LIST_USERS_SCRIPT = `
 echo "===PASSWD==="
 getent passwd 2>/dev/null || cat /etc/passwd
 echo "===SUDOERS==="
-${sudoCat} 2>/dev/null || cat /etc/sudoers.d/* 2>/dev/null || echo ""
+cat /etc/sudoers /etc/sudoers.d/* 2>/dev/null || true
 echo "===GROUPS==="
 getent group 2>/dev/null || cat /etc/group
 `;
 
-  return new Promise((resolve, reject) => {
-    let stdout = "";
-    let stderr = "";
-
-    client.exec(script, (err, stream) => {
-      if (err) {
-        client.end();
-        return reject(new SshError("unreachable", `Failed to list OS users: ${err.message}`));
-      }
-
-      stream
-        .on("data", (chunk: Buffer) => {
-          stdout += chunk.toString("utf8");
-        })
-        .stderr.on("data", (chunk: Buffer) => {
-          stderr += chunk.toString("utf8");
-        });
-
-      stream.on("close", () => {
-        client.end();
-        try {
-          const users = parseUsers(stdout);
-          resolve(users);
-        } catch (parseErr: any) {
-          reject(new Error(`Failed to parse users: ${parseErr.message}`));
-        }
-      });
+export async function listOsUsers(serverId: number, overridePassword?: string): Promise<OsUserInfo[]> {
+  const { client, password } = await connectToServer(serverId, overridePassword);
+  let result: RemoteScriptResult;
+  try {
+    // Root reads /etc/sudoers; without usable sudo the listing still works and
+    // simply shows whatever sudoers.d entries the SSH user can read.
+    result = await execPreferRoot(client, LIST_USERS_SCRIPT, password, {
+      timeoutMs: READ_TIMEOUT_MS,
+      maxOutputBytes: 16 * 1024 * 1024,
     });
-  });
+  } finally {
+    client.end();
+  }
+  if (result.errorCode === "UPLOAD_FAILED" || result.errorCode === "TIMEOUT") {
+    throw new SshError("unreachable", `Failed to list OS users: ${describeRemoteFailure(result)}`);
+  }
+  try {
+    return parseUsers(result.stdout);
+  } catch (parseErr: any) {
+    throw new Error(`Failed to parse users: ${parseErr.message}`);
+  }
 }
 
 function parseUsers(output: string): OsUserInfo[] {
@@ -256,46 +421,25 @@ export async function updateSudoPermission(
 
   // Built and validated before the SSH session is opened so invalid input never
   // leaves a connection dangling.
-  const execCmd =
+  const step =
     input.permissionType === "none"
-      ? `sudo rm -f ${escapeShellArg(fileName)}`
-      : buildSudoersWriteCommand(
+      ? `rm -f ${escapeShellArg(fileName)}`
+      : buildSudoersWriteFragment(
           buildSudoersRuleLine(targetUser, input.permissionType, input.customCommands),
           fileName
         );
 
-  const { client, password } = await connectToServer(serverId, overridePassword);
+  await runRootScript(serverId, buildRootScript([step]), overridePassword, "Failed to update sudoers rule");
 
-  return new Promise((resolve, reject) => {
-    client.exec(execCmd, (err, stream) => {
-      if (err) {
-        client.end();
-        return reject(new SshError("unreachable", `Failed to execute sudo update: ${err.message}`));
-      }
-
-      let stderr = "";
-      stream.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString("utf8");
-      });
-
-      stream.on("close", async (code: number | null) => {
-        client.end();
-        if (code === 0) {
-          await writeAudit({
-            ctx,
-            category: "security",
-            action: "server.sudo_permission",
-            entity: "server",
-            entityId: String(serverId),
-            after: { targetUser, permissionType: input.permissionType, customCommands: input.customCommands },
-          });
-          resolve({ ok: true, message: `Successfully updated sudo permission for ${targetUser}` });
-        } else {
-          reject(new Error(`Failed to update sudoers rule. visudo validation error: ${stderr || "Exit code " + code}`));
-        }
-      });
-    });
+  await writeAudit({
+    ctx,
+    category: "security",
+    action: "server.sudo_permission",
+    entity: "server",
+    entityId: String(serverId),
+    after: { targetUser, permissionType: input.permissionType, customCommands: input.customCommands },
   });
+  return { ok: true, message: `Successfully updated sudo permission for ${targetUser}` };
 }
 
 
@@ -303,76 +447,57 @@ export async function createOsUser(
   serverId: number,
   input: CreateOsUserInput,
   ctx: AuditCtx = {},
-  overridePassword?: string
+  overridePassword?: string,
+  opts: OsUserWriteOptions = {}
 ): Promise<{ ok: boolean; message: string }> {
   const username = sanitizeUsername(input.username);
 
   // Built and validated before the SSH session is opened: every value below is
-  // interpolated into a command that runs as root on the managed host.
+  // interpolated into a script that runs as root on the managed host.
   const flags: string[] = [];
+  const guards: string[] = [];
   if (input.createHome !== false) flags.push("-m");
   if (input.shell) flags.push(`-s ${shellSafeAbsolutePath(input.shell, "shell")}`);
   if (input.homeDir) flags.push(`-d ${shellSafeAbsolutePath(input.homeDir, "home directory")}`);
   if (input.isSystemUser) flags.push("-r");
-  if (input.uid) flags.push(`-u ${input.uid}`);
-  if (input.gid) flags.push(`-g ${input.gid}`);
+  if (input.uid) flags.push(`-u ${safeNumericId(input.uid, "uid")}`);
+  if (input.gid) {
+    const gid = safeNumericId(input.gid, "gid");
+    flags.push(`-g ${gid}`);
+    if (!opts.allowPrivileged) guards.push(buildPrivilegedGidGuard(gid));
+  }
   if (input.groups && input.groups.length > 0) {
     const cleanGroups = validateGroupNames(input.groups).join(",");
     if (cleanGroups) flags.push(`-G ${escapeShellArg(cleanGroups)}`);
   }
 
-  let execCmd = `sudo useradd ${flags.join(" ")} ${escapeShellArg(username)}`;
-  if (input.password) {
-    execCmd += ` && echo ${escapeShellArg(`${username}:${input.password}`)} | sudo chpasswd`;
-  }
+  const steps = [`useradd ${flags.join(" ")} ${escapeShellArg(username)}`];
+  if (input.password) steps.push(buildChpasswdStep(username, input.password));
 
   if (input.sudoType && input.sudoType !== "none") {
     const fileName = `/etc/sudoers.d/rackmap_${username}`;
-    execCmd += ` && ${buildSudoersWriteCommand(
-      buildSudoersRuleLine(username, input.sudoType, input.customCommands),
-      fileName
-    )}`;
+    steps.push(buildSudoersWriteFragment(buildSudoersRuleLine(username, input.sudoType, input.customCommands), fileName));
   }
 
-  const { client, password } = await connectToServer(serverId, overridePassword);
+  await runRootScript(serverId, buildRootScript(steps, guards), overridePassword, `Failed to create OS user ${username}`);
 
-  return new Promise((resolve, reject) => {
-    client.exec(execCmd, (err, stream) => {
-      if (err) {
-        client.end();
-        return reject(new SshError("unreachable", `Failed to execute create user: ${err.message}`));
-      }
-
-      let stderr = "";
-      stream.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString("utf8");
-      });
-
-      stream.on("close", async (code: number | null) => {
-        client.end();
-        if (code === 0) {
-          await writeAudit({
-            ctx,
-            category: "security",
-            action: "server.os_user_create",
-            entity: "server",
-            entityId: String(serverId),
-            after: {
-              username,
-              shell: input.shell || "/bin/bash",
-              homeDir: input.homeDir || `/home/${username}`,
-              groups: input.groups,
-              sudoType: input.sudoType || "none",
-              isSystemUser: input.isSystemUser,
-            },
-          });
-          resolve({ ok: true, message: `Successfully created user account ${username}` });
-        } else {
-          reject(new Error(`Failed to create OS user ${username}: ${stderr || "Exit code " + code}`));
-        }
-      });
-    });
+  await writeAudit({
+    ctx,
+    category: "security",
+    action: "server.os_user_create",
+    entity: "server",
+    entityId: String(serverId),
+    after: {
+      username,
+      shell: input.shell || "/bin/bash",
+      homeDir: input.homeDir || `/home/${username}`,
+      groups: input.groups,
+      sudoType: input.sudoType || "none",
+      isSystemUser: input.isSystemUser,
+      passwordSet: !!input.password,
+    },
   });
+  return { ok: true, message: `Successfully created user account ${username}` };
 }
 
 export async function updateOsUser(
@@ -380,84 +505,66 @@ export async function updateOsUser(
   rawUsername: string,
   input: UpdateOsUserInput,
   ctx: AuditCtx = {},
-  overridePassword?: string
+  overridePassword?: string,
+  opts: OsUserWriteOptions = {}
 ): Promise<{ ok: boolean; message: string }> {
   const username = sanitizeUsername(rawUsername);
   const safeUsername = escapeShellArg(username);
 
   // Built and validated before the SSH session is opened: every value below is
-  // interpolated into a command that runs as root on the managed host.
+  // interpolated into a script that runs as root on the managed host.
   const steps: string[] = [];
 
   if (input.shell) {
-    steps.push(`sudo usermod -s ${shellSafeAbsolutePath(input.shell, "shell")} ${safeUsername}`);
+    steps.push(`usermod -s ${shellSafeAbsolutePath(input.shell, "shell")} ${safeUsername}`);
   }
   if (input.homeDir) {
-    steps.push(`sudo usermod -d ${shellSafeAbsolutePath(input.homeDir, "home directory")} -m ${safeUsername}`);
+    steps.push(`usermod -d ${shellSafeAbsolutePath(input.homeDir, "home directory")} -m ${safeUsername}`);
   }
   if (input.groups !== undefined) {
     const cleanGroups = validateGroupNames(input.groups).join(",");
-    steps.push(`sudo usermod -G ${escapeShellArg(cleanGroups)} ${safeUsername}`);
+    steps.push(`usermod -G ${escapeShellArg(cleanGroups)} ${safeUsername}`);
   }
   if (input.password) {
-    steps.push(`echo ${escapeShellArg(`${username}:${input.password}`)} | sudo chpasswd`);
+    steps.push(buildChpasswdStep(username, input.password));
   }
   if (input.isLocked === true) {
-    steps.push(`sudo usermod -L ${safeUsername}`);
+    steps.push(`usermod -L ${safeUsername}`);
   } else if (input.isLocked === false) {
-    steps.push(`sudo usermod -U ${safeUsername}`);
+    steps.push(`usermod -U ${safeUsername}`);
   }
 
   if (input.sudoType !== undefined) {
     const fileName = `/etc/sudoers.d/rackmap_${username}`;
     if (input.sudoType === "none") {
-      steps.push(`sudo rm -f ${escapeShellArg(fileName)}`);
+      steps.push(`rm -f ${escapeShellArg(fileName)}`);
     } else {
       steps.push(
-        buildSudoersWriteCommand(buildSudoersRuleLine(username, input.sudoType, input.customCommands), fileName)
+        buildSudoersWriteFragment(buildSudoersRuleLine(username, input.sudoType, input.customCommands), fileName)
       );
     }
   }
 
-  const { client, password } = await connectToServer(serverId, overridePassword);
+  if (steps.length === 0) {
+    return { ok: true, message: "No changes requested" };
+  }
 
-  return new Promise((resolve, reject) => {
-    if (steps.length === 0) {
-      client.end();
-      return resolve({ ok: true, message: "No changes requested" });
-    }
+  // Without server:sudo, any change to an account that is already
+  // root-equivalent (new password, shell, lock state…) is refused on the host.
+  const guards = opts.allowPrivileged ? [] : [buildPrivilegedUserGuard(username)];
+  await runRootScript(serverId, buildRootScript(steps, guards), overridePassword, `Failed to update user ${username}`);
 
-    const execCmd = steps.join(" && ");
-
-    client.exec(execCmd, (err, stream) => {
-      if (err) {
-        client.end();
-        return reject(new SshError("unreachable", `Failed to execute update user: ${err.message}`));
-      }
-
-      let stderr = "";
-      stream.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString("utf8");
-      });
-
-      stream.on("close", async (code: number | null) => {
-        client.end();
-        if (code === 0) {
-          await writeAudit({
-            ctx,
-            category: "security",
-            action: "server.os_user_update",
-            entity: "server",
-            entityId: String(serverId),
-            after: { username, ...input },
-          });
-          resolve({ ok: true, message: `Successfully updated user account ${username}` });
-        } else {
-          reject(new Error(`Failed to update user ${username}: ${stderr || "Exit code " + code}`));
-        }
-      });
-    });
+  // Never audit the password itself.
+  const { password: _password, ...auditedInput } = input;
+  await writeAudit({
+    ctx,
+    category: "security",
+    action: "server.os_user_update",
+    entity: "server",
+    entityId: String(serverId),
+    after: { username, ...auditedInput, ...(input.password ? { passwordChanged: true } : {}) },
   });
+  return { ok: true, message: `Successfully updated user account ${username}` };
 }
 
 export async function deleteOsUser(
@@ -465,7 +572,8 @@ export async function deleteOsUser(
   rawUsername: string,
   input: DeleteOsUserInput,
   ctx: AuditCtx = {},
-  overridePassword?: string
+  overridePassword?: string,
+  opts: OsUserWriteOptions = {}
 ): Promise<{ ok: boolean; message: string }> {
   const username = sanitizeUsername(rawUsername);
 
@@ -481,44 +589,26 @@ export async function deleteOsUser(
     throw new Error("Cannot delete the active SSH administration account for this server");
   }
 
-  const { client, password } = await connectToServer(serverId, overridePassword);
+  const flags: string[] = [];
+  if (input.removeHome !== false) flags.push("-r");
+  if (input.force === true) flags.push("-f");
 
-  return new Promise((resolve, reject) => {
-    const flags: string[] = [];
-    if (input.removeHome !== false) flags.push("-r");
-    if (input.force) flags.push("-f");
+  const steps = [
+    `userdel ${flags.join(" ")} ${escapeShellArg(username)}`,
+    `rm -f ${escapeShellArg(`/etc/sudoers.d/rackmap_${username}`)}`,
+  ];
+  // Without server:sudo, removing an account that is root-equivalent on the
+  // host (e.g. another administrator) is refused there, like updates are.
+  const guards = opts.allowPrivileged ? [] : [buildPrivilegedUserGuard(username)];
+  await runRootScript(serverId, buildRootScript(steps, guards), overridePassword, `Failed to delete user ${username}`);
 
-    const execCmd = `sudo userdel ${flags.join(" ")} ${escapeShellArg(username)} && sudo rm -f ${escapeShellArg(
-      `/etc/sudoers.d/rackmap_${username}`
-    )}`;
-
-    client.exec(execCmd, (err, stream) => {
-      if (err) {
-        client.end();
-        return reject(new SshError("unreachable", `Failed to execute delete user: ${err.message}`));
-      }
-
-      let stderr = "";
-      stream.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString("utf8");
-      });
-
-      stream.on("close", async (code: number | null) => {
-        client.end();
-        if (code === 0) {
-          await writeAudit({
-            ctx,
-            category: "security",
-            action: "server.os_user_delete",
-            entity: "server",
-            entityId: String(serverId),
-            after: { username, removeHome: input.removeHome, force: input.force },
-          });
-          resolve({ ok: true, message: `Successfully deleted user account ${username}` });
-        } else {
-          reject(new Error(`Failed to delete user ${username}: ${stderr || "Exit code " + code}`));
-        }
-      });
-    });
+  await writeAudit({
+    ctx,
+    category: "security",
+    action: "server.os_user_delete",
+    entity: "server",
+    entityId: String(serverId),
+    after: { username, removeHome: input.removeHome, force: input.force },
   });
+  return { ok: true, message: `Successfully deleted user account ${username}` };
 }

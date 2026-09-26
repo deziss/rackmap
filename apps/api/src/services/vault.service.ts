@@ -88,6 +88,15 @@ function getSessionDek(sessionToken?: string): Buffer | null {
 }
 
 /**
+ * Whether background work (no request session) can decrypt v2 vault blobs:
+ * true when the system session is unlocked via VAULT_PASSPHRASE or an admin's
+ * global unlock.
+ */
+export function isSystemVaultUnlocked(): boolean {
+  return getSystemSessionDek() !== null;
+}
+
+/**
  * The DEK of the deployment-wide system session (VAULT_PASSPHRASE / global unlock), or null.
  *
  * This is the only cross-session key path that exists. It is consulted explicitly — for

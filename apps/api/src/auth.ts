@@ -1,10 +1,12 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { APIError, createAuthMiddleware, getIp } from "better-auth/api";
 import { admin, twoFactor } from "better-auth/plugins";
 import { prisma } from "./db.js";
 import { env } from "./env.js";
 import { ac, roles } from "@inv/shared";
 import { writeAuditDirect } from "./lib/audit.js";
+import { signInAccountKey, signInAccountLimit } from "./middleware/rate-limit.js";
 
 // Better Auth otherwise infers the cookie "secure" flag from baseURL. Set it explicitly so an
 // https deployment always gets Secure session cookies, including when BETTER_AUTH_URL is left
@@ -22,7 +24,7 @@ const useSecureCookies =
   env.BETTER_AUTH_URL.startsWith("https://") || env.WEB_ORIGIN.startsWith("https://");
 
 export const auth = betterAuth({
-  database: prismaAdapter(prisma, { provider: "sqlite" }),
+  database: prismaAdapter(prisma, { provider: "postgresql" }),
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
   // TRUSTED_ORIGINS defaults to WEB_ORIGIN (see env.ts). "*" is an explicit opt-in wildcard that
@@ -69,13 +71,67 @@ export const auth = betterAuth({
     },
   },
 
+  // Per client IP. Kept generous for sign-in so a shared-NAT office is not
+  // locked out; the per-ACCOUNT limit in `hooks.before` below is what bounds
+  // password guessing against any one user.
   rateLimit: {
-    enabled: true,
-    window: 60,
-    max: 100,
+    enabled: env.AUTH_RATE_LIMIT_ENABLED,
+    window: env.AUTH_RATE_LIMIT_WINDOW,
+    max: env.AUTH_RATE_LIMIT_MAX,
     customRules: {
-      "/sign-in/email": { window: 60, max: 10 },
+      "/sign-in/email": {
+        window: env.AUTH_LOGIN_RATE_LIMIT_WINDOW,
+        max: env.AUTH_LOGIN_RATE_LIMIT_MAX,
+      },
     },
+  },
+
+  hooks: {
+    // Per-account sign-in limit (see signInAccountLimit in middleware/rate-limit.ts).
+    // Runs before the password is checked, so a throttled attempt costs no hash.
+    //
+    // 2FA verification is not covered here: its body carries no email, and the
+    // twoFactor plugin already limits /two-factor/* to 3 per 10s per IP. Every
+    // fresh 2FA challenge also requires a correct password, which this bounds.
+    before: createAuthMiddleware(async (ctx) => {
+      if (!env.AUTH_RATE_LIMIT_ENABLED || ctx.path !== "/sign-in/email") return;
+      const email = (ctx.body as { email?: unknown } | undefined)?.email;
+      if (typeof email !== "string" || !email.trim()) return; // body validation rejects it
+
+      const hit = signInAccountLimit.hit(signInAccountKey(email));
+      if (hit.allowed) return;
+
+      if (hit.firstRejection) {
+        const normalized = email.trim().toLowerCase();
+        void writeAuditDirect({
+          ctx: {
+            actorId: null,
+            actorEmail: normalized,
+            ip: ctx.request ? getIp(ctx.request, ctx.context.options) : null,
+          },
+          category: "security",
+          action: "security.rate_limited",
+          entity: "RateLimit",
+          after: {
+            route: "POST /api/auth/sign-in/email",
+            scope: "account",
+            limit: signInAccountLimit.max,
+            windowMs: signInAccountLimit.windowMs,
+          },
+        }).catch(() => {
+          /* never fail a request because the audit write failed */
+        });
+      }
+
+      throw new APIError(
+        "TOO_MANY_REQUESTS",
+        {
+          code: "RATE_LIMITED",
+          message: `Too many sign-in attempts for this account. Try again in ${hit.retryAfterSec}s.`,
+        },
+        { "Retry-After": String(hit.retryAfterSec) },
+      );
+    }),
   },
 
   plugins: [

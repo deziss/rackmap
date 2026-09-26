@@ -26,6 +26,8 @@ import type {
   TestAlertResponse,
   LicenseStatusResponse,
   ActivateLicenseRequest,
+  OrderItem,
+  OrderListResponse,
 } from "@inv/shared";
 
 export const serverKeys = {
@@ -107,33 +109,46 @@ export function fetchServerOsUsers(id: number) {
   return apiFetch<{ users: OsUserInfo[] }>(`/api/v1/servers/${id}/os-users`);
 }
 
-export function createServerOsUser(id: number, input: CreateOsUserInput) {
+/** One-time sudo password for a root action (header X-Sudo-Password; never stored). */
+export interface SudoOpts {
+  sudoPassword?: string;
+}
+
+function sudoHeaders(opts?: SudoOpts): Record<string, string> | undefined {
+  return opts?.sudoPassword ? { "X-Sudo-Password": opts.sudoPassword } : undefined;
+}
+
+export function createServerOsUser(id: number, input: CreateOsUserInput, opts?: SudoOpts) {
   return apiFetch<{ ok: boolean; message: string }>(`/api/v1/servers/${id}/os-users`, {
     method: "POST",
     body: JSON.stringify(input),
+    headers: sudoHeaders(opts),
   });
 }
 
-export function updateServerOsUser(id: number, username: string, input: UpdateOsUserInput) {
+export function updateServerOsUser(id: number, username: string, input: UpdateOsUserInput, opts?: SudoOpts) {
   return apiFetch<{ ok: boolean; message: string }>(`/api/v1/servers/${id}/os-users/${encodeURIComponent(username)}`, {
     method: "PATCH",
     body: JSON.stringify(input),
+    headers: sudoHeaders(opts),
   });
 }
 
-export function deleteServerOsUser(id: number, username: string, input: DeleteOsUserInput) {
+export function deleteServerOsUser(id: number, username: string, input: DeleteOsUserInput, opts?: SudoOpts) {
   const query = new URLSearchParams();
   if (input.removeHome !== undefined) query.set("removeHome", String(input.removeHome));
   if (input.force !== undefined) query.set("force", String(input.force));
   return apiFetch<{ ok: boolean; message: string }>(`/api/v1/servers/${id}/os-users/${encodeURIComponent(username)}?${query.toString()}`, {
     method: "DELETE",
+    headers: sudoHeaders(opts),
   });
 }
 
-export function updateServerSudoPermission(id: number, input: SudoPermissionInput) {
+export function updateServerSudoPermission(id: number, input: SudoPermissionInput, opts?: SudoOpts) {
   return apiFetch<{ success: boolean; message: string }>(`/api/v1/servers/${id}/os-users/sudo`, {
     method: "POST",
     body: JSON.stringify(input),
+    headers: sudoHeaders(opts),
   });
 }
 
@@ -389,4 +404,20 @@ export function deactivateLicense() {
   return apiFetch<LicenseStatusResponse>("/api/v1/license/deactivate", {
     method: "POST",
   });
+}
+
+
+// ─── Checkout & Billing History ─────────────────────────────────────────────
+export const checkoutKeys = {
+  all: ["checkout"] as const,
+  orders: () => [...checkoutKeys.all, "orders"] as const,
+  order: (id: string) => [...checkoutKeys.all, "order", id] as const,
+};
+
+export function fetchUserOrders() {
+  return apiFetch<OrderListResponse>("/api/v1/checkout/orders");
+}
+
+export function fetchOrderById(id: string) {
+  return apiFetch<{ order: OrderItem }>(`/api/v1/checkout/orders/${id}`);
 }
