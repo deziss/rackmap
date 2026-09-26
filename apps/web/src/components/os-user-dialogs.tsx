@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SudoPasswordField, useSudoPassword } from "@/components/sudo-password-field";
 import {
   Dialog,
@@ -41,6 +41,8 @@ import {
   updateServerOsUser,
   deleteServerOsUser,
   serverKeys,
+  fetchMe,
+  systemKeys,
 } from "@/lib/queries";
 import type {
   OsUserInfo,
@@ -79,6 +81,16 @@ const COMMON_SHELLS = [
 
 const COMMON_GROUPS = ["sudo", "docker", "adm", "www-data", "staff", "systemd-journal"];
 
+// Mirrors PRIVILEGED_OS_GROUPS in apps/api/src/services/os-user.service.ts: granting
+// any of these (or sudo rules) needs server:sudo, so editors are not offered them.
+const PRIVILEGED_GROUP_NAMES = new Set(["sudo", "wheel", "admin", "docker", "lxd", "disk", "root", "adm", "shadow"]);
+
+/** Whether the signed-in user may grant sudo rules and privileged groups. */
+function useCanSudo(): boolean {
+  const { data: me } = useQuery({ queryKey: systemKeys.me, queryFn: fetchMe, staleTime: 5 * 60 * 1000 });
+  return !!me?.can?.["server.sudo"];
+}
+
 // ======================================================================
 // 1. CREATE OS USER DIALOG
 // ======================================================================
@@ -110,6 +122,7 @@ export function CreateOsUserDialog({
   const [customCommands, setCustomCommands] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const sudo = useSudoPassword();
+  const canSudo = useCanSudo();
 
   // Reset fields on open
   useEffect(() => {
@@ -355,7 +368,7 @@ export function CreateOsUserDialog({
             />
             <div className="flex flex-wrap gap-1 pt-1">
               <span className="text-[10px] text-muted-foreground mr-1">Quick Add:</span>
-              {COMMON_GROUPS.map((grp) => {
+              {COMMON_GROUPS.filter((grp) => canSudo || !PRIVILEGED_GROUP_NAMES.has(grp)).map((grp) => {
                 const isSelected = groups
                   .split(",")
                   .map((g) => g.trim())
@@ -399,47 +412,53 @@ export function CreateOsUserDialog({
           </div>
 
           {/* Section: Sudo Privileges */}
-          <div className="p-3 rounded-lg border bg-muted/20 space-y-2.5">
-            <Label className="text-xs font-semibold flex items-center gap-1.5">
-              <ShieldCheck className="h-4 w-4 text-amber-500" /> Sudoers Privileges
-            </Label>
-            <Select
-              value={sudoType}
-              onValueChange={(val: any) => setSudoType(val)}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none" className="text-xs">
-                  None (Standard Unprivileged User)
-                </SelectItem>
-                <SelectItem value="all_nopasswd" className="text-xs font-mono">
-                  Full Sudo without Password (NOPASSWD: ALL)
-                </SelectItem>
-                <SelectItem value="all_passwd" className="text-xs font-mono">
-                  Full Sudo with Password Required (ALL=(ALL:ALL) ALL)
-                </SelectItem>
-                <SelectItem value="custom" className="text-xs font-mono">
-                  Custom Restricted Commands
-                </SelectItem>
-              </SelectContent>
-            </Select>
+          {canSudo ? (
+            <div className="p-3 rounded-lg border bg-muted/20 space-y-2.5">
+              <Label className="text-xs font-semibold flex items-center gap-1.5">
+                <ShieldCheck className="h-4 w-4 text-amber-500" /> Sudoers Privileges
+              </Label>
+              <Select
+                value={sudoType}
+                onValueChange={(val: any) => setSudoType(val)}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" className="text-xs">
+                    None (Standard Unprivileged User)
+                  </SelectItem>
+                  <SelectItem value="all_nopasswd" className="text-xs font-mono">
+                    Full Sudo without Password (NOPASSWD: ALL)
+                  </SelectItem>
+                  <SelectItem value="all_passwd" className="text-xs font-mono">
+                    Full Sudo with Password Required (ALL=(ALL:ALL) ALL)
+                  </SelectItem>
+                  <SelectItem value="custom" className="text-xs font-mono">
+                    Custom Restricted Commands
+                  </SelectItem>
+                </SelectContent>
+              </Select>
 
-            {sudoType === "custom" && (
-              <div className="space-y-1 pt-1">
-                <Label className="text-[11px] text-muted-foreground">
-                  Allowed Commands (comma-separated):
-                </Label>
-                <Input
-                  placeholder="/usr/bin/systemctl restart nginx, /usr/bin/docker ps"
-                  value={customCommands}
-                  onChange={(e) => setCustomCommands(e.target.value)}
-                  className="h-8 text-xs font-mono"
-                />
-              </div>
-            )}
-          </div>
+              {sudoType === "custom" && (
+                <div className="space-y-1 pt-1">
+                  <Label className="text-[11px] text-muted-foreground">
+                    Allowed Commands (comma-separated):
+                  </Label>
+                  <Input
+                    placeholder="/usr/bin/systemctl restart nginx, /usr/bin/docker ps"
+                    value={customCommands}
+                    onChange={(e) => setCustomCommands(e.target.value)}
+                    className="h-8 text-xs font-mono"
+                  />
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">
+              Sudo rules and privileged groups (sudo, docker, adm, …) can only be granted by an admin.
+            </p>
+          )}
 
           <DialogFooter className="pt-2">
             <Button
@@ -501,6 +520,7 @@ export function EditOsUserDialog({
   const [customCommands, setCustomCommands] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const sudo = useSudoPassword();
+  const canSudo = useCanSudo();
 
   useEffect(() => {
     if (user && open) {
@@ -665,7 +685,7 @@ export function EditOsUserDialog({
             />
             <div className="flex flex-wrap gap-1 pt-1">
               <span className="text-[10px] text-muted-foreground mr-1">Quick Add:</span>
-              {COMMON_GROUPS.map((grp) => {
+              {COMMON_GROUPS.filter((grp) => canSudo || !PRIVILEGED_GROUP_NAMES.has(grp)).map((grp) => {
                 const isSelected = groups
                   .split(",")
                   .map((g) => g.trim())
@@ -742,47 +762,53 @@ export function EditOsUserDialog({
           </div>
 
           {/* Sudoers Privileges */}
-          <div className="p-3 rounded-lg border bg-muted/20 space-y-2.5">
-            <Label className="text-xs font-semibold flex items-center gap-1.5">
-              <ShieldCheck className="h-4 w-4 text-amber-500" /> Sudoers Privileges
-            </Label>
-            <Select
-              value={sudoType}
-              onValueChange={(val: any) => setSudoType(val)}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none" className="text-xs">
-                  None (Remove sudo rules)
-                </SelectItem>
-                <SelectItem value="all_nopasswd" className="text-xs font-mono">
-                  Full Sudo without Password (NOPASSWD: ALL)
-                </SelectItem>
-                <SelectItem value="all_passwd" className="text-xs font-mono">
-                  Full Sudo with Password Required (ALL=(ALL:ALL) ALL)
-                </SelectItem>
-                <SelectItem value="custom" className="text-xs font-mono">
-                  Custom Restricted Commands
-                </SelectItem>
-              </SelectContent>
-            </Select>
+          {canSudo ? (
+            <div className="p-3 rounded-lg border bg-muted/20 space-y-2.5">
+              <Label className="text-xs font-semibold flex items-center gap-1.5">
+                <ShieldCheck className="h-4 w-4 text-amber-500" /> Sudoers Privileges
+              </Label>
+              <Select
+                value={sudoType}
+                onValueChange={(val: any) => setSudoType(val)}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" className="text-xs">
+                    None (Remove sudo rules)
+                  </SelectItem>
+                  <SelectItem value="all_nopasswd" className="text-xs font-mono">
+                    Full Sudo without Password (NOPASSWD: ALL)
+                  </SelectItem>
+                  <SelectItem value="all_passwd" className="text-xs font-mono">
+                    Full Sudo with Password Required (ALL=(ALL:ALL) ALL)
+                  </SelectItem>
+                  <SelectItem value="custom" className="text-xs font-mono">
+                    Custom Restricted Commands
+                  </SelectItem>
+                </SelectContent>
+              </Select>
 
-            {sudoType === "custom" && (
-              <div className="space-y-1 pt-1">
-                <Label className="text-[11px] text-muted-foreground">
-                  Allowed Commands (comma-separated):
-                </Label>
-                <Input
-                  placeholder="/usr/bin/systemctl restart nginx, /usr/bin/docker ps"
-                  value={customCommands}
-                  onChange={(e) => setCustomCommands(e.target.value)}
-                  className="h-8 text-xs font-mono"
-                />
-              </div>
-            )}
-          </div>
+              {sudoType === "custom" && (
+                <div className="space-y-1 pt-1">
+                  <Label className="text-[11px] text-muted-foreground">
+                    Allowed Commands (comma-separated):
+                  </Label>
+                  <Input
+                    placeholder="/usr/bin/systemctl restart nginx, /usr/bin/docker ps"
+                    value={customCommands}
+                    onChange={(e) => setCustomCommands(e.target.value)}
+                    className="h-8 text-xs font-mono"
+                  />
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">
+              Sudo rules and privileged groups (sudo, docker, adm, …) can only be granted by an admin.
+            </p>
+          )}
 
           <DialogFooter className="pt-2">
             <Button

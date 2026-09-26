@@ -141,7 +141,7 @@ export function GrantAccessDialog({ serverId, open, onOpenChange, defaultKind = 
     },
     onError: (e: Error) => {
       if (e instanceof ApiError && e.code === "VAULT_LOCKED") {
-        toast.error("The vault is locked — unlock it (sidebar → Vault) and try again.");
+        toast.error("The vault is locked — unlock it with the Vault button on the Servers page, then try again.");
         return;
       }
       toast.error(e.message);
