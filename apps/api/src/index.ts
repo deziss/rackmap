@@ -13,6 +13,9 @@ import { syncEnvAlertChannels } from "./services/alert-channel.service.js";
 import { startSslDailyScan, stopSslDailyScan } from "./services/ssl-daily-scan.js";
 import { startHeartbeatScheduler, stopHeartbeatScheduler } from "./services/heartbeat.service.js";
 import { startRunbookBackground, stopRunbookBackground } from "./services/runbook-background.js";
+import { startPatchScheduler, stopPatchScheduler } from "./services/patch-scheduler.js";
+import { startDriftScheduler, stopDriftScheduler } from "./services/drift-scheduler.js";
+import { startAccessGrantSweeper, stopAccessGrantSweeper } from "./services/access-grant-sweeper.js";
 import { autoInitVaultFromEnv } from "./services/vault.service.js";
 import { autoInitLicenseFromEnv } from "./services/license.service.js";
 import type { Server } from "node:http";
@@ -45,6 +48,9 @@ async function main() {
     startSslDailyScan();
     startHeartbeatScheduler();
     startRunbookBackground();
+    startPatchScheduler();
+    startDriftScheduler();
+    startAccessGrantSweeper();
   });
 
   injectWebSocket(server as unknown as Server);
@@ -62,6 +68,9 @@ async function main() {
     stopAlertDispatcher();
     stopSslDailyScan();
     stopHeartbeatScheduler();
+    stopPatchScheduler();
+    stopDriftScheduler();
+    stopAccessGrantSweeper();
     await stopRunbookBackground({ markOwnFailed: true }).catch((err) => console.error("[shutdown] runbooks:", err));
     (server as unknown as Server).close();
     await prisma.$disconnect().catch(() => {});

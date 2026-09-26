@@ -26,6 +26,10 @@ const FREE_FEATURES: Record<LicenseFeature, boolean> = {
   unlimited_servers: false,
   remote_cron: false,
   runbooks: false,
+  service_manager: false,
+  patch_management: false,
+  drift_detection: false,
+  access_expiry: false,
 };
 
 const PRO_FEATURES: Record<LicenseFeature, boolean> = {
@@ -37,6 +41,10 @@ const PRO_FEATURES: Record<LicenseFeature, boolean> = {
   unlimited_servers: false,
   remote_cron: true,
   runbooks: true,
+  service_manager: true,
+  patch_management: true,
+  drift_detection: true,
+  access_expiry: true,
 };
 
 const ENTERPRISE_FEATURES: Record<LicenseFeature, boolean> = {
@@ -48,6 +56,10 @@ const ENTERPRISE_FEATURES: Record<LicenseFeature, boolean> = {
   unlimited_servers: true,
   remote_cron: true,
   runbooks: true,
+  service_manager: true,
+  patch_management: true,
+  drift_detection: true,
+  access_expiry: true,
 };
 
 /** Get the current license status and active entitlements */
@@ -366,6 +378,10 @@ export async function assertFeatureEnabled(feature: LicenseFeature): Promise<voi
       unlimited_servers: "Unlimited Servers Fleet Management",
       remote_cron: "Remote Cron Job Editor",
       runbooks: "Runbooks & Fleet Command Execution",
+      service_manager: "systemd Service Manager",
+      patch_management: "Fleet Patch Management",
+      drift_detection: "Configuration Drift Detection",
+      access_expiry: "Time-boxed Access Grants",
     };
     const humanName = featureNames[feature] || feature;
     throw new AppError(

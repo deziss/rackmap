@@ -38,6 +38,12 @@ export interface ConnectOptions {
   overridePassword?: string;
   preferredAuth?: "auto" | "key" | "password";
   keyId?: string;
+  /**
+   * Also connect to a soft-deleted server (default false: "not_found"). Only for
+   * taking access away again — revoking a time-boxed access grant must still
+   * work after the server was removed from the inventory.
+   */
+  allowDeleted?: boolean;
 }
 
 // Root commands go through execAsRoot / execPreferRoot in ./remote-exec.service.ts.
@@ -78,7 +84,7 @@ export async function connectToServer(
     where: { id: serverId },
     select: { id: true, hostname: true, ip: true, username: true, sshPort: true, passwordEnc: true, deletedAt: true },
   });
-  if (!server || server.deletedAt) throw new SshError("not_found", "Server not found");
+  if (!server || (server.deletedAt && !opts.allowDeleted)) throw new SshError("not_found", "Server not found");
 
   let password: string | undefined;
   let privateKey: string | Buffer | undefined;

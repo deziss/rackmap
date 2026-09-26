@@ -122,6 +122,10 @@ Change the published port by setting `PORT` in `.env`. Next steps: [add your fir
 - **Cron heartbeat monitoring** — one switch wraps a cron job so it checks in with RackMap after every run; a missed, late, or failing run raises an alert. Heartbeats also work for anything that can call a URL (systemd `OnFailure=`, Kubernetes CronJobs, scripts)
 - **Runbooks** — saved, parameterised scripts run across a set of servers chosen by tag, environment, location, or name, with a target preview, dry run, per-host live output, cancel/rerun, schedules, and a two-person approval step for root or sensitive runs
 - **Alert channels** — Slack, Microsoft Teams, Discord, PagerDuty, Telegram, email, and signed webhooks, each subscribing to the events it cares about, with retries, a delivery log, and a test button. PagerDuty incidents open and resolve automatically
+- **systemd services** — a Services tab per server lists units with their state and boot setting, shows details and the journal, and can start/stop/restart/reload/enable/disable them. Protected units (SSH, networking, D-Bus, Docker, systemd-*, targets, mounts) need an admin
+- **Patch management** — a nightly fleet scan (apt, dnf, yum, zypper) of pending and security updates, reboot-required hosts, and running vs installed kernel, with "scan now" and admin-only apply (security-only or all; never reboots)
+- **Drift detection** — nightly snapshots of accounts, privileged group members, sudoers rules, crontabs, listening ports, enabled units, and authorized SSH keys, compared with an accepted baseline; a new root key, sudoers rule, uid-0 account or privileged member is flagged critical
+- **Time-boxed access** — temporary OS accounts and SSH keys that RackMap locks, deletes, or removes at expiry, with the expiry also enforced on the host (`chage`, and `expiry-time` on OpenSSH 8.2+)
 
 </details>
 
@@ -502,6 +506,36 @@ POST   /api/v1/alert-channels/:id/test
 GET    /api/v1/alert-channels/:id/deliveries
 GET    /api/v1/alert-events
 
+# systemd (editor+; protected units need admin)
+GET    /api/v1/servers/:id/systemd/units[/:unit[/logs]]
+POST   /api/v1/servers/:id/systemd/units/:unit/action   {action: start|stop|restart|reload|enable|disable}
+
+# Patches
+GET    /api/v1/patches[/summary]                     Fleet report
+POST   /api/v1/patches/scan                          Queue scans (editor+)
+GET    /api/v1/servers/:id/patches
+POST   /api/v1/servers/:id/patches/scan              (editor+)
+POST   /api/v1/servers/:id/patches/apply             {mode: security|all} (admin)
+
+# Drift (editor+; accepting a baseline needs admin)
+GET    /api/v1/drift/events | /api/v1/drift/summary
+POST   /api/v1/drift/events/:id/acknowledge
+GET    /api/v1/servers/:id/drift
+POST   /api/v1/servers/:id/drift/{scan,baseline}
+
+# Access grants (editor+; root or privileged targets need admin)
+GET    /api/v1/access-grants[/:id]
+POST   /api/v1/access-grants/{users,keys}            Temporary account / SSH key
+POST   /api/v1/access-grants/:id/{extend,revoke}     Creator or admin
+
+# Status history (admin)
+GET    /api/v1/status-history/stats
+POST   /api/v1/status-history/prune                  {olderThanDays?, keepNewest?}
+
+# Prometheus
+GET    /api/v1/metrics                                Exporter (session or API key)
+GET    /api/v1/prometheus/sd                          http_sd_configs targets
+
 # Logs & ATOP forensics
 POST   /api/v1/servers/:id/logs                  Query journalctl/syslog by priority and unit
 GET    /api/v1/servers/:id/atop/dates            List historical ATOP activity dates
@@ -662,8 +696,16 @@ scrape_configs:
 
 Exports server/service/certificate counts by status, per-host up/down and probe
 latency, probe staleness (a rising `rackmap_server_last_probe_age_seconds` means
-the scheduler has stopped), GPU counts, and days remaining on every tracked
-certificate.
+the scheduler has stopped), GPU counts, days remaining on every tracked
+certificate, heartbeats, runbook runs, alert deliveries, pending/security
+updates, reboot-required hosts, open drift events, and active access grants.
+
+**Service discovery.** `GET /api/v1/prometheus/sd` returns `http_sd_configs`
+targets for every server (default port `PROMETHEUS_SD_DEFAULT_PORT`, 9100 for
+node_exporter) with `rackmap_*` labels, filterable by environment, location, tag,
+or status. Both endpoints accept a viewer-scoped API key as a Bearer token.
+`contrib/prometheus/prometheus.yml` has a ready scrape config and
+`contrib/grafana/rackmap-fleet.json` an importable dashboard.
 
 ---
 

@@ -45,6 +45,11 @@ import { SudoPermissionDialog } from "@/components/sudo-permission-dialog";
 import { PaginationBar } from "@/components/pagination-bar";
 import { CreateOsUserDialog, EditOsUserDialog, DeleteOsUserDialog } from "@/components/os-user-dialogs";
 import { CronTab } from "@/components/cron/cron-tab";
+import { SystemdTab } from "@/components/systemd/systemd-tab";
+import { ServerPatchCard } from "@/components/patches/server-patch-card";
+import { ServerDriftCard } from "@/components/drift/server-drift-card";
+import { ServerAccessCard } from "@/components/access-grants/server-access-card";
+import { GrantAccessDialog } from "@/components/access-grants/grant-dialog";
 import { applyCronMonitorChange } from "@/lib/heartbeats-api";
 import { ServerAlertChannelsCard } from "@/components/alerts/server-alert-channels-card";
 import { ServerHeartbeatsCard } from "@/components/heartbeats/server-heartbeats-card";
@@ -54,6 +59,7 @@ import { RequestAccessButton } from "@/components/request-access-button";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
+  TimerReset,
   Trash2,
   Plus,
   Cpu,
@@ -199,7 +205,8 @@ function ServerDetailPage() {
   const id = Number(serverId);
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"overview" | "metrics" | "atop" | "logs" | "users" | "cron" | "terminal">("overview");
+  const [grantRequest, setGrantRequest] = useState<{ kind: "os_user" | "ssh_key"; username?: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<"overview" | "metrics" | "atop" | "logs" | "users" | "cron" | "systemd" | "terminal">("overview");
   const [vaultModalOpen, setVaultModalOpen] = useState(false);
   const [selectedUserForSudo, setSelectedUserForSudo] = useState<OsUserInfo | null>(null);
   const [selectedAtopSnapshot, setSelectedAtopSnapshot] = useState<AtopIntervalSnapshot | null>(null);
@@ -604,6 +611,17 @@ function ServerDetailPage() {
           </Button>
         )}
 
+        {me?.can?.["server.systemd"] && (
+          <Button
+            variant={activeTab === "systemd" ? "secondary" : "ghost"}
+            size="sm"
+            className={cn("gap-1.5 text-xs h-8 font-medium", activeTab === "systemd" && "bg-secondary shadow-sm")}
+            onClick={() => setActiveTab("systemd")}
+          >
+            <Cpu className="h-3.5 w-3.5 text-violet-500" /> Services
+          </Button>
+        )}
+
         {sshEnabled && (canAdmin || viewerApproved("ssh")) && (
           <Button
             variant={activeTab === "terminal" ? "secondary" : "ghost"}
@@ -650,6 +668,8 @@ function ServerDetailPage() {
           onEditUser={(user) => setSelectedUserForEdit(user)}
           onDeleteUser={(user) => setSelectedUserForDelete(user)}
           onManageSudo={(user) => setSelectedUserForSudo(user)}
+          onTemporaryUser={() => setGrantRequest({ kind: "os_user" })}
+          onTemporaryKey={(user) => setGrantRequest({ kind: "ssh_key", username: user.username })}
         />
       )}
 
@@ -657,6 +677,9 @@ function ServerDetailPage() {
       {activeTab === "cron" && (
         <CronTab serverId={id} onMonitorRequest={(req) => applyCronMonitorChange(id, req)} />
       )}
+
+      {/* Tab: systemd units */}
+      {activeTab === "systemd" && <SystemdTab serverId={id} />}
 
       {/* Tab 6: Web Terminal */}
       {activeTab === "terminal" && (
@@ -713,6 +736,15 @@ function ServerDetailPage() {
         user={selectedUserForSudo}
         open={!!selectedUserForSudo}
         onOpenChange={(open) => !open && setSelectedUserForSudo(null)}
+      />
+
+      <GrantAccessDialog
+        key={grantRequest ? `${grantRequest.kind}:${grantRequest.username ?? ""}` : "closed"}
+        serverId={id}
+        open={grantRequest !== null}
+        onOpenChange={(open) => !open && setGrantRequest(null)}
+        defaultKind={grantRequest?.kind}
+        defaultUsername={grantRequest?.username}
       />
 
       <CreateOsUserDialog
@@ -1102,6 +1134,13 @@ function OverviewTab({
 
       {/* Heartbeat monitors linked to this server */}
       <ServerHeartbeatsCard serverId={server.id} />
+
+      {/* Pending package / security updates */}
+      <ServerPatchCard serverId={server.id} />
+
+      {/* Configuration drift and time-boxed access — editor+ only */}
+      {canManage && <ServerDriftCard serverId={server.id} />}
+      {canManage && <ServerAccessCard serverId={server.id} />}
     </div>
   );
 }
@@ -2920,6 +2959,8 @@ function OsUsersTab({
   onEditUser,
   onDeleteUser,
   onManageSudo,
+  onTemporaryUser,
+  onTemporaryKey,
 }: {
   serverId: number;
   currentSshUser?: string;
@@ -2927,6 +2968,9 @@ function OsUsersTab({
   onEditUser: (user: OsUserInfo) => void;
   onDeleteUser: (user: OsUserInfo) => void;
   onManageSudo: (user: OsUserInfo) => void;
+  /** Time-boxed account / key (access grants). */
+  onTemporaryUser: () => void;
+  onTemporaryKey: (user: OsUserInfo) => void;
 }) {
   const [filter, setFilter] = useState("");
   const [page, setPage] = useState(1);
@@ -2987,6 +3031,9 @@ function OsUsersTab({
               onClick={onAddUser}
             >
               <UserPlus className="h-3.5 w-3.5" /> + Add User
+            </Button>
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={onTemporaryUser}>
+              <TimerReset className="h-3.5 w-3.5 text-amber-500" /> Temporary User
             </Button>
             <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => refetch()}>
               <RefreshCw className="h-3.5 w-3.5" /> Refresh Users
@@ -3133,6 +3180,15 @@ function OsUsersTab({
                               title="Configure Sudo Permissions"
                             >
                               <ShieldCheck className="h-3 w-3 text-amber-500" /> Sudo
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-[11px] gap-1 px-2"
+                              onClick={() => onTemporaryKey(u)}
+                              title="Grant a temporary SSH key for this account"
+                            >
+                              <TimerReset className="h-3 w-3 text-amber-500" /> Key
                             </Button>
                             <Button
                               size="sm"

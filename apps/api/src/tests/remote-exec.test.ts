@@ -782,6 +782,25 @@ describe("OS-user service over the primitive", () => {
     expect(hasInnerSudo(script)).toBe(false);
   });
 
+  it("createOsUser without server:sudo checks requested groups against the host's sudoers", async () => {
+    const { createOsUser } = await import("../services/os-user.service.js");
+    const fake = withHost({ sudoProbeStatus: 0 });
+    await createOsUser(1, { username: "erin", groups: ["deploy", "users"] });
+    const script = fake.uploads[0]!.stdin;
+    // A custom group with its own `%deploy ALL=…` rule is root-equivalent even
+    // though it is not on the static list; the host-side loop catches it.
+    expect(script).toContain("for g in 'deploy' 'users'; do");
+    expect(script).toContain('awk -v g="%$g"');
+    expect(script.indexOf("for g in")).toBeLessThan(script.indexOf("useradd"));
+  });
+
+  it("createOsUser with server:sudo skips the group check", async () => {
+    const { createOsUser } = await import("../services/os-user.service.js");
+    const fake = withHost({ sudoProbeStatus: 0 });
+    await createOsUser(1, { username: "erin", groups: ["deploy"] }, {}, undefined, { allowPrivileged: true });
+    expect(fake.uploads[0]!.stdin).not.toContain("for g in");
+  });
+
   it("deleteOsUser without server:sudo refuses root-equivalent accounts on the host", async () => {
     const { deleteOsUser } = await import("../services/os-user.service.js");
     const fake = withHost({ sudoProbeStatus: 0 });

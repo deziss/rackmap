@@ -186,6 +186,16 @@ const EnvSchema = z.object({
   RUNBOOK_APPROVAL_TTL_HOURS: z.coerce.number().int().min(1).default(24),
   // Scheduled SSL certificate scan (croner expression, server local time).
   SSL_SCAN_CRON: z.string().default("0 6 * * *"),
+  // Fleet patch scan (package updates, security updates, reboot-required).
+  PATCH_SCAN_CRON: z.string().default("0 3 * * *"),
+  PATCH_SCAN_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(5),
+  // Configuration drift snapshots (users, sudoers, crontabs, ports, units, keys).
+  DRIFT_SCAN_CRON: z.string().default("30 3 * * *"),
+  DRIFT_SNAPSHOT_KEEP: z.coerce.number().int().min(2).default(30),
+  // How often expired access grants are revoked on their hosts.
+  ACCESS_EXPIRY_SWEEP_INTERVAL_MS: z.coerce.number().int().min(10_000).default(60_000),
+  // Default scrape port advertised by the Prometheus service-discovery endpoint (node_exporter).
+  PROMETHEUS_SD_DEFAULT_PORT: z.coerce.number().int().min(1).max(65535).default(9100),
 }).refine(
   (data) => {
     const raw = (data.APP_ENCRYPTION_PASSPHRASE || data.APP_ENCRYPTION_KEY || "").trim();
