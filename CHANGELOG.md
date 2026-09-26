@@ -7,8 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Automation for day-to-day operations work, fixes for OS-user management, and the pieces the PostgreSQL move
-left unfinished.
+## [1.0.0] — 2026-09-26
+
+RackMap 1.0 turns the inventory into an operations console: cron editing and monitoring, runbooks across the fleet,
+pluggable alerting, systemd control, patch management, drift detection and time-boxed access — on PostgreSQL 18,
+with the OS-user management bugs fixed and the security gaps found along the way closed.
+
+**Upgrading from 0.8.x? Read [MIGRATION.md](MIGRATION.md) first** — see *Breaking changes* below.
+
+### Breaking changes
+- **PostgreSQL 18 is the only database.** SQLite support is gone. Copy an existing SQLite database across with
+  `pnpm --filter @inv/api db:migrate:postgres` (see MIGRATION.md).
+- **Docker Compose runs PostgreSQL and requires `POSTGRES_PASSWORD`** (URL-safe). Set `POSTGRES_HOST_PORT` if 5432 is
+  already taken on the host.
+- **The API image runs as the non-root `node` user.** Volumes written by older root-run images must be re-owned
+  (`chown -R node:node /data`) or SSH keys under `/data` become unreadable.
+- **Editing and deleting OS users now needs the `remote_os_users` license feature**, like creating them.
+- **Checkout and license activation are admin-only**; completing a checkout requires `BILLING_MODE=simulated`, and
+  unverified license keys are refused in production.
+- **`POST /servers/:id/test-alert` needs `alertChannel:manage`** (admin) and only sends a test event.
+- **Rebuild the web image**: nginx changes fix an empty Servers page on 0.8.0 images and add long timeouts for host
+  actions.
 
 ### Added
 - **Cron job editor** on each server page (editor+). Lists user crontabs from the spool directory,
@@ -57,6 +76,11 @@ left unfinished.
   connection. The commands also ignored the server's SSH password, so they only worked with passwordless
   sudo.
 - **Deleting an OS user always failed with 400.** The query-string booleans were rejected.
+- When sudo rejects the stored server password (RackMap usually logs in with a key, so a stale password only shows up
+  on root actions), the OS-user dialogs ask for the sudo password once and retry; it is sent as `X-Sudo-Password`
+  for that request only and never stored.
+- The Servers page showed no servers on 0.8.0 images (nginx 301-redirected the list to a URL the API does not route),
+  and the web container always reported unhealthy.
 - **The committed PostgreSQL baseline migration was truncated.** It was missing two tables and every foreign
   key and index, and was not valid SQL, so fresh installs could not migrate. If `migrate deploy` already
   failed on it, see [MIGRATION.md](MIGRATION.md).
@@ -76,9 +100,21 @@ left unfinished.
 - Editors can no longer grant sudo or privileged group membership (sudo, wheel, docker, …), change or delete
   root-equivalent accounts, or set a password containing a newline (which injected extra `chpasswd` lines).
   Password changes are no longer written to the audit log.
+- Creating or editing an OS user without `server:sudo` is also refused, on the host, when a requested supplementary
+  group is root-equivalent there — a group with its own sudoers rule (`%deploy ALL=…`) or gid 0 — even if it is not on
+  the static privileged list.
 - Checkout and license activation are admin-only. Checkout completes only with `BILLING_MODE=simulated`,
   and in production any-key license activation is refused without a license server.
 - `POST /servers/:id/test-alert` requires `alertChannel:manage` and sends a test event only.
+
+### Dependencies
+- Resolved the open Dependabot alerts: vitest 4.1 (test runner config migrated), `deepmerge-ts` 8 via a pnpm override
+  (Prisma 6.19 pins 7.x), and a single zod 4.6 across packages; better-auth, nodemailer, hono, postcss, browserslist
+  and nanoid were already on patched versions.
+- Radix UI, TanStack Router, `@vitejs/plugin-react` and `jspdf-autotable` 5 (PDF export moved to the functional API).
+- GitHub Actions: `actions/checkout` v7, `docker/metadata-action` v6, `docker/setup-qemu-action` v4,
+  `docker/setup-buildx-action` v4, `docker/build-push-action` v7.
+- Docker images stay on Node.js 24 LTS; Dependabot now skips Node majors until the next even release reaches LTS.
 
 ### Changed
 - PostgreSQL 18 is the only supported database. Compose runs it by default and requires `POSTGRES_PASSWORD`.
@@ -365,7 +401,8 @@ First release prepared for public distribution. No breaking changes to the API o
 - CPU/RAM column handling and GPU field synchronization on update
 - Background polling hardened against invalid ports
 
-[Unreleased]: https://github.com/deziss/rackmap/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/deziss/rackmap/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/deziss/rackmap/compare/v0.8.0...v1.0.0
 [0.8.0]: https://github.com/deziss/rackmap/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/deziss/rackmap/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/deziss/rackmap/compare/v0.6.0...v0.6.1
