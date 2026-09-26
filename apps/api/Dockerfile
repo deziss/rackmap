@@ -1,4 +1,4 @@
-FROM node:24-alpine AS base
+FROM node:26-alpine AS base
 RUN corepack enable pnpm
 
 # ── deps ─────────────────────────────────────────────────────────────────────
@@ -33,7 +33,7 @@ RUN pnpm --filter @inv/api exec prisma generate
 # improves.
 
 # ── runtime ───────────────────────────────────────────────────────────────────
-FROM node:24-alpine AS runtime
+FROM node:26-alpine AS runtime
 # pg_dump for the scheduled backups (services/backup.service.ts). Its major
 # version must be >= the server's: pg_dump refuses to dump a newer server.
 # postgresql18-client is in Alpine 3.23+; node:24-alpine is currently 3.24.
