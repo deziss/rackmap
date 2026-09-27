@@ -23,7 +23,7 @@
     "@hono/zod-validator": "^0.9.1",
     "@inv/shared": "workspace:*",
     "@prisma/client": "^6.0.0",
-    "better-auth": "^1.6.22",
+    "better-auth": "^1.7.5",
     "croner": "^10.0.1",
     "date-fns": "^4.1.0",
     "dotenv": "^17.4.2",
