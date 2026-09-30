@@ -9,7 +9,27 @@ COPY packages/shared/package.json ./packages/shared/
 COPY apps/api/package.json ./apps/api/
 # --frozen-lockfile: the image must be reproducible. A build that silently
 # resolves different versions than the lockfile is not the thing that was tested.
-RUN pnpm install --frozen-lockfile
+#
+# The retry is not superstition: the most common first-build failure on a home
+# or corporate connection is a flaky registry, and pnpm aborts the whole install
+# on one EAI_AGAIN/ETIMEDOUT — minutes of downloading thrown away, reported by
+# docker as a build failure that reads like a broken app. The lower concurrency
+# is for the same reason: 16 parallel sockets is what pushes a weak link over.
+# If every attempt fails the build still fails, loudly — this only absorbs a
+# blip, it does not paper over a real outage.
+RUN for attempt in 1 2 3; do \
+      pnpm install --frozen-lockfile \
+        --fetch-retries 5 \
+        --fetch-retry-maxtimeout 120000 \
+        --network-concurrency 8 \
+      && exit 0; \
+      echo "pnpm install failed (attempt $attempt of 3) — retrying in 15s..." >&2; \
+      sleep 15; \
+    done; \
+    echo "pnpm install failed three times. If the log shows EAI_AGAIN or" >&2; \
+    echo "ETIMEDOUT the npm registry was unreachable — check your network or" >&2; \
+    echo "proxy and run 'make up' again." >&2; \
+    exit 1
 
 # ── build ─────────────────────────────────────────────────────────────────────
 FROM deps AS builder

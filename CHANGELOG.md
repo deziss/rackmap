@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-09-30
+
+### Fixed
+- **A flaky npm registry failed the whole first build, and the error looked like an application bug.** `pnpm install`
+  aborts the entire install on a single `EAI_AGAIN`/`ETIMEDOUT`, throwing away minutes of downloads. `make up` then
+  fell through to its log dump, which showed the *previous* container still crash-looping — so a network blip
+  presented as yesterday's symptom. Both Dockerfiles now retry the install three times with a lower network
+  concurrency, and `make up` builds as a separate step that reports a build failure as a build failure. A genuine
+  registry outage still fails the build, with the network named as the likely cause.
+
 ## [1.1.0] — 2026-09-30
 
 Setting RackMap up for the first time is now two commands. This release also fixes a database-URL bug that made a

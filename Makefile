@@ -33,9 +33,25 @@ up: $(ENV_FILE) ## Start RackMap (builds on first run), then print the login
 	@# --build is mandatory, not an optimisation: the api image now carries the
 	@# entrypoint that assembles DATABASE_URL. An image from before v1.1.0 run
 	@# against this compose file has no database URL at all.
-	@$(COMPOSE) up -d --build --wait --wait-timeout 420 \
-		|| { echo; echo "Startup failed. Recent api logs:"; echo; \
-		     $(COMPOSE) ps; echo; $(COMPOSE) logs --tail=40 api; exit 1; }
+	@# Build first, separately. Folding it into `up` meant a failed build fell
+	@# through to the log dump below, which then showed the PREVIOUS container's
+	@# stale crash — so a dead network looked like an application bug.
+	@$(COMPOSE) build \
+		|| { echo; \
+		     echo "The image build failed — nothing was started, and any container"; \
+		     echo "still running is from a previous attempt."; \
+		     echo; \
+		     echo "If the log above shows EAI_AGAIN, ETIMEDOUT or slow tarball"; \
+		     echo "downloads, the npm registry was unreachable. Check your network"; \
+		     echo "or proxy and run 'make up' again — nothing is broken."; \
+		     echo; \
+		     echo "  docker compose down   stop the old container meanwhile"; \
+		     exit 1; }
+	@$(COMPOSE) up -d --wait --wait-timeout 420 \
+		|| { echo; echo "The images built, but the stack did not come up."; echo; \
+		     $(COMPOSE) ps; echo; \
+		     echo "Recent api logs:"; echo; \
+		     $(COMPOSE) logs --tail=40 api; exit 1; }
 	@$(MAKE) --no-print-directory credentials
 
 start: ## Start without rebuilding
