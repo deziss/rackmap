@@ -93,3 +93,68 @@ jobs:
 
       - name: Run automated test suite
         run: pnpm test
+
+  setup:
+    name: First-run setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # A password full of the characters that used to corrupt DATABASE_URL.
+      # Until v1.1.0 docker-compose.yml spliced this into a connection URL by
+      # string interpolation, and "/" terminates the URL authority — so the port
+      # parsed as garbage and the API crash-looped with "invalid port number".
+      # `openssl rand -base64 32` emits "/" most of the time, so this was easy
+      # to hit. The URL is now assembled by apps/api/entrypoint.sh, which
+      # percent-encodes it.
+      - name: Resolve compose config with a hostile password
+        run: |
+          cat > /tmp/hostile.env <<'EOF'
+          POSTGRES_PASSWORD=Str0ng#Pa:ss@2026/x?y
+          BETTER_AUTH_SECRET=0123456789abcdef0123456789abcdef
+          EOF
+          docker compose --env-file /tmp/hostile.env config > /tmp/resolved.yml
+
+      # The whole point: compose must not build a URL any more. If this key
+      # comes back, the bug has come back with it.
+      - name: Assert compose no longer composes DATABASE_URL
+        run: |
+          python3 - <<'PY'
+          import sys, yaml
+          env = yaml.safe_load(open("/tmp/resolved.yml"))["services"]["api"]["environment"]
+          if "DATABASE_URL" in env:
+              sys.exit(f"docker-compose.yml is building DATABASE_URL again: {env['DATABASE_URL']!r}")
+          missing = [k for k in ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB",
+                                 "POSTGRES_HOST", "POSTGRES_PORT") if k not in env]
+          if missing:
+              sys.exit(f"api service is missing {missing}")
+          print("ok: parts passed through, no composed URL")
+          PY
+
+      - name: Assert the entrypoint encodes a hostile password
+        run: |
+          url=$(POSTGRES_PASSWORD='Str0ng#Pa:ss@2026/x?y' \
+                sh apps/api/entrypoint.sh sh -c 'printf "%s" "$DATABASE_URL"')
+          node -e '
+            const u = new URL(process.argv[1]);
+            if (u.port !== "5432") throw new Error(`port is ${u.port}: ${process.argv[1]}`);
+            if (decodeURIComponent(u.password) !== process.argv[2]) throw new Error("password did not round-trip");
+            console.log("ok:", u.protocol, u.hostname + ":" + u.port);
+          ' "$url" 'Str0ng#Pa:ss@2026/x?y'
+
+      - name: Generated secrets must be URL-safe
+        run: |
+          ./scripts/setup-env.sh
+          test "$(stat -c '%a' .env)" = 600 || { echo ".env is not mode 600"; exit 1; }
+          grep -E '^(POSTGRES_PASSWORD|BETTER_AUTH_SECRET|SEED_ADMIN_PASSWORD)=' .env \
+            | grep -E '[/?#]' && { echo "a generated secret contains a URL-breaking character"; exit 1; }
+          echo "ok: generated secrets are URL-safe"
+
+      - name: setup-env.sh must never overwrite an existing .env
+        run: |
+          before=$(sha256sum .env)
+          ./scripts/setup-env.sh
+          make -B setup
+          [ "$before" = "$(sha256sum .env)" ] || { echo ".env was overwritten"; exit 1; }
+          echo "ok: idempotent"

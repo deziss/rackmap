@@ -7,7 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-09-30
+
+Setting RackMap up for the first time is now two commands. This release also fixes a database-URL bug that made a
+first run fail, confusingly, for most people who chose their own PostgreSQL password.
+
+**Upgrading: you must rebuild the api image** (`git pull && make up`, or `docker compose up -d --build`). The image
+now carries an entrypoint that assembles `DATABASE_URL`; compose no longer sets it, so an older image started
+against this compose file would have no database URL at all.
+
+### Fixed
+- **A PostgreSQL password containing `/`, `?` or `#` corrupted `DATABASE_URL` and the API crash-looped** with
+  `invalid port number in database URL`. Compose built the connection string by string interpolation and cannot
+  percent-encode, so `/` terminated the URL authority early and the port parsed as garbage. `openssl rand -base64 32`
+  emits `/` in roughly 70% of draws, and `.env.example` recommended exactly that idiom for the other two secrets —
+  so this was easy to hit and very hard to diagnose. The URL is now assembled by `apps/api/entrypoint.sh`, which
+  encodes the password properly. Any password works.
+
+  It was hard to diagnose for two more reasons, both addressed: the database container stayed **healthy** while the
+  API failed (Postgres takes the same password as a plain value and never parses it as a URL), and the error arrived
+  under a `[baseline] FAILED … database in an unknown state` banner, because the baseline script is simply the first
+  thing in the start chain to open a connection.
+- **A blank `SEED_ADMIN_PASSWORD` created the first admin with an empty password in development.** `seed.ts` used
+  `?? "Admin123!"`, which does not catch the empty string that Compose actually sends.
+- Environment validation errors were unreadable: Node renders the zod tree to depth 2, so every reason printed as
+  the literal token `[Array]`. They are now a plain list naming each variable, what is wrong, and how to fix it.
+- `DATABASE_URL` had no format validation, so a malformed value surfaced much later as an opaque Prisma error.
+
+### Added
+- **`make up`** — generates `.env` with URL-safe secrets (mode 600, never overwriting an existing file), builds,
+  starts, waits for health, and prints the admin login. Plus `make logs`, `make down`, `make doctor`,
+  `make credentials`, `make reset`, and `make help`.
+- **`make doctor`** — host-side checks that a container cannot do: Docker reachable, compose config resolvable,
+  `.env` permissions, port conflicts, and `WEB_ORIGIN`/`PORT` disagreement (the cause of "sign in, bounce straight
+  back to the login page").
+- **A preflight check** that runs before migrations and turns the common first-run failures into specific
+  instructions — unreachable database, wrong password on an existing data directory, an api image older than the
+  compose file, a weak first admin password.
+- A CI job that resolves the compose config with a deliberately hostile password and fails if `DATABASE_URL` is ever
+  built in YAML again.
+
 ### Changed
+- **`.env.example` is 35 lines instead of 281**, and covers only a Docker first run. The full annotated reference
+  moved to `docs/CONFIGURATION.md`, and the bare-metal settings to `apps/api/.env.example` — the root `.env` is read
+  by Compose while the API reads `apps/api/.env`, and mixing both in one file was a trap.
+- Compose passes `POSTGRES_USER`/`PASSWORD`/`DB`/`HOST`/`PORT` to the api service instead of a pre-built
+  `DATABASE_URL`. `DOCKER_DATABASE_URL` still overrides it verbatim for an external database.
+- For one-off commands in the api container use `docker compose run --rm api …` rather than `exec`: `exec` does not
+  run the entrypoint and so has no `DATABASE_URL`.
+
 - **The sudo password prompt now covers every root action**, not just the OS-user dialogs: cron, systemd, patches,
   drift, access grants and automatic updates too. One app-wide prompt opens whenever sudo on a host needs or rejects
   a password and retries the action. The password can be remembered in memory for the session, or saved as the
@@ -408,7 +456,8 @@ First release prepared for public distribution. No breaking changes to the API o
 - CPU/RAM column handling and GPU field synchronization on update
 - Background polling hardened against invalid ports
 
-[Unreleased]: https://github.com/deziss/rackmap/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/deziss/rackmap/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/deziss/rackmap/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/deziss/rackmap/compare/v0.8.0...v1.0.0
 [0.8.0]: https://github.com/deziss/rackmap/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/deziss/rackmap/compare/v0.6.1...v0.7.0

@@ -9,11 +9,18 @@ services:
     environment:
       IN_DOCKER: "true"
       NODE_ENV: ${NODE_ENV:-production}
-      # Built from the postgres service's credentials below. Set
-      # DOCKER_DATABASE_URL to use an external PostgreSQL 18 instead.
-      # POSTGRES_PASSWORD goes into a URL here: use URL-safe characters
-      # (openssl rand -hex 24), or percent-encode it in DOCKER_DATABASE_URL.
-      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://${POSTGRES_USER:-rackmap}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-rackmap}}
+      # The connection string is assembled by apps/api/entrypoint.sh, not here.
+      # Compose cannot percent-encode, so splicing the password into a URL in
+      # YAML silently corrupted it for any password containing "/", "?" or "#"
+      # — and `openssl rand -base64 32` produces "/" most of the time.
+      # Pass the parts; the entrypoint encodes them.
+      POSTGRES_USER: ${POSTGRES_USER:-rackmap}
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env — run make up}"
+      POSTGRES_DB: ${POSTGRES_DB:-rackmap}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      # An external PostgreSQL 18 instead of the bundled one. Used verbatim.
+      DOCKER_DATABASE_URL: ${DOCKER_DATABASE_URL:-}
       PORT: "3001"
       BETTER_AUTH_URL: http://api:3001
       # nginx (the web service) terminates in front of the API, so forwarding
@@ -28,7 +35,7 @@ services:
       # production — the credentials are published in the repository.
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
       # Override remaining vars from .env file or env:
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env — run make up}"
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
       APP_ENCRYPTION_PASSPHRASE: ${APP_ENCRYPTION_PASSPHRASE:-}
       VAULT_PASSPHRASE: ${VAULT_PASSPHRASE:-}
@@ -41,7 +48,7 @@ services:
       NOTIFY_WEBHOOK_URL: ${NOTIFY_WEBHOOK_URL:-}
       NOTIFY_TELEGRAM_BOT_TOKEN: ${NOTIFY_TELEGRAM_BOT_TOKEN:-}
       NOTIFY_TELEGRAM_CHAT_ID: ${NOTIFY_TELEGRAM_CHAT_ID:-}
-      # Nightly pg_dump into the `backups` volume (see BACKUP_* in .env.example).
+      # Nightly pg_dump into the `backups` volume (see BACKUP_* in docs/CONFIGURATION.md).
       BACKUP_DIR: /backups
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@example.com}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
@@ -66,7 +73,7 @@ services:
       # it, and otherwise leaves it unset in the container so the default in
       # apps/api/src/env.ts applies. Do not write `${VAR:-}` for these: an
       # empty string fails validation for the numeric and URL variables and the
-      # API refuses to start. Every one is documented in .env.example.
+      # API refuses to start. Every one is documented in docs/CONFIGURATION.md.
       AUTH_RATE_LIMIT_ENABLED:
       AUTH_RATE_LIMIT_MAX:
       AUTH_RATE_LIMIT_WINDOW:
@@ -156,7 +163,7 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-rackmap}
       # Required — there is deliberately no default password.
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env — run make up}"
       POSTGRES_DB: ${POSTGRES_DB:-rackmap}
     volumes:
       # PostgreSQL 18 images keep PGDATA at /var/lib/postgresql/18/docker and

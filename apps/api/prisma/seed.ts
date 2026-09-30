@@ -6,6 +6,11 @@ config({ path: envPath });
 import { generateId } from "better-auth";
 import { prisma } from "../src/db.js";
 import { encryptSecret } from "../src/lib/crypto.js";
+import {
+  isWeakAdminPassword,
+  MIN_ADMIN_PASSWORD_LENGTH,
+  resolveAdminPassword,
+} from "../src/lib/admin-password.js";
 
 // Use better-auth's own scrypt hasher via resolved path (not in exports map).
 import { createRequire } from "node:module";
@@ -34,16 +39,24 @@ async function main() {
   const seedDemoData = process.env["SEED_DEMO_DATA"] === "true" || !isProduction;
 
   const email = process.env["SEED_ADMIN_EMAIL"] ?? "admin@inventory.local";
-  const password = process.env["SEED_ADMIN_PASSWORD"] ?? "Admin123!";
+  // `??` here was a real hole: docker-compose sends SEED_ADMIN_PASSWORD: "" when
+  // the operator never set one, and `??` only substitutes for undefined. In
+  // production the weak-password refusal below caught it; in development it
+  // sailed through and created the first admin account with an EMPTY password.
+  // resolveAdminPassword() treats blank as unset.
+  const password = resolveAdminPassword(process.env["SEED_ADMIN_PASSWORD"]);
 
   // Refuse to create the very first admin with a credential that is published
   // in this repository. Only reached on a genuinely empty database, so this
   // cannot lock an existing installation out.
-  const WEAK_DEFAULTS = new Set(["Admin123!", "changeme123", "Change-Me-Now-123!", "admin", "password"]);
-  if (isProduction && (WEAK_DEFAULTS.has(password) || password.length < 12)) {
+  //
+  // preflight.ts checks the same policy from the same module before migrations
+  // run, so the operator normally hears about it earlier — but this stays the
+  // authority: it is the only place that knows the database is really empty.
+  if (isProduction && isWeakAdminPassword(password)) {
     throw new Error(
       "Refusing to seed the initial admin with a weak or default password. " +
-        "Set SEED_ADMIN_PASSWORD to a strong value (12+ characters) and start again.",
+        `Set SEED_ADMIN_PASSWORD to a strong value (${MIN_ADMIN_PASSWORD_LENGTH}+ characters) and start again.`,
     );
   }
 

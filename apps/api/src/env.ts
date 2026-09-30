@@ -1,13 +1,32 @@
 import { configDotenv } from "dotenv";
 import { z } from "zod";
+import { databaseUrlProblem, formatEnvProblems } from "./lib/env-errors.js";
 
 // Load .env with override so shell's empty exported vars don't shadow file values
 configDotenv({ override: process.env.NODE_ENV !== "test" });
 
-const EnvSchema = z.object({
+export const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().default(3000),
-  DATABASE_URL: z.string().default("postgresql://postgres:postgres@localhost:5432/server_inventory?schema=public"),
+  // The localhost default is kept: a bare-metal `pnpm dev` against a local
+  // PostgreSQL relies on it, and removing it would break that path for everyone
+  // to catch one Docker misconfiguration. The FORMAT is now strict instead, so a
+  // URL that is present but malformed fails here — in a message naming
+  // DATABASE_URL — rather than three steps later inside ensure-baseline.mjs,
+  // under a banner about "a database in an unknown state" that sends people to
+  // MIGRATION.md for what is really a bad .env.
+  //
+  // The default still masks a MISSING value, and in Docker that has a specific,
+  // diagnosable shape: a container reaching for its own localhost never received
+  // a DATABASE_URL. preflight.ts catches exactly that and names the cause (an
+  // api image that predates this compose file).
+  DATABASE_URL: z
+    .string()
+    .default("postgresql://postgres:postgres@localhost:5432/server_inventory?schema=public")
+    .superRefine((value, ctx) => {
+      const problem = databaseUrlProblem(value);
+      if (problem) ctx.addIssue({ code: "custom", message: problem });
+    }),
   AUTH_RATE_LIMIT_ENABLED: z
     .string()
     .default("true")
@@ -209,7 +228,12 @@ const EnvSchema = z.object({
 
 const parsed = EnvSchema.safeParse(process.env);
 if (!parsed.success) {
-  console.error("Invalid environment:", z.treeifyError(parsed.error));
+  // Not treeifyError: it nests the messages at depth 3 and console.error stops
+  // at depth 2, so every reason printed as the literal string "[Array]" and the
+  // operator learned only which variable was wrong. See lib/env-errors.ts.
+  console.error("");
+  console.error(formatEnvProblems(parsed.error));
+  console.error("");
   process.exit(1);
 }
 

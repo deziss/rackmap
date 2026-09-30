@@ -1,12 +1,13 @@
 {
   "name": "@inv/api",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsup && tsup prisma/seed.ts --format esm --target node22 --out-dir dist --no-clean --sourcemap",
     "start": "node dist/index.js",
+    "preflight": "tsx src/preflight.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:generate": "prisma generate",

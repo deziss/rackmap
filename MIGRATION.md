@@ -1,9 +1,40 @@
 # RackMap — Upgrade & Migration Guide
 
+- **[Upgrading to 1.1.0](#upgrading-to-110)**: rebuilding the api image is mandatory.
 - **[Upgrading 0.8.x → 1.0.0](#upgrading-08x--100)**: breaking changes, the SQLite → PostgreSQL 18 data move, and new
   settings. Read this before pulling 1.0.
 - **[Moving RackMap to another server](#moving-rackmap-to-another-server-postgresql-18)**: a full server-to-server
   migration onto PostgreSQL 18, plus [backups & restore](#9-backups--restore).
+
+---
+
+## Upgrading to 1.1.0
+
+**Rebuild the api image. This is mandatory, not an optimisation.**
+
+```bash
+git pull
+make up          # always builds — equivalent to: docker compose up -d --build
+```
+
+`DATABASE_URL` is no longer assembled in `docker-compose.yml`. The api image now carries an entrypoint
+(`apps/api/entrypoint.sh`) that builds the URL from `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB`,
+percent-encoding each part — Compose cannot percent-encode, so a password containing `/`, `?` or `#` used to produce
+a corrupt URL and Prisma reported *"invalid port number in database URL"*. **An api image from before 1.1.0 run
+against the new compose file gets no `DATABASE_URL` at all and will not start.**
+
+No `.env` change is needed. `POSTGRES_PASSWORD` keeps its meaning, and an existing one keeps working whatever
+characters it contains.
+
+**One-off api commands must use `run`, not `exec`:**
+
+```bash
+docker compose run --rm api pnpm exec prisma migrate status   # correct
+docker compose exec api pnpm exec prisma migrate status       # no DATABASE_URL
+```
+
+`exec` starts a process inside the running container without going through the entrypoint, so it never sees the
+assembled URL. `docker compose exec postgres …` is unaffected — the postgres service has no such entrypoint.
 
 ---
 
@@ -335,8 +366,9 @@ Choose your deployment method:
 ### Option A: Docker Compose Deployment (Recommended)
 
 #### 1. Configure `.env` on Target Server
-Edit `/opt/server-inventory/.env`. Do not copy `.env.example` wholesale; its `PORT`, `NODE_ENV`, and `WEB_ORIGIN` are
-development values.
+Run `make setup` to generate `/opt/server-inventory/.env` with fresh secrets, then edit it. (`.env.example` is now
+the same file with the secrets left blank, so copying it is safe — the development values it used to carry moved to
+`apps/api/.env.example`.)
 ```ini
 # Database credentials — the API's DATABASE_URL is derived from these.
 # Required; URL-safe: openssl rand -hex 24

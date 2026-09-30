@@ -42,7 +42,7 @@ Nothing is installed on the machines you manage. That makes it a good fit for:
 | **No agents** | Plain SSH. Nothing to install, patch, or roll back on target hosts. |
 | **Credentials encrypted at rest** | AES-256-GCM, plus an optional envelope-encryption vault (PBKDF2 → KEK → DEK) whose passphrase is never stored in the database. |
 | **RBAC + approvals** | admin / editor / viewer, request-and-approve for SSH and password reveal, and a second admin to approve sensitive runbook runs. |
-| **Self-hosted, AGPL-3.0** | Your inventory stays on your infrastructure. One `docker compose up`, PostgreSQL 18 included. |
+| **Self-hosted, AGPL-3.0** | Your inventory stays on your infrastructure. One `make up`, PostgreSQL 18 included. |
 
 ---
 
@@ -73,11 +73,47 @@ The full list is in the [Changelog](CHANGELOG.md).
 **Requirements:** Docker and Docker Compose. Nothing else.
 
 ```bash
-# 1. Clone
 git clone https://github.com/deziss/rackmap.git
 cd rackmap
+make up
+```
 
-# 2. Create a Docker .env with generated secrets (never commit this file)
+`make up` generates a `.env` with fresh secrets (mode 600; it never touches an existing one), builds the images,
+starts everything, waits until it is healthy, and then prints the URL and the admin login. The first build takes a
+few minutes, and the first start also runs the database migrations.
+
+Open **http://localhost:8080** and sign in with the credentials it printed — `make credentials` shows them again.
+In production mode the first start refuses to create the admin with a published default password or one shorter
+than 12 characters.
+
+| Command | What it does |
+|---------|--------------|
+| `make up` | Start RackMap, building first. Use it after every `git pull` too |
+| `make start` | Start without rebuilding |
+| `make logs` | Follow the logs |
+| `make ps` | Container status |
+| `make down` | Stop. Your data is kept |
+| `make restart` | Stop and start again |
+| `make doctor` | Check the configuration without starting anything |
+| `make credentials` | Print the URL and the seeded admin login |
+| `make reset CONFIRM=yes` | **Destructive** — delete the database, `/data` and the backups, then start fresh |
+
+`make help` lists every target.
+
+<details>
+<summary><strong>No <code>make</code>?</strong> The scripts under <code>scripts/</code> do the real work, so they also run on their own.</summary>
+
+```bash
+./scripts/setup-env.sh              # generate .env with fresh secrets (mode 600)
+./scripts/doctor.sh                 # optional: check Docker, ports, and .env
+docker compose up -d --build --wait
+```
+
+Or write `.env` yourself. Any `POSTGRES_PASSWORD` works — it is percent-encoded into the connection URL for you.
+(Before 1.1.0 it was spliced in raw, so a `/` in the password broke startup; `openssl rand -base64 32` emits one
+most of the time. Hence the `-hex` below, and the fix.)
+
+```bash
 cat > .env <<EOF
 NODE_ENV=production
 PORT=8080
@@ -90,29 +126,25 @@ SEED_ADMIN_PASSWORD=$(openssl rand -hex 12)
 EOF
 chmod 600 .env
 
-# 3. Start (build on first run and after pulling updates)
 docker compose up -d --build
-
-# 4. Open http://localhost:8080
 ```
 
-Sign in as `admin@example.com` with the generated password (`grep SEED_ADMIN_PASSWORD .env`). In production mode
-the first start refuses to create the admin with a published default password or one shorter than 12 characters.
-The first start also runs the database migrations, so give it a minute.
+`--build` is not an optimisation: the api image carries the entrypoint that assembles `DATABASE_URL`.
 
-> **Don't copy `.env.example` wholesale for Docker.** Its `PORT`, `NODE_ENV`, and `WEB_ORIGIN` are local-development
-> values (API on 3000, Vite on 5173). Compose reads `.env` too, so copying them would publish the UI on port 3000, run
-> in development mode with demo accounts, and reject sign-ins from the wrong origin. Copy only the settings you need;
-> every one is documented in [Configuration](#%EF%B8%8F-configuration).
+</details>
 
-- **Port 5432 already in use?** The bundled PostgreSQL is published on `127.0.0.1:5432`. Add `POSTGRES_HOST_PORT=5433`
-  (or any free port) to `.env`.
+Everything below is an edit to `.env` followed by `make up`. `make doctor` checks the first two for you.
+
+- **Port 8080 or 5432 already in use?** The web UI is published on `8080` and the bundled PostgreSQL on
+  `127.0.0.1:5432`. Set `PORT=8081` and/or `POSTGRES_HOST_PORT=5433` (or any free port). If you change `PORT`,
+  change `WEB_ORIGIN` to match.
 - **Reaching RackMap by another name or port?** Set `WEB_ORIGIN` to that URL. If you use several, list them all in
   `TRUSTED_ORIGINS`.
 - **Using cron heartbeats?** Set `PUBLIC_BASE_URL` to an address your managed hosts can reach.
 
 Next steps: [add your first server](USER_GUIDE.md#adding-a-server),
 [enable the SSH terminal](#optional--ssh), or [set up alert channels](USER_GUIDE.md#alert-channels--notifications).
+Every setting is in [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 ---
 
@@ -122,7 +154,7 @@ Next steps: [add your first server](USER_GUIDE.md#adding-a-server),
 |----------|--------------|
 | **[User Guide](USER_GUIDE.md)** | Day-to-day usage: every page, every feature, roles, troubleshooting |
 | **[Upgrading & migration](MIGRATION.md)** | Upgrading 0.8.x → 1.0.0 (breaking changes), SQLite → PostgreSQL, moving to a new server, backups & restore |
-| **[Configuration](#%EF%B8%8F-configuration)** | Every environment variable, with defaults |
+| **[Configuration](docs/CONFIGURATION.md)** | Every environment variable: which file it goes in, defaults, and the long-form notes |
 | **[Encryption Guide](#-encryption--credential-vault)** | At-rest encryption, the credential vault, passphrase recovery |
 | **[Deployment](#-deployment)** | Docker Compose, external PostgreSQL, bare metal / PM2 / systemd, backups |
 | **[API Overview](#-api-overview)** | REST endpoints and required roles |
@@ -196,7 +228,7 @@ Next steps: [add your first server](USER_GUIDE.md#adding-a-server),
 - **Universal pagination** — rows-per-page selector (10 / 25 / 50 / 100), range display, and numbered pages across every table
 - **Saved views** — save and reuse server-list filters
 - **Customer portal** — a public dark-mode product showcase at `/portal` with an interactive mock console and pricing comparison
-- **Single-command deploy** — `docker compose up` for production, with PostgreSQL 18 and nightly `pg_dump` backups included
+- **Single-command deploy** — `make up` for production, with PostgreSQL 18 and nightly `pg_dump` backups included
 
 </details>
 
@@ -261,17 +293,22 @@ API opens SSH → uploads the script over stdin into a private temp file
 
 ## ⚙️ Configuration
 
-All configuration is environment-driven. The authoritative list, with comments, is [`.env.example`](.env.example);
-defaults below are the API's built-in defaults from `apps/api/src/env.ts`, with the Docker Compose value noted where
-Compose overrides it.
+All configuration is environment-driven. The tables below are a quick reference; the exhaustive version, with the
+long-form notes and migration paths, is [**docs/CONFIGURATION.md**](docs/CONFIGURATION.md). Defaults below are the
+API's built-in defaults from `apps/api/src/env.ts`, with the Docker Compose value noted where Compose overrides it.
 
-**Where the file goes.** Docker Compose reads `.env` in the repository root. A bare-metal or development API reads
-`apps/api/.env`, from its working directory. The systemd unit and PM2 config in this repository both point there.
+**Where the file goes.** Docker Compose reads `.env` in the repository root — start from
+[`.env.example`](.env.example), or let `make up` generate it. A bare-metal or development API reads `apps/api/.env`,
+from its working directory — start from [`apps/api/.env.example`](apps/api/.env.example). The systemd unit and PM2
+config in this repository both point there. The two files use the same variable names and are read by different
+programs, so a value in the wrong one is silently ignored.
 
 **Docker Compose passes through only the variables listed under `services.api.environment` in
 `docker-compose.yml`.** Every variable below is listed there except those marked **‡**, which only apply to bare-metal
 installs. To pass another variable through, add it to that section as a bare key (e.g. `MY_VAR:`) and set the value
-in `.env`.
+in `.env`. A bare key, not `${MY_VAR:-}`: an empty string fails validation for the numeric and URL variables and the
+API refuses to start. `DATABASE_URL` is the exception — in Docker the api entrypoint builds it, and any value in the
+root `.env` is ignored. See [docs/CONFIGURATION.md](docs/CONFIGURATION.md#2-how-docker-compose-passes-variables-through).
 
 ### Required
 
@@ -279,7 +316,7 @@ in `.env`.
 |----------|-------------|
 | `BETTER_AUTH_SECRET` | Session-signing secret, at least 16 characters. Generate with `openssl rand -hex 32` |
 | `APP_ENCRYPTION_KEY` *or* `APP_ENCRYPTION_PASSPHRASE` | Master key or passphrase for at-rest encryption (AES-256-GCM). Accepts a 32-byte base64 value (`openssl rand -base64 32`) or any passphrase of at least 8 characters |
-| `POSTGRES_PASSWORD` | **Docker Compose.** Password for the bundled PostgreSQL. Compose refuses to start without it. It is embedded in a URL, so use URL-safe characters (`openssl rand -hex 24`) |
+| `POSTGRES_PASSWORD` | **Docker Compose.** Password for the bundled PostgreSQL. Compose refuses to start without it. Any characters are fine — it is percent-encoded into the connection URL. `make setup` generates one with `openssl rand -hex 24` |
 | `DATABASE_URL` | **Bare metal.** PostgreSQL 18 connection URL. Percent-encode special characters in the password |
 | `SEED_ADMIN_PASSWORD` | Password for the first admin, created on an empty database only. With `NODE_ENV=production` it must be at least 12 characters and not a published default |
 
@@ -820,9 +857,11 @@ GET    /health/ready                  Database check (503 when unreachable) + ba
 
 ### Docker Compose (recommended)
 
-1. **Prepare the environment.** Create `.env` as in the [Quick Start](#-quick-start). `POSTGRES_PASSWORD` is required
-   and Compose refuses to start without it. It is embedded in a connection URL, so use URL-safe characters
-   (`openssl rand -hex 24` does). For a public deployment also set:
+1. **Prepare the environment.** `make setup` writes a `.env` with fresh secrets and stops there, so you can edit it
+   before the first start. (`make up` does the same thing and then starts, which is fine if the defaults suit you.)
+   `POSTGRES_PASSWORD` is required and Compose refuses to start without it. It is embedded in a connection URL, so
+   any characters are fine (it is percent-encoded for you); `make setup` uses `openssl rand -hex 24`. For a public deployment also
+   set:
 
    ```ini
    WEB_ORIGIN=https://rackmap.example.com
@@ -835,12 +874,16 @@ GET    /health/ready                  Database check (503 when unreachable) + ba
 3. **Start:**
 
    ```bash
-   docker compose up -d --build
-   docker compose ps          # postgres, api and web should become "healthy"
+   make doctor   # Docker, compose, .env mode, free ports, WEB_ORIGIN vs PORT
+   make up       # builds, starts, waits for health, prints the login
+   make ps       # postgres, api and web should be "healthy"
    ```
 
    The API container runs migrations (`prisma migrate deploy`) and the seed on every start. The seed only acts on an
    empty database.
+
+   For a one-off command in the api image, use `docker compose run --rm api …`, not `exec`: `exec` skips the
+   entrypoint, so the process has no `DATABASE_URL`.
 
 4. **Volumes.**
 
@@ -868,8 +911,13 @@ GET    /health/ready                  Database check (503 when unreachable) + ba
 **External PostgreSQL.** Set `DOCKER_DATABASE_URL=postgresql://rackmap:<password>@db.example.com:5432/rackmap`. The
 bundled `postgres` service still starts and still needs `POSTGRES_PASSWORD`, but the API does not use it.
 
-**Updating.** `git pull && docker compose up -d --build`. Always rebuild both images: the web image carries the Nginx
-configuration.
+**Updating.** `git pull && make up`.
+
+> **Rebuilding is mandatory for this release.** The api image now carries an entrypoint that assembles
+> `DATABASE_URL` from `POSTGRES_*`; the compose file no longer sets it. An older image run against the new compose
+> file gets no database URL at all and will not start. `make up` always passes `--build`; if you drive Compose
+> yourself, use `docker compose up -d --build`, not a restart. The web image also carries the Nginx configuration,
+> so rebuild both.
 
 ### Bare metal / VPS
 
@@ -881,8 +929,9 @@ backups.
 sudo -u postgres psql -c "CREATE ROLE rackmap WITH LOGIN PASSWORD '<strong-password>';"
 sudo -u postgres psql -c "CREATE DATABASE rackmap OWNER rackmap;"
 
-# 2. Configuration — the API reads .env from its working directory
-cp .env.example apps/api/.env
+# 2. Configuration — the API reads apps/api/.env from its working directory
+#    (the root .env is Docker Compose's, and is not read here)
+cp apps/api/.env.example apps/api/.env
 #    then set at least: NODE_ENV=production, DATABASE_URL, APP_ENCRYPTION_KEY, BETTER_AUTH_SECRET,
 #    SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD, WEB_ORIGIN, BETTER_AUTH_URL, PORT
 #    and optionally BACKUP_DIR=/backups, SERVE_STATIC_DIR=<repo>/apps/web/dist
@@ -1021,7 +1070,8 @@ or status. Both endpoints accept a viewer-scoped API key as a Bearer token.
 
 ```bash
 pnpm install
-cp .env.example apps/api/.env      # the API reads apps/api/.env; set PORT=3001 and DATABASE_URL
+cp apps/api/.env.example apps/api/.env   # already set for a local dev database on :5432 and PORT=3001
+#   then fill in BETTER_AUTH_SECRET and APP_ENCRYPTION_KEY (generators are in the file)
 pnpm --filter @inv/api db:generate
 pnpm --filter @inv/api db:deploy   # apply migrations to your dev database
 pnpm --filter @inv/api db:seed     # admin + demo accounts (development only)

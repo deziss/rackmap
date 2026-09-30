@@ -48,6 +48,7 @@ COPY --from=builder /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
+COPY --chmod=755 apps/api/entrypoint.sh ./apps/api/entrypoint.sh
 
 WORKDIR /app/apps/api
 
@@ -58,7 +59,9 @@ RUN mkdir -p /data /backups && chown -R node:node /app /data /backups
 VOLUME ["/data"]
 
 # No DATABASE_URL default: the database is PostgreSQL, and a baked-in URL could
-# only ever be wrong. docker-compose.yml derives it from POSTGRES_*.
+# only ever be wrong. entrypoint.sh builds it from POSTGRES_* at start, with the
+# password percent-encoded — see the comment there for why that cannot be done
+# in docker-compose.yml.
 ENV PORT=3001
 EXPOSE 3001
 
@@ -72,4 +75,5 @@ USER node
 # ensure-baseline adopts databases created by the old `db push` image into the
 # migration history first, so an upgrade does not abort on "table already
 # exists". Seeding is idempotent and self-limiting (see seed.ts).
-CMD ["sh", "-c", "node prisma/ensure-baseline.mjs && pnpm exec prisma migrate deploy && node dist/seed.js && node dist/index.js"]
+ENTRYPOINT ["./entrypoint.sh"]
+CMD ["sh", "-c", "node dist/preflight.js && node prisma/ensure-baseline.mjs && pnpm exec prisma migrate deploy && node dist/seed.js && node dist/index.js"]

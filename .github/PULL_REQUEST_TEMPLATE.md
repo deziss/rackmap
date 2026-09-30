@@ -23,7 +23,7 @@ Closes #
 - [ ] `pnpm build` passes
 - [ ] New or changed behaviour is covered by a test where practical
 - [ ] Database changes include a Prisma migration
-- [ ] New environment variables are documented in `.env.example` and the README
+- [ ] New environment variables are documented in `docs/CONFIGURATION.md` (and added to `.env.example` if a first run needs them)
 - [ ] User-facing changes are reflected in `USER_GUIDE.md`
 - [ ] `CHANGELOG.md` updated under `## [Unreleased]`
 - [ ] No secrets, real hostnames, internal IPs, or customer data in code, fixtures, tests, or screenshots

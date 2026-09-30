@@ -33,11 +33,13 @@ docker exec rackmap-dev-pg psql -U postgres \
   -c 'CREATE DATABASE server_inventory_shadow'
 
 # 2. API configuration — the API and the Prisma CLI read apps/api/.env
-cp .env.example apps/api/.env
-sed -i "s|^APP_ENCRYPTION_KEY=.*|APP_ENCRYPTION_KEY=$(openssl rand -base64 32)|" apps/api/.env
-sed -i "s|^BETTER_AUTH_SECRET=.*|BETTER_AUTH_SECRET=$(openssl rand -hex 32)|" apps/api/.env
-sed -i "s|^PORT=.*|PORT=3001|" apps/api/.env   # the Vite dev server proxies /api and /health to :3001
-# DATABASE_URL in .env.example already points at postgres:postgres@localhost:5432/server_inventory
+cp apps/api/.env.example apps/api/.env
+echo "BETTER_AUTH_SECRET=$(openssl rand -hex 32)" >> apps/api/.env
+echo "APP_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> apps/api/.env
+# These two fill in the blanks the example leaves: dotenv takes the last value for a key,
+# so the appended lines win. Everything else is already set for this layout — PORT=3001
+# (the Vite dev server proxies /api and /health there) and a DATABASE_URL pointing at
+# postgres:postgres@localhost:5432/server_inventory.
 
 # 3. Schema and seed data
 pnpm --filter @inv/api db:generate
@@ -47,8 +49,13 @@ pnpm --filter @inv/api db:seed    # the SEED_ADMIN_* admin, plus demo editor/vie
 pnpm dev   # API on :3001, web on http://localhost:5173
 ```
 
-The root `.env` is for Docker Compose only. Outside production the seed accepts the example admin password and always
-adds demo accounts, so never point a development `.env` at a real database.
+The root `.env` is Docker Compose's, and the API never reads it — see
+[docs/CONFIGURATION.md](docs/CONFIGURATION.md#1-which-file-goes-where). Outside production the seed accepts the
+example admin password and always adds demo accounts, so never point a development `apps/api/.env` at a real
+database.
+
+`apps/api/src/env.ts` loads the file with dotenv's `override` flag on, so a value in `apps/api/.env` beats the same
+variable exported in your shell. To point a run somewhere else, edit the file rather than exporting.
 
 ## Project layout
 
@@ -86,6 +93,8 @@ pnpm typecheck   # type-checks every workspace
 pnpm test        # needs TEST_DATABASE_URL (see above)
 pnpm e2e         # optional; Playwright against a running instance at http://localhost:3123 (playwright.config.ts)
 ```
+
+`make build`, `make typecheck`, and `make test` are thin wrappers around the first three, if you prefer them.
 
 ## Database changes and migrations
 
@@ -153,8 +162,9 @@ Common scopes: `api`, `web`, `shared`, `db`, `ssh`, `ssl`, `servers`, `services`
 - [ ] Database changes include a migration generated with `prisma migrate diff --output`, and the drift check passes
 - [ ] New permissions go in `packages/shared/src/permissions.ts`, and new license features in
       `packages/shared/src/schemas/license.ts`, with the README RBAC / licensing tables updated
-- [ ] New environment variables are added to `apps/api/src/env.ts`, `.env.example`, the README configuration table,
-      and, if Docker users need them, the api service's `environment` list in `docker-compose.yml`
+- [ ] New environment variables are added to `apps/api/src/env.ts`, `docs/CONFIGURATION.md`, the README configuration
+      table, and, if Docker users need them, the api service's `environment` list in `docker-compose.yml` (as a bare
+      key, not `${VAR:-}`). The two `.env.example` files stay minimal — add to them only a setting a first run needs
 - [ ] User-facing changes are reflected in `USER_GUIDE.md`; breaking changes in `MIGRATION.md`
 - [ ] No secrets, real hostnames, internal IP addresses, or customer data in code, fixtures, tests, or screenshots
       (use `example.com` and the documentation ranges `192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`)
