@@ -7,6 +7,26 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { CloudCog, Eye, EyeOff, Loader2, Sparkles } from "lucide-react";
 
+/**
+ * Better Auth answers a request whose Origin is not trusted with 403 "Invalid origin" — two
+ * words that read like a bug in the app rather than a line missing from .env. The operator is
+ * usually the one hitting it, on their own install, at a hostname or LAN IP they never told
+ * the server about, so name the origin and the variable that fixes it.
+ */
+function describeAuthError(
+  error: { message?: string; code?: string; status?: number },
+  fallback: string,
+): string {
+  if (error.code === "INVALID_ORIGIN" || error.status === 403) {
+    const origin = typeof window === "undefined" ? "this address" : window.location.origin;
+    return (
+      `The server does not accept sign-in from ${origin}. ` +
+      `Add it to TRUSTED_ORIGINS in .env (or set WEB_ORIGIN to it), then restart.`
+    );
+  }
+  return error.message ?? fallback;
+}
+
 export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
@@ -47,7 +67,7 @@ function LoginPage() {
     try {
       const { error } = await authClient.signIn.email({ email, password });
       if (error) {
-        toast.error(error.message ?? "Sign in failed");
+        toast.error(describeAuthError(error, "Sign in failed"));
         return;
       }
       await router.navigate({ to: "/" });
@@ -64,7 +84,7 @@ function LoginPage() {
     try {
       const { error } = await authClient.signUp.email({ name, email, password });
       if (error) {
-        toast.error(error.message ?? "Registration failed");
+        toast.error(describeAuthError(error, "Registration failed"));
         return;
       }
       toast.success("Account created — you have Viewer access. Contact admin to upgrade.");

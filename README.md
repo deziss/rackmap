@@ -139,7 +139,10 @@ Everything below is an edit to `.env` followed by `make up`. `make doctor` check
   `127.0.0.1:5432`. Set `PORT=8081` and/or `POSTGRES_HOST_PORT=5433` (or any free port). If you change `PORT`,
   change `WEB_ORIGIN` to match.
 - **Reaching RackMap by another name or port?** Set `WEB_ORIGIN` to that URL. If you use several, list them all in
-  `TRUSTED_ORIGINS`.
+  `TRUSTED_ORIGINS`. `localhost`, `127.0.0.1`, `[::1]` and `0.0.0.0` count as the same address and need no extra
+  configuration; a LAN IP or hostname does.
+- **Sign-in fails with "Invalid origin" (403)?** The address in your browser is not one the server trusts. Use the
+  URL in `WEB_ORIGIN`, or add the one you are using to `TRUSTED_ORIGINS`.
 - **Using cron heartbeats?** Set `PUBLIC_BASE_URL` to an address your managed hosts can reach.
 
 Next steps: [add your first server](USER_GUIDE.md#adding-a-server),
@@ -339,7 +342,7 @@ root `.env` is ignored. See [docs/CONFIGURATION.md](docs/CONFIGURATION.md#2-how-
 | `PORT` | `3000` (Compose: `8080`) | Bare metal: the port the API listens on. **In Compose it is the host port for the web UI.** The API listens on 3001 inside the network |
 | `NODE_ENV` | `development` (Compose: `production`) | `production` enables the seed's password check, skips demo data, and refuses unverified license keys |
 | `WEB_ORIGIN` | `http://localhost:5173` (Compose: `http://localhost:8080`) | URL the web app is reached at, used for CORS and auth cookies |
-| `TRUSTED_ORIGINS` | = `WEB_ORIGIN` | Comma-separated origins allowed to call the API. `*` reflects any origin and disables origin checks; use it only on a trusted private network |
+| `TRUSTED_ORIGINS` | = `WEB_ORIGIN` | Comma-separated origins allowed to call the API. Loopback entries also match their other spellings (`localhost` / `127.0.0.1` / `[::1]` / `0.0.0.0` on the same scheme and port); other hosts match exactly. `*` reflects any origin and disables origin checks; use it only on a trusted private network |
 | `BETTER_AUTH_URL` | `http://localhost:5173` (Compose: `http://api:3001`) | Base URL Better Auth uses. Compose sets it; bare metal usually matches `WEB_ORIGIN` |
 | `PUBLIC_BASE_URL` | — | Externally reachable URL of this instance, such as `https://rackmap.example.com`. Managed hosts use it for heartbeat check-ins, and alerts use it for links. Leave it unset rather than empty |
 | `SERVE_STATIC_DIR` ‡ | — | Bare metal: serve the built web app (`apps/web/dist`) from the API process |

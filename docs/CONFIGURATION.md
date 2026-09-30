@@ -225,6 +225,12 @@ than empty: an empty value fails validation.**
 # Leave unset and it defaults to WEB_ORIGIN. Set it explicitly when the web app is served from
 # a different host/port than WEB_ORIGIN, e.g.
 #   TRUSTED_ORIGINS=https://rackmap.example.com,https://rackmap.internal.example.com
+#
+# A loopback origin covers its aliases: WEB_ORIGIN=http://localhost:8080 also accepts
+# http://127.0.0.1:8080, http://[::1]:8080 and http://0.0.0.0:8080, because they are four
+# names for the same interface and a browser sends whichever one is in the address bar. This
+# expansion applies to loopback only — a LAN IP, a hostname or a domain still has to be listed
+# here in full, scheme and port included, or sign-in returns 403 "Invalid origin".
 # "*" is an opt-in wildcard that reflects ANY origin back with credentials enabled and disables
 # Better Auth origin validation (CSRF). Only for a trusted private network; it warns at boot.
 TRUSTED_ORIGINS=

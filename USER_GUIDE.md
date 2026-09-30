@@ -1009,8 +1009,13 @@ need a Pro license — see [Licensing](#licensing-subscriptions--quotas). The co
 > Rebuild both images: `docker compose up -d --build`.
 
 **Q: I'm getting CORS or "invalid origin" errors when signing in**
-> Set `WEB_ORIGIN` to the exact URL the web app is served at (e.g. `https://rackmap.example.com`), including scheme,
+> The address in your browser is not one the server trusts, so Better Auth answers the sign-in with 403. Set
+> `WEB_ORIGIN` to the exact URL the web app is served at (e.g. `https://rackmap.example.com`), including scheme,
 > hostname, and port. If you reach it under several names, list all of them in `TRUSTED_ORIGINS`.
+>
+> `localhost`, `127.0.0.1`, `[::1]` and `0.0.0.0` are treated as the same origin, so switching between them on your
+> own machine needs no configuration. Anything else — a LAN IP such as `http://192.168.1.10:8080`, a hostname, a
+> domain — must be listed.
 
 **Q: GPU shows "No GPU" but the server has one**
 > The metrics detection checks `nvidia-smi`, then AMD sysfs (`/sys/class/drm/card*/device/gpu_busy_percent`), then `rocm-smi`, then `xpu-smi`. If none are present, it reports no GPU. Ensure the GPU driver is installed on the target server and the tools are in PATH for the SSH user.

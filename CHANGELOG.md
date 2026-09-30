@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] — 2026-09-30
+
+### Fixed
+- **Sign-in returned 403 "Invalid origin" when the browser was at `127.0.0.1` or `0.0.0.0` instead of `localhost`.**
+  The four loopback spellings reach the same server but are four different origins to a browser, and only the one in
+  `WEB_ORIGIN` was trusted — so the page loaded, the password was right, and the only symptom was a status code in
+  the network tab. A loopback entry in `WEB_ORIGIN`/`TRUSTED_ORIGINS` now covers all four spellings on the same
+  scheme and port. Non-loopback origins are unchanged: a LAN IP, hostname or domain still has to be listed in
+  `TRUSTED_ORIGINS` in full.
+
+### Changed
+- The login page turns a rejected origin into an instruction — it names the address the browser is actually at and
+  the variable that accepts it — instead of showing Better Auth's two-word "Invalid origin".
+- `.env.example`, the README, `docs/CONFIGURATION.md` and the troubleshooting guide say which origins are covered
+  automatically and which must be listed.
+
 ## [1.1.1] — 2026-09-30
 
 ### Fixed

@@ -237,10 +237,52 @@ if (!parsed.success) {
   process.exit(1);
 }
 
+// The four spellings of "this machine". A browser sends whichever one is in the address
+// bar, and they are not interchangeable to an origin check even though they reach the same
+// server: http://localhost:8080 and http://127.0.0.1:8080 are different origins.
+const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "[::1]", "0.0.0.0"];
+
+/**
+ * Every loopback spelling of `origin`, or just `origin` when it is not loopback.
+ *
+ * Without this, a single-machine install works at the one hostname in WEB_ORIGIN and answers
+ * every other spelling with a bare 403 "Invalid origin" at sign-in — the app loads, the
+ * password is right, and the only clue is a status code in the network tab. Nothing is
+ * widened by it: all four names resolve to the loopback interface, so anyone who can open
+ * them is already on the host and could have used the configured name anyway. A non-loopback
+ * WEB_ORIGIN is left exactly as written — the operator's list stays the operator's list.
+ */
+export function withLoopbackAliases(origin: string): string[] {
+  let url: URL;
+  try {
+    url = new URL(origin);
+  } catch {
+    return [origin];
+  }
+  if (!LOOPBACK_HOSTS.includes(url.host.replace(/:\d+$/, ""))) return [origin];
+  const port = url.port ? `:${url.port}` : "";
+  return LOOPBACK_HOSTS.map((h) => `${url.protocol}//${h}${port}`);
+}
+
 // An unset TRUSTED_ORIGINS falls back to WEB_ORIGIN rather than "*", so a deployment that
 // never configured CORS is locked to its own web origin instead of reflecting every caller.
+// The fallback is expanded to the loopback aliases so a laptop install is not origin-locked
+// to whichever of localhost/127.0.0.1 the operator happened to type first. An explicit
+// TRUSTED_ORIGINS is expanded the same way per entry, so listing one loopback spelling in it
+// does not silently lock out the others either.
 const trustedOriginsRaw = (parsed.data.TRUSTED_ORIGINS ?? "").trim();
-const resolvedTrustedOrigins = trustedOriginsRaw.length > 0 ? trustedOriginsRaw : parsed.data.WEB_ORIGIN;
+const resolvedTrustedOrigins =
+  trustedOriginsRaw === "*"
+    ? "*"
+    : [
+        ...new Set(
+          (trustedOriginsRaw.length > 0 ? trustedOriginsRaw : parsed.data.WEB_ORIGIN)
+            .split(",")
+            .map((o) => o.trim())
+            .filter(Boolean)
+            .flatMap(withLoopbackAliases),
+        ),
+      ].join(",");
 
 if (resolvedTrustedOrigins === "*") {
   console.warn(
