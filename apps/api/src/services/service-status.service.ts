@@ -9,7 +9,7 @@ import { notifyFlip } from "./notify.service.js";
 export async function runServiceCheck(serviceId: number) {
   const service = await prisma.service.findUnique({
     where: { id: serviceId, deletedAt: null },
-    select: { id: true, serviceName: true, serverIp: true, port: true, healthUrl: true, downStreak: true, notifiedDown: true, lastStatus: true },
+    select: { id: true, serviceName: true, serverIp: true, port: true, domain: true, healthUrl: true, downStreak: true, notifiedDown: true, lastStatus: true },
   });
   if (!service) return null;
 
@@ -19,8 +19,10 @@ export async function runServiceCheck(serviceId: number) {
     errorCode: "NO_ENDPOINT",
   };
 
-  if (service.healthUrl) {
-    result = await httpProbe(service.healthUrl, env.PING_TIMEOUT_MS);
+  const probeUrl = service.healthUrl || (service.domain ? (service.domain.startsWith("http") ? service.domain : `https://${service.domain}`) : null);
+
+  if (probeUrl) {
+    result = await httpProbe(probeUrl, env.PING_TIMEOUT_MS);
   } else if (service.serverIp && service.port) {
     const portNum = parseInt(service.port, 10);
     if (!isNaN(portNum) && portNum > 0 && portNum <= 65535) {

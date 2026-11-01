@@ -137,7 +137,7 @@ export function ServerDriftCard({ serverId }: { serverId: number }) {
                     <CheckCircle2 className="h-3.5 w-3.5" /> Matches baseline
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 text-amber-400">
+                  <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium">
                     <AlertTriangle className="h-3.5 w-3.5" /> Differs from baseline
                   </span>
                 )}
@@ -145,7 +145,7 @@ export function ServerDriftCard({ serverId }: { serverId: number }) {
             </dl>
 
             {unavailable.length > 0 && (
-              <div className="rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/15 px-3 py-2 text-[11px] text-amber-900 dark:text-amber-200 font-medium">
                 <p className="font-medium">Not checked in the last scan:</p>
                 <ul className="mt-0.5 list-disc pl-4">
                   {unavailable.map(({ c, why }) => (

@@ -153,7 +153,7 @@ function RunDetailPage() {
       </div>
 
       {pendingApproval && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/15 px-4 py-3 text-sm text-amber-900 dark:text-amber-200 font-medium">
           Waiting for approval{r.approvalExpiresAt ? ` until ${new Date(r.approvalExpiresAt).toLocaleString()}` : ""}.
           {isRequester && canApprove && " You requested this run, so a different admin must approve it."}
         </div>

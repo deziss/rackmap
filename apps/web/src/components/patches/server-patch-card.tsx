@@ -94,7 +94,7 @@ export function ServerPatchCard({ serverId }: { serverId: number }) {
                   {patch.kernelUpdatePending && patch.kernelLatest && (
                     <>
                       {" "}
-                      → <span className="font-mono text-amber-400">{patch.kernelLatest}</span> installed, active after a reboot
+                      → <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold">{patch.kernelLatest}</span> installed, active after a reboot
                     </>
                   )}
                 </div>
@@ -103,11 +103,11 @@ export function ServerPatchCard({ serverId }: { serverId: number }) {
             </div>
             {patch.error && (
               <div
-                className={`flex items-start gap-2 rounded-md border p-2 text-[11px] ${
-                  patch.status === "ok" ? "border-amber-500/30 bg-amber-500/10 text-amber-300" : "border-destructive/30 bg-destructive/10 text-destructive"
+                className={`flex items-start gap-2 rounded-md border p-2 text-[11px] font-medium ${
+                  patch.status === "ok" ? "border-amber-500/40 bg-amber-500/15 text-amber-900 dark:text-amber-200" : "border-destructive/40 bg-destructive/10 text-destructive"
                 }`}
               >
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px text-amber-700 dark:text-amber-400" />
                 <span>
                   {patch.status === "error" ? "Last scan failed: " : ""}
                   {patch.error}

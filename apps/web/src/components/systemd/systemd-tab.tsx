@@ -397,8 +397,8 @@ export function SystemdTab({ serverId }: { serverId: number }) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           {pending && pendingProtected && (
-            <div className="flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-400">
-              <ShieldAlert className="h-3.5 w-3.5 mt-px shrink-0" />
+            <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/15 p-2.5 text-xs text-amber-900 dark:text-amber-200 font-medium">
+              <ShieldAlert className="h-4 w-4 mt-px shrink-0 text-amber-700 dark:text-amber-400" />
               <span>
                 <span className="font-mono">{pending.unit}</span> is a protected unit (SSH, networking, D-Bus, the container
                 runtime, a target or mount, or part of systemd itself).

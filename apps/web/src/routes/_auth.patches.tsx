@@ -196,7 +196,7 @@ function PatchesPage() {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="h-8 pl-8 pr-2 text-xs bg-zinc-900/60 border-zinc-700"
+              className="h-8 pl-8 pr-2 text-xs"
             />
           </div>
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">

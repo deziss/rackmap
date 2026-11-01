@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { CloudCog, Sparkles, ArrowRight } from "lucide-react";
+import { Sparkles, ArrowRight } from "lucide-react";
+import { RackMapLogo } from "@/components/rackmap-logo";
 
 interface PortalNavProps {
   isAuthenticated: boolean;
@@ -15,9 +16,7 @@ export function PortalNav({ isAuthenticated, userName, onOpenCheckout }: PortalN
         {/* Brand Logo */}
         <div className="flex items-center gap-3">
           <Link to="/portal" className="flex items-center gap-2.5 group cursor-pointer">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-500 text-white shadow-md shadow-blue-500/30 transition-transform duration-200 group-hover:scale-105">
-              <CloudCog className="h-4.5 w-4.5" />
-            </div>
+            <RackMapLogo size={32} />
             <span className="text-base font-extrabold tracking-tight text-white flex items-center gap-2">
               RackMap
               <span className="rounded-full bg-blue-500/15 border border-blue-500/30 px-2 py-0.5 text-[10px] font-mono font-semibold text-blue-400">

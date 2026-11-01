@@ -2768,21 +2768,21 @@ function LogsViewerTab({ serverId }: { serverId: number }) {
 
         {/* Total Log Size & Storage Stats */}
         {(data?.totalLogSize || data?.journalDiskUsage) && (
-          <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-zinc-900/60 border border-zinc-800 text-xs flex-wrap">
-            <div className="flex items-center gap-1.5 text-zinc-400">
-              <HardDrive className="h-3.5 w-3.5 text-amber-400" />
-              <span className="text-[11px] font-medium text-zinc-300">Disk Footprint:</span>
+          <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/50 border border-border text-xs flex-wrap">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <HardDrive className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+              <span className="text-[11px] font-medium text-foreground">Disk Footprint:</span>
             </div>
             {data.totalLogSize && (
-              <Badge variant="outline" className="bg-amber-500/10 text-amber-300 border-amber-500/30 text-[11px] font-mono gap-1">
+              <Badge variant="outline" className="bg-amber-500/15 text-amber-900 dark:text-amber-200 border-amber-500/30 text-[11px] font-mono gap-1">
                 <span>/var/log Total:</span>
-                <span className="font-semibold text-amber-200">{data.totalLogSize}</span>
+                <span className="font-bold text-amber-950 dark:text-amber-100">{data.totalLogSize}</span>
               </Badge>
             )}
             {data.journalDiskUsage && (
-              <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-500/30 text-[11px] font-mono gap-1">
+              <Badge variant="outline" className="bg-blue-500/15 text-blue-900 dark:text-blue-200 border-blue-500/30 text-[11px] font-mono gap-1">
                 <span>journalctl Usage:</span>
-                <span className="font-semibold text-blue-200">{data.journalDiskUsage}</span>
+                <span className="font-bold text-blue-950 dark:text-blue-100">{data.journalDiskUsage}</span>
               </Badge>
             )}
           </div>

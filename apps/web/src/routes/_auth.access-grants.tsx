@@ -100,7 +100,7 @@ function AccessGrantsPage() {
               placeholder="Search user, server, reason…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-8 pl-8 pr-2 text-xs bg-zinc-900/60 border-zinc-700"
+              className="h-8 pl-8 pr-2 text-xs"
             />
           </div>
           <Select value={kind} onValueChange={(v) => setKind(v as AccessGrantKind | "all")}>
@@ -136,8 +136,8 @@ function AccessGrantsPage() {
 
       <div className="flex-1 overflow-auto p-6 space-y-4">
         {failed.length > 0 && (
-          <div className="flex items-start gap-2 px-3.5 py-2.5 rounded-lg bg-red-500/10 border border-red-500/25 text-xs text-red-300">
-            <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
+          <div className="flex items-start gap-2 px-3.5 py-2.5 rounded-lg bg-red-500/15 border border-red-500/35 text-xs text-red-900 dark:text-red-200 font-medium">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-px text-red-700 dark:text-red-400" />
             <span>
               <strong>
                 {failed.length} grant{failed.length === 1 ? "" : "s"} could not be revoked.
@@ -148,7 +148,7 @@ function AccessGrantsPage() {
           </div>
         )}
         {error && (
-          <div className="px-3.5 py-2.5 rounded-lg bg-red-500/10 border border-red-500/25 text-xs text-red-300">{(error as Error).message}</div>
+          <div className="px-3.5 py-2.5 rounded-lg bg-red-500/15 border border-red-500/35 text-xs text-red-900 dark:text-red-200 font-medium">{(error as Error).message}</div>
         )}
         {liveCount > 0 && (
           <div className="text-xs text-muted-foreground">

@@ -124,7 +124,7 @@ function HeartbeatsPage() {
               placeholder="Search name or server…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-8 pl-8 pr-2 text-xs bg-zinc-900/60 border-zinc-700"
+              className="h-8 pl-8 pr-2 text-xs"
             />
           </div>
           <Select value={status} onValueChange={(v) => setStatus(v as HeartbeatStatus | "all")}>
@@ -150,10 +150,10 @@ function HeartbeatsPage() {
 
       <div className="flex-1 overflow-auto p-6 space-y-4">
         {data && !data.meta.pingUrlsAvailable && (
-          <div className="flex items-start gap-2 px-3.5 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-xs text-amber-300">
-            <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
+          <div className="flex items-start gap-2 px-3.5 py-2.5 rounded-lg bg-amber-500/15 border border-amber-500/35 text-xs text-amber-900 dark:text-amber-200 font-medium">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-px text-amber-700 dark:text-amber-400" />
             <span>
-              <strong>PUBLIC_BASE_URL is not set.</strong> RackMap cannot show ping URLs or monitor cron jobs until it knows its externally reachable address (for example <code className="font-mono">https://rackmap.example.com</code>).
+              <strong>PUBLIC_BASE_URL is not set.</strong> RackMap cannot show ping URLs or monitor cron jobs until it knows its externally reachable address (for example <code className="font-mono bg-amber-500/20 px-1 py-0.5 rounded text-amber-950 dark:text-amber-100">https://rackmap.example.com</code>).
             </span>
           </div>
         )}

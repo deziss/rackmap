@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-11-02
+
+### Added
+- **Modern Brand Identity and Custom Favicon:**
+  Introduced a dedicated geometric vector RackMap logo (`RackMapLogo`) featuring precision server-rack chassis detailing and active status telemetry accents. Integrated throughout the Web UI (Sidebar, Login authentication page, Customer Portal Navigation, and Portal Footer) with support for full-brand and compact icon-only displays. Added matching modern SVG favicon.
+
+### Changed
+- **Professional Layout & Dialog Reorganization:**
+  Re-engineered dialog and modal views across the entire platform (`service-form-dialog`, `alert-channel-dialog`, `grant-dialog`, `heartbeat-form-dialog`, `rotate-token-dialog`, `run-dialog`, `systemd-tab`, etc.) with responsive max-widths, structured field sections, standard padding, and pinned sticky action footers for optimal usability on all screen resolutions.
+- **Enhanced Dark Theme Contrast & Visual Accessibility:**
+  Overhauled typography contrast, muted labels, input placeholders, select dropdowns, border definitions, and state badges across all authenticated routes (Servers, Heartbeats, Runbooks, SSH, Patches, Drift Detection, Access Grants, and Security) to ensure crisp legibility and eliminate washed-out text in dark mode.
+
+### Fixed
+- **Loopback Probe Routing & Docker Bridge Communication:**
+  Fixed HTTP service status checks and SSL certificate probing when running inside Docker containers. Probes pointing to loopback addresses (`localhost`, `127.0.0.1`, `0.0.0.0`) are now automatically mapped to the host gateway (`host.docker.internal`) on Linux/container environments, preventing false-positive connection refused errors.
+- **Service Edit Dialog Interaction & Validation:**
+  Resolved issue where editing services failed or hung due to loopback probe timeouts and unhandled modal state in Dockerized environments.
+
 ## [1.1.2] — 2026-09-30
 
 ### Fixed
@@ -482,7 +500,10 @@ First release prepared for public distribution. No breaking changes to the API o
 - CPU/RAM column handling and GPU field synchronization on update
 - Background polling hardened against invalid ports
 
-[Unreleased]: https://github.com/deziss/rackmap/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/deziss/rackmap/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/deziss/rackmap/compare/v1.1.2...v1.2.0
+[1.1.2]: https://github.com/deziss/rackmap/compare/v1.1.1...v1.1.2
+[1.1.1]: https://github.com/deziss/rackmap/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/deziss/rackmap/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/deziss/rackmap/compare/v0.8.0...v1.0.0
 [0.8.0]: https://github.com/deziss/rackmap/compare/v0.7.0...v0.8.0

@@ -268,11 +268,11 @@ export function GrantAccessDialog({ serverId, open, onOpenChange, defaultKind = 
               {(privilegedGroups.length > 0 || sudoType !== "none") && (
                 <div
                   className={cn(
-                    "flex items-start gap-2 rounded-md border p-2.5 text-xs",
-                    perms.canSudo ? "border-amber-500/30 bg-amber-500/10 text-amber-300" : "border-red-500/30 bg-red-500/10 text-red-300",
+                    "flex items-start gap-2 rounded-md border p-2.5 text-xs font-medium",
+                    perms.canSudo ? "border-amber-500/40 bg-amber-500/15 text-amber-900 dark:text-amber-200" : "border-red-500/40 bg-red-500/15 text-red-900 dark:text-red-200",
                   )}
                 >
-                  <ShieldAlert className="mt-px h-4 w-4 shrink-0" />
+                  <ShieldAlert className={cn("mt-px h-4 w-4 shrink-0", perms.canSudo ? "text-amber-700 dark:text-amber-400" : "text-red-700 dark:text-red-400")} />
                   <span>
                     {perms.canSudo
                       ? `This account will be root-equivalent${privilegedGroups.length ? ` (${privilegedGroups.join(", ")})` : ""} until it expires.`
@@ -317,8 +317,8 @@ export function GrantAccessDialog({ serverId, open, onOpenChange, defaultKind = 
           )}
 
           {touched && errors.length > 0 && (
-            <div className="flex items-start gap-2 rounded-md border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-300">
-              <AlertTriangle className="mt-px h-4 w-4 shrink-0" />
+            <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/15 p-2.5 text-xs text-red-900 dark:text-red-200 font-medium">
+              <AlertTriangle className="mt-px h-4 w-4 shrink-0 text-red-700 dark:text-red-400" />
               <ul className="space-y-0.5">
                 {errors.map((e) => (
                   <li key={e}>{e}</li>

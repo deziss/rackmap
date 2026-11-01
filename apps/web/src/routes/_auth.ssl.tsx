@@ -123,7 +123,7 @@ function SslPage() {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="h-8 pl-8 pr-2 text-xs bg-zinc-900/60 border-zinc-700 font-mono"
+              className="h-8 pl-8 pr-2 text-xs font-mono"
             />
           </div>
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
@@ -184,10 +184,10 @@ function SslPage() {
         )}
 
         {/* Table */}
-        <div className="rounded-xl border border-white/10 bg-card/60 backdrop-blur-md shadow-xl overflow-hidden">
+        <div className="rounded-xl border border-border/80 bg-card/80 backdrop-blur-md shadow-xs overflow-x-auto relative">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/8 bg-white/3">
+              <tr className="border-b border-border/40 bg-muted/30">
                 {[
                   { key: "domain", label: "Domain" },
                   { key: "status", label: "Status" },
@@ -199,7 +199,7 @@ function SslPage() {
                 ].map(col => (
                   <th
                     key={col.key}
-                    className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-white/5 transition-colors"
+                    className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer hover:bg-muted/50 transition-colors whitespace-nowrap"
                     onClick={() => handleSort(col.key)}
                   >
                     <div className="flex items-center gap-1">
@@ -210,7 +210,7 @@ function SslPage() {
                     </div>
                   </th>
                 ))}
-                <th className="px-3 py-2.5 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
+                <th className="sticky right-0 z-10 bg-card px-3 py-2.5 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider border-l border-border/60 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)] select-none">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -268,7 +268,7 @@ function SslPage() {
                   <td className="px-3 py-3 text-xs text-muted-foreground">
                     {ssl.server ? `Server: ${ssl.server.name}` : ssl.service ? `Service: ${ssl.service.name}` : "—"}
                   </td>
-                  <td className="px-3 py-3 text-right">
+                  <td className="sticky right-0 z-10 bg-card px-3 py-3 text-right border-l border-border/60 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                     <div className="flex justify-end gap-1">
                       {isDeleted ? (
                         <Button size="icon" variant="ghost" className="h-7 w-7 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/20 transition-colors" onClick={() => { if(confirm("Restore domain?")) restoreMutation.mutate(ssl.id); }}>

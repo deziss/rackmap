@@ -50,6 +50,16 @@ function sslSeverity(daysRemaining: number): AlertSeverity {
   return "warning";
 }
 
+export function cleanDomain(domain: string): string {
+  let cleaned = domain.trim();
+  cleaned = cleaned.replace(/^https?:\/\//i, "");
+  cleaned = cleaned.split("/")[0].split("?")[0];
+  if (!cleaned.startsWith("*.") && cleaned.includes(":")) {
+    cleaned = cleaned.split(":")[0];
+  }
+  return cleaned;
+}
+
 function connectAndGetCert(
   host: string,
   sni: string,
@@ -64,6 +74,7 @@ function connectAndGetCert(
           host: targetHost,
           port: 443,
           servername: sni,
+          family: 4,
           rejectUnauthorized: false, // We want to parse expired certs too
           timeout: timeoutMs,
         },
@@ -110,7 +121,8 @@ function connectAndGetCert(
 export async function fetchSslCert(
   domain: string
 ): Promise<{ validFrom: Date; validTo: Date; issuer: string; daysRemaining: number } | null> {
-  const trimmed = domain.trim();
+  const trimmed = cleanDomain(domain);
+  if (!trimmed) return null;
 
   // If not a wildcard domain, probe directly
   if (!trimmed.startsWith("*.")) {
@@ -206,10 +218,16 @@ export async function scanAllDomains(triggerEmail: boolean = false) {
   // Extract unique domains
   const autoDomains = new Map<string, { serverId?: number; serviceId?: number }>();
   for (const s of servers) {
-    if (s.domain) autoDomains.set(s.domain, { serverId: s.id });
+    if (s.domain) {
+      const cd = cleanDomain(s.domain);
+      if (cd) autoDomains.set(cd, { serverId: s.id });
+    }
   }
   for (const s of services) {
-    if (s.domain) autoDomains.set(s.domain, { serviceId: s.id });
+    if (s.domain) {
+      const cd = cleanDomain(s.domain);
+      if (cd) autoDomains.set(cd, { serviceId: s.id });
+    }
   }
 
   // Ensure all auto-discovered domains exist in SslStatus

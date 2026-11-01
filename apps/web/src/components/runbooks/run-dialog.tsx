@@ -242,7 +242,7 @@ export function RunDialog({ runbook, open, onOpenChange }: { runbook: RunbookDto
               </div>
             )}
             {targets.some((t) => t.warnings.includes("vault_required")) && (
-              <p className="text-xs text-amber-400">
+              <p className="text-xs text-amber-800 dark:text-amber-300 font-medium">
                 Runs execute in the background, so only a global vault unlock (or VAULT_PASSPHRASE) counts. Hosts marked “vault locked” will fail with
                 VAULT_LOCKED.
               </p>
@@ -251,8 +251,8 @@ export function RunDialog({ runbook, open, onOpenChange }: { runbook: RunbookDto
           </div>
 
           {waitsForApproval && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/15 px-3.5 py-2.5 text-xs text-amber-900 dark:text-amber-200 font-medium">
+              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
               This run will wait until a different admin approves it
               {runbook.requireApproval ? " (the runbook requires approval)." : " (it runs as root)."}
             </div>

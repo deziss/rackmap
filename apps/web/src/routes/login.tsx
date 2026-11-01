@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { CloudCog, Eye, EyeOff, Loader2, Sparkles } from "lucide-react";
+import { Eye, EyeOff, Loader2, Sparkles } from "lucide-react";
+import { RackMapLogo } from "@/components/rackmap-logo";
 
 /**
  * Better Auth answers a request whose Origin is not trusted with 403 "Invalid origin" — two
@@ -115,9 +116,7 @@ function LoginPage() {
 
         {/* Logo */}
         <div className="flex flex-col items-center mb-8 gap-3">
-          <div className="flex items-center justify-center rounded-2xl bg-primary/90 w-14 h-14 text-primary-foreground shadow-2xl shadow-primary/30">
-            <CloudCog className="h-7 w-7" />
-          </div>
+          <RackMapLogo size={60} />
           <div className="text-center">
             <h1 className="text-2xl font-bold tracking-tight text-foreground">RackMap</h1>
             <p className="text-sm text-muted-foreground mt-1">

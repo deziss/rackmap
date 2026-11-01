@@ -142,7 +142,7 @@ function SshPage() {
                   openTab(filteredServers[0].id, filteredServers[0].hostname);
                 }
               }}
-              className="h-8 pl-8 pr-2 text-xs bg-zinc-900 border-zinc-700 placeholder:text-zinc-500 font-mono"
+              className="h-8 pl-8 pr-2 text-xs font-mono"
             />
           </div>
 

@@ -28,16 +28,26 @@ function SecurityPage() {
   const { data: session } = authClient.useSession();
 
   return (
-    <div className="space-y-6 max-w-xl">
+    <div className="space-y-6 max-w-6xl w-full">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Security</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">Manage your profile, password, and authentication settings</p>
+        <h1 className="text-3xl font-bold tracking-tight">Security & Access</h1>
+        <p className="text-muted-foreground text-sm mt-0.5">Manage your profile identity, access credentials, and master server encryption vault</p>
       </div>
-      <ProfileSection user={session?.user ?? null} />
-      <ChangePasswordSection />
-      <TwoFactorSection enabled={!!(session?.user as { twoFactorEnabled?: boolean })?.twoFactorEnabled} />
-      <VaultManagementSection />
-      <ApiKeysSection />
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column: Identity & Access Controls (5 cols) */}
+        <div className="lg:col-span-5 space-y-6">
+          <ProfileSection user={session?.user ?? null} />
+          <ChangePasswordSection />
+          <TwoFactorSection enabled={!!(session?.user as { twoFactorEnabled?: boolean })?.twoFactorEnabled} />
+        </div>
+
+        {/* Right Column: Server Vault & Developer API Keys (7 cols) */}
+        <div className="lg:col-span-7 space-y-6">
+          <VaultManagementSection />
+          <ApiKeysSection />
+        </div>
+      </div>
     </div>
   );
 }
@@ -61,19 +71,19 @@ function ProfileSection({ user }: { user: { name?: string; email?: string } | nu
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-card/60 backdrop-blur-md p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <User className="h-4 w-4" />
-        <span className="font-medium text-sm">Profile</span>
+    <div className="rounded-xl border border-border/80 bg-card/80 backdrop-blur-md shadow-xs p-5 space-y-4">
+      <div className="flex items-center gap-2 pb-3 border-b border-border/40">
+        <User className="h-4 w-4 text-primary" />
+        <span className="font-semibold text-sm">Profile Details</span>
       </div>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Email (contact admin to change)</Label>
-          <Input value={user?.email ?? ""} disabled className="h-8 text-sm bg-muted/30" />
+          <Input value={user?.email ?? ""} disabled className="h-9 text-sm bg-muted/40" />
         </div>
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Display Name</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} className="h-8 text-sm" required />
+          <Input value={name} onChange={(e) => setName(e.target.value)} className="h-9 text-sm" required />
         </div>
         <Button size="sm" type="submit" disabled={loading}>{loading ? "Saving…" : "Update Profile"}</Button>
       </form>
@@ -103,10 +113,10 @@ function ChangePasswordSection() {
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-card/60 backdrop-blur-md p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <Key className="h-4 w-4" />
-        <span className="font-medium text-sm">Change Password</span>
+    <div className="rounded-xl border border-border/80 bg-card/80 backdrop-blur-md shadow-xs p-5 space-y-4">
+      <div className="flex items-center gap-2 pb-3 border-b border-border/40">
+        <Key className="h-4 w-4 text-primary" />
+        <span className="font-semibold text-sm">Change Password</span>
       </div>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="space-y-1">
@@ -115,7 +125,7 @@ function ChangePasswordSection() {
             type="password"
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
-            className="h-8 text-sm"
+            className="h-9 text-sm"
             autoComplete="current-password"
             required
           />
@@ -126,7 +136,7 @@ function ChangePasswordSection() {
             type="password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            className="h-8 text-sm"
+            className="h-9 text-sm"
             autoComplete="new-password"
             minLength={8}
             required
@@ -191,10 +201,10 @@ function TwoFactorSection({ enabled }: { enabled: boolean }) {
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-card/60 backdrop-blur-md p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <ShieldCheck className="h-4 w-4" />
-        <span className="font-medium text-sm">Two-Factor Authentication</span>
+    <div className="rounded-xl border border-border/80 bg-card/80 backdrop-blur-md shadow-xs p-5 space-y-4">
+      <div className="flex items-center gap-2 pb-3 border-b border-border/40">
+        <ShieldCheck className="h-4 w-4 text-primary" />
+        <span className="font-semibold text-sm">Two-Factor Authentication</span>
         <Badge variant={enabled ? "default" : "secondary"} className="text-xs ml-auto">
           {enabled ? "Enabled" : "Disabled"}
         </Badge>
@@ -319,13 +329,13 @@ function ApiKeysSection() {
   }
 
   return (
-    <div className="rounded-md border p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <Key className="h-4 w-4" />
-        <span className="font-medium text-sm">API Keys</span>
+    <div className="rounded-xl border border-border/80 bg-card/80 backdrop-blur-md shadow-xs p-5 space-y-4">
+      <div className="flex items-center gap-2 pb-3 border-b border-border/40">
+        <Key className="h-4 w-4 text-primary" />
+        <span className="font-semibold text-sm">API Keys</span>
         {!loaded && (
           <Button size="sm" variant="outline" className="ml-auto" onClick={loadKeys} disabled={loading}>
-            {loading ? "Loading…" : "Load"}
+            {loading ? "Loading…" : "Load Keys"}
           </Button>
         )}
       </div>
@@ -396,10 +406,10 @@ function VaultManagementSection() {
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-card/60 backdrop-blur-md p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <KeyRound className="h-4 w-4" />
-        <span className="font-medium text-sm">Master Credential Vault</span>
+    <div className="rounded-xl border border-border/80 bg-card/80 backdrop-blur-md shadow-xs p-5 space-y-4">
+      <div className="flex items-center gap-2 pb-3 border-b border-border/40">
+        <KeyRound className="h-4 w-4 text-primary" />
+        <span className="font-semibold text-sm">Master Credential Vault</span>
         <div className="ml-auto flex items-center gap-2">
           {isLoading ? (
             <Badge variant="outline" className="text-xs">Checking…</Badge>

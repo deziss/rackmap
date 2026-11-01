@@ -16,7 +16,7 @@ complete audit trail — **without installing a single agent on a target host.**
 [![PostgreSQL 18](https://img.shields.io/badge/PostgreSQL-18-336791?logo=postgresql&logoColor=white)](#-deployment)
 [![Self-hosted](https://img.shields.io/badge/deploy-self--hosted-0db7ed?logo=docker&logoColor=white)](#-quick-start)
 
-[Quick Start](#-quick-start) · [What's New](#-whats-new-in-10) · [Features](#-features) · [User Guide](USER_GUIDE.md) · [Configuration](#%EF%B8%8F-configuration) · [Deployment](#-deployment) · [API](#-api-overview) · [Upgrading](MIGRATION.md) · [Contributing](CONTRIBUTING.md)
+[Quick Start](#-quick-start) · [What's New](#-whats-new-in-12) · [Features](#-features) · [User Guide](USER_GUIDE.md) · [Configuration](#%EF%B8%8F-configuration) · [Deployment](#-deployment) · [API](#-api-overview) · [Upgrading](MIGRATION.md) · [Contributing](CONTRIBUTING.md)
 
 ![RackMap dashboard — fleet overview with live status, environment split, project allocation, and GPU inventory](docs/screenshots/dashboard.png)
 
@@ -43,6 +43,19 @@ Nothing is installed on the machines you manage. That makes it a good fit for:
 | **Credentials encrypted at rest** | AES-256-GCM, plus an optional envelope-encryption vault (PBKDF2 → KEK → DEK) whose passphrase is never stored in the database. |
 | **RBAC + approvals** | admin / editor / viewer, request-and-approve for SSH and password reveal, and a second admin to approve sensitive runbook runs. |
 | **Self-hosted, AGPL-3.0** | Your inventory stays on your infrastructure. One `make up`, PostgreSQL 18 included. |
+
+---
+
+## 🆕 What's new in 1.2
+
+RackMap 1.2 introduces a refreshed brand identity, enhanced UI responsiveness, and hardened loopback probe routing.
+
+- **Brand identity & logo:** New custom vector geometric RackMap logo with rack chassis detailing and telemetry accents, integrated into the sidebar, authentication, customer portal, and modern SVG favicon.
+- **Layout & dialog overhaul:** Redesigned dialog views across service configuration, alert channels, access grants, runbooks, and heartbeats with responsive scaling and pinned actions.
+- **High-contrast dark mode:** Hardened contrast across all typography, form inputs, placeholder text, and status badges for legibility in dark mode.
+- **Docker bridge loopback probe routing:** Automatic mapping of loopback addresses (`localhost`, `127.0.0.1`) to the Docker host gateway (`host.docker.internal`) during HTTP service and SSL certificate checks, preventing false-positive probe failures.
+
+The full list is in the [Changelog](CHANGELOG.md).
 
 ---
 

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { RackMapLogo } from "@/components/rackmap-logo";
 import {
   Server,
   LogOut,
@@ -17,7 +18,6 @@ import {
   Clock,
   Shield,
   LayoutDashboard,
-  CloudCog,
   Terminal,
   ChevronLeft,
   ChevronRight,
@@ -174,11 +174,9 @@ export function Sidebar({ user }: SidebarProps) {
     >
       {/* Logo */}
       <div className="flex h-14 items-center gap-2.5 border-b border-sidebar-border px-3 overflow-hidden">
-        <div className="flex items-center justify-center rounded-lg bg-primary/90 w-8 h-8 text-primary-foreground shadow-lg shadow-primary/30 shrink-0">
-          <CloudCog className="h-4.5 w-4.5" />
-        </div>
+        <RackMapLogo size={32} />
         {!collapsed && (
-          <span className="text-sm font-semibold tracking-tight bg-linear-to-r from-foreground to-muted-foreground bg-clip-text text-transparent whitespace-nowrap overflow-hidden">
+          <span className="text-sm font-bold tracking-tight bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent whitespace-nowrap overflow-hidden">
             RackMap
           </span>
         )}

@@ -207,8 +207,8 @@ export function HeartbeatFormDialog({ open, onOpenChange, heartbeat, defaultServ
             </div>
           ) : (
             <div className="space-y-2">
-              <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-300">
-                <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
+              <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/15 p-2.5 text-xs text-amber-900 dark:text-amber-200 font-medium">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-px text-amber-700 dark:text-amber-400" />
                 <span>{created.warning ?? "PUBLIC_BASE_URL is not set, so no ping URL can be shown."}</span>
               </div>
               <Label className="text-xs">Token</Label>

@@ -58,10 +58,10 @@ export function CronMonitorFields({ entry, timezone, value, onChange, disabled }
       </label>
 
       {!urlsAvailable && !monitored && (
-        <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-300">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
+        <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/15 p-2.5 text-xs text-amber-900 dark:text-amber-200 font-medium">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-px text-amber-700 dark:text-amber-400" />
           <span>
-            This instance has no <code className="font-mono">PUBLIC_BASE_URL</code>, so jobs have no URL to ping. Set it to RackMap's externally reachable address to enable monitoring.
+            This instance has no <code className="font-mono bg-background/50 px-1 py-0.5 rounded">PUBLIC_BASE_URL</code>, so jobs have no URL to ping. Set it to RackMap's externally reachable address to enable monitoring.
           </span>
         </div>
       )}

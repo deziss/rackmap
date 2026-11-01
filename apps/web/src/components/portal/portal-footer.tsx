@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { CloudCog, Sparkles, ArrowRight } from "lucide-react";
+import { Sparkles, ArrowRight } from "lucide-react";
+import { RackMapLogo } from "@/components/rackmap-logo";
 
 interface PortalFooterProps {
   onOpenCheckout: (plan: "free" | "pro" | "enterprise") => void;
@@ -47,9 +48,7 @@ export function PortalFooter({ onOpenCheckout }: PortalFooterProps) {
       <footer className="border-t border-white/10 bg-slate-950 py-14 text-xs text-slate-400">
         <div className="container mx-auto max-w-6xl px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md shadow-blue-600/30">
-              <CloudCog className="h-4.5 w-4.5" />
-            </div>
+            <RackMapLogo size={32} />
             <div>
               <span className="font-bold text-white text-sm">RackMap</span>
               <p className="text-[11px] text-slate-400">Agentless Linux Server Inventory &amp; Encrypted Credential Vault</p>

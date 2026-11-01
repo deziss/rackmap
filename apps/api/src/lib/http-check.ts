@@ -33,7 +33,9 @@ export async function httpProbe(targetUrl: string, timeoutMs: number) {
           method: "GET",
           headers: {
             Host: parsedUrl.host,
+            "User-Agent": "RackMap-HealthCheck/1.0",
           },
+          family: 4,
           timeout: timeoutMs,
         },
         (res) => {

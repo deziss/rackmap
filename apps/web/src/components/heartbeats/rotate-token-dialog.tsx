@@ -73,14 +73,14 @@ export function RotateTokenDialog({
               </Button>
             </div>
             {result.warning && (
-              <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-300">
-                <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
+              <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/15 p-2.5 text-xs text-amber-900 dark:text-amber-200 font-medium">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-px text-amber-700 dark:text-amber-400" />
                 <span>{result.warning}</span>
               </div>
             )}
           </div>
         ) : linked ? (
-          <label className="flex items-start gap-2.5 rounded-md border border-white/10 bg-white/3 p-2.5">
+          <label className="flex items-start gap-2.5 rounded-md border border-border/70 bg-muted/40 p-2.5">
             <Checkbox checked={canRewrite && rewriteCron} disabled={!canRewrite} onCheckedChange={(v) => setRewriteCron(v === true)} className="mt-0.5" />
             <div className="space-y-0.5">
               <div className="text-xs font-medium">Rewrite the crontab line on {heartbeat.server?.hostname ?? "the server"}</div>

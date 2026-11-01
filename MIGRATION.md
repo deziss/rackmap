@@ -1,10 +1,22 @@
 # RackMap — Upgrade & Migration Guide
 
+- **[Upgrading to 1.2.0](#upgrading-to-120)**: UI layout, brand identity, and loopback probe routing updates.
 - **[Upgrading to 1.1.0](#upgrading-to-110)**: rebuilding the api image is mandatory.
 - **[Upgrading 0.8.x → 1.0.0](#upgrading-08x--100)**: breaking changes, the SQLite → PostgreSQL 18 data move, and new
   settings. Read this before pulling 1.0.
 - **[Moving RackMap to another server](#moving-rackmap-to-another-server-postgresql-18)**: a full server-to-server
   migration onto PostgreSQL 18, plus [backups & restore](#9-backups--restore).
+
+---
+
+## Upgrading to 1.2.0
+
+```bash
+git pull
+make up          # rebuilds images — equivalent to: docker compose up -d --build
+```
+
+No database migrations or `.env` configuration changes are required. This release updates web UI dialogs, dark theme high contrast legibility, introduces the official vector RackMap logo and favicon, and configures Docker bridge loopback probe resolution for containerized health checks.
 
 ---
 

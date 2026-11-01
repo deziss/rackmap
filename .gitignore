@@ -62,3 +62,4 @@ docs/superpowers/
 *.swo
 .DS_Store
 Thumbs.db
+graphify-out/

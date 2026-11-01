@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ServiceCreateInput, type ServiceDto } from "@inv/shared";
@@ -27,7 +27,7 @@ export function ServiceFormDialog({ service, onSaved, triggerClassName }: Servic
   const [open, setOpen] = useState(false);
   const isEdit = !!service;
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm({
     resolver: zodResolver(ServiceCreateInput),
     defaultValues: {
       serviceName: service?.serviceName ?? "",
@@ -49,9 +49,32 @@ export function ServiceFormDialog({ service, onSaved, triggerClassName }: Servic
     },
   });
 
+  useEffect(() => {
+    if (open) {
+      reset({
+        serviceName: service?.serviceName ?? "",
+        serviceType: service?.serviceType ?? "",
+        serverIp: service?.serverIp ?? "",
+        port: service?.port ?? "",
+        domain: service?.domain ?? "",
+        username: service?.username ?? "",
+        password: undefined,
+        documentLink: service?.documentLink ?? "",
+        project: service?.project ?? "",
+        version: service?.version ?? "",
+        environment: service?.environment ?? "",
+        dbName: service?.dbName ?? "",
+        managedBy: service?.managedBy ?? "",
+        remark: service?.remark ?? "",
+        healthUrl: service?.healthUrl ?? "",
+        status: (service?.status as "working" | "not_working" | undefined) ?? "working",
+      });
+    }
+  }, [open, service, reset]);
+
   async function onSubmit(data: Record<string, unknown>) {
     try {
-      const url = isEdit ? `/api/v1/services/${service.id}` : "/api/v1/services";
+      const url = isEdit && service ? `/api/v1/services/${service.id}` : "/api/v1/services";
       const method = isEdit ? "PATCH" : "POST";
       const cleaned = Object.fromEntries(
         Object.entries(data).map(([k, v]) => [k, v === "" ? undefined : v])
@@ -67,26 +90,29 @@ export function ServiceFormDialog({ service, onSaved, triggerClassName }: Servic
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {isEdit ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
+      {isEdit ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DialogTrigger asChild>
               <Button
                 size="icon"
                 variant="ghost"
                 className={triggerClassName || "h-7 w-7 text-muted-foreground hover:text-sky-400 hover:bg-sky-500/20 transition-colors"}
+                onClick={() => setOpen(true)}
               >
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
-            </TooltipTrigger>
-            <TooltipContent>Edit service</TooltipContent>
-          </Tooltip>
-        ) : (
+            </DialogTrigger>
+          </TooltipTrigger>
+          <TooltipContent>Edit service</TooltipContent>
+        </Tooltip>
+      ) : (
+        <DialogTrigger asChild>
           <Button size="sm">
             <Plus className="h-4 w-4 mr-1" /> Add Service
           </Button>
-        )}
-      </DialogTrigger>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Service" : "Add Service"}</DialogTitle>

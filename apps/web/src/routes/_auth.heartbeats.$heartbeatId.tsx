@@ -275,7 +275,7 @@ function HeartbeatDetailPage() {
             </CardHeader>
             <CardContent className="p-4 pt-0 space-y-2">
               {!data.pingUrl && (
-                <p className="text-[11px] text-amber-300">
+                <p className="text-[11px] text-amber-800 dark:text-amber-300 font-medium">
                   PUBLIC_BASE_URL is not set; replace &lt;PUBLIC_BASE_URL&gt; with this instance's externally reachable URL.
                 </p>
               )}

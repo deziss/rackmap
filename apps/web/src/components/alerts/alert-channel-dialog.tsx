@@ -755,8 +755,8 @@ export function AlertChannelDialog({ open, onOpenChange, channel, license, email
 
 function UpgradeHint({ text }: { text: string }) {
   return (
-    <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-      <Sparkles className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+    <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/15 px-3.5 py-2.5 text-xs text-amber-900 dark:text-amber-200 font-medium">
+      <Sparkles className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-700 dark:text-amber-400" />
       <span>
         {text} <Lock className="inline h-3 w-3 -mt-0.5" /> Settings → Subscription.
       </span>

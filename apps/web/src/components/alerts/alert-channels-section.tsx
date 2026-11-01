@@ -99,8 +99,8 @@ export function AlertChannelsSection() {
       </CardHeader>
       <CardContent className="space-y-3">
         {!license.multiChannel && (
-          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-            <Sparkles className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/15 px-3.5 py-2.5 text-xs text-amber-900 dark:text-amber-200 font-medium">
+            <Sparkles className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-700 dark:text-amber-400" />
             <span>
               Free tier: {license.uiChannelCount}/{license.uiChannelLimit} channel used, plus any NOTIFY_* environment channels. RackMap Pro adds unlimited channels,
               Teams, PagerDuty, routing filters and custom webhook templates.

@@ -229,7 +229,7 @@ function RunbookEditorPage() {
         </div>
       )}
       {canEdit && issues.length > 0 && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/15 px-3.5 py-2.5 text-xs text-amber-900 dark:text-amber-200 font-medium space-y-1">
           {issues.map((i) => (
             <div key={i}>{i}</div>
           ))}
